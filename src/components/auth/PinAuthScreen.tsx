@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../../types';
-import { Wine, Lock, Delete, ArrowRight, ShieldCheck, UserCheck } from 'lucide-react';
+import { Wine, Lock, Delete, ArrowRight, ShieldCheck, UserCheck, Download } from 'lucide-react';
 
 interface PinAuthScreenProps {
   users: User[];
@@ -224,8 +224,20 @@ export const PinAuthScreen: React.FC<PinAuthScreenProps> = ({ users, onLogin }) 
           </div>
         </div>
 
+        {/* Download ZIP Button */}
+        <div className="text-center mt-4">
+          <a
+            href="/bar-track-source.zip"
+            download="bar-track-source.zip"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-800 text-emerald-300 text-xs font-semibold transition-all shadow-lg shadow-emerald-950/40 cursor-pointer"
+          >
+            <Download className="w-4 h-4 text-emerald-400" />
+            <span>Download Project ZIP (for VS Code)</span>
+          </a>
+        </div>
+
         {/* Footer Note */}
-        <div className="text-center mt-6 text-xs text-slate-500">
+        <div className="text-center mt-4 text-xs text-slate-500">
           Strict operational separation between physical records & management oversight.
         </div>
       </div>

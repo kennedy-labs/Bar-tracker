@@ -9,6 +9,7 @@ import {
   Wine,
   ShieldAlert,
   SlidersHorizontal,
+  Download,
 } from 'lucide-react';
 
 interface TopBarProps {
@@ -133,6 +134,17 @@ export const TopBar: React.FC<TopBarProps> = ({
               </>
             )}
           </button>
+
+          {/* Download ZIP for VS Code Button */}
+          <a
+            href="/bar-track-source.zip"
+            download="bar-track-source.zip"
+            title="Download complete project ZIP to open in VS Code"
+            className="px-2.5 py-1 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer whitespace-nowrap"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Download ZIP</span>
+          </a>
 
           {/* Reset Demo Data button */}
           <button
