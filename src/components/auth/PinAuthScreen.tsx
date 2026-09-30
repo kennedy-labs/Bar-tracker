@@ -98,7 +98,7 @@ export const PinAuthScreen: React.FC<PinAuthScreenProps> = ({ users, onLogin }) 
           <div className="w-14 h-14 mx-auto rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-3 shadow-lg shadow-emerald-950/50">
             <Wine className="w-7 h-7" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">PombeTrack</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-white">Bar Track</h1>
           <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
             Bar Operations Reconciliation & Financial Transparency
           </p>

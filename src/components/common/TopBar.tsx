@@ -75,7 +75,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           </div>
           <div>
             <div className="text-base font-bold tracking-tight text-white flex items-center gap-2">
-              <span>PombeTrack</span>
+              <span>Bar Track</span>
               <span className="text-[10px] font-mono tracking-widest uppercase px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
                 {currentUser?.role === 'OWNER' ? 'Owner Portal' : 'Counter Terminal'}
               </span>
