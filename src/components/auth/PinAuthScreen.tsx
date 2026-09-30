@@ -227,8 +227,8 @@ export const PinAuthScreen: React.FC<PinAuthScreenProps> = ({ users, onLogin }) 
         {/* Download ZIP Button */}
         <div className="text-center mt-4">
           <a
-            href="/bar-track-source.zip"
-            download="bar-track-source.zip"
+            href="/bar-track-project.zip"
+            download="bar-track-project.zip"
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-800 text-emerald-300 text-xs font-semibold transition-all shadow-lg shadow-emerald-950/40 cursor-pointer"
           >
             <Download className="w-4 h-4 text-emerald-400" />

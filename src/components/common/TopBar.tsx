@@ -137,8 +137,8 @@ export const TopBar: React.FC<TopBarProps> = ({
 
           {/* Download ZIP for VS Code Button */}
           <a
-            href="/bar-track-source.zip"
-            download="bar-track-source.zip"
+            href="/bar-track-project.zip"
+            download="bar-track-project.zip"
             title="Download complete project ZIP to open in VS Code"
             className="px-2.5 py-1 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer whitespace-nowrap"
           >
