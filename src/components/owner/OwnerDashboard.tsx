@@ -550,11 +550,20 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                     </div>
                   </div>
 
-                  <div className="text-xs text-slate-400 mb-3">
-                    Attendant on duty: <span className="text-slate-200 font-medium">{d.workerName}</span>
+                  <div className="text-xs text-slate-400 mb-3 space-y-1">
+                    <div>Attendant reporting: <span className="text-slate-200 font-medium">{d.workerName}</span></div>
+                    {d.responsibleWorkerName && (
+                      <div className="p-2 rounded-xl bg-red-950/60 border border-red-800 text-red-200 text-[11px] font-sans">
+                        <strong className="text-red-300">⚠️ Liable for Missing Handover:</strong>{' '}
+                        <span className="text-white font-bold">{d.responsibleWorkerName}</span>
+                        <div className="text-[10px] text-red-400 mt-0.5">
+                          Missing items identified during counter shift verification by incoming worker.
+                        </div>
+                      </div>
+                    )}
                     {d.ownerNotes && (
                       <div className="mt-1 text-slate-300 italic bg-[#0E1420] p-2 rounded-lg border border-slate-800">
-                        Owner Note: {d.ownerNotes}
+                        Remarks: {d.ownerNotes}
                       </div>
                     )}
                   </div>
@@ -699,7 +708,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 font-mono">
-                {products.map((p) => {
+                {[...products].sort((a, b) => a.name.localeCompare(b.name)).map((p) => {
                   const counterStock =
                     inventory.find((i) => i.locationId === 'loc-counter-1' && i.productId === p.id)
                       ?.quantityOnHand || 0;

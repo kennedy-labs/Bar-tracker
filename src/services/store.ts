@@ -285,6 +285,15 @@ class OperationalRealityStore {
     );
   }
 
+  public getLastClosedShift(locationId?: string): Shift | undefined {
+    const shifts = this.getShifts();
+    return shifts.find(
+      (s) =>
+        s.status === 'CLOSED' &&
+        (!locationId || s.locationId === locationId)
+    );
+  }
+
   public getShiftById(shiftId: string): Shift | undefined {
     return this.getShifts().find((s) => s.id === shiftId);
   }
@@ -460,26 +469,60 @@ class OperationalRealityStore {
     });
 
     if (hasOpeningInconsistency) {
+      const lastClosedShift = this.getLastClosedShift(params.locationId);
+      const prevWorker = lastClosedShift ? lastClosedShift.workerName : 'Previous Shift Attendant';
       const discrepancies = this.get<Discrepancy[]>(STORAGE_KEYS.DISCREPANCIES, []);
-      discrepancies.unshift({
-        id: `disc-open-${Date.now()}`,
-        shiftId,
-        shiftNumber,
-        branchName: 'Nairobi Central Flagship',
-        locationName: location.name,
-        workerName: params.workerName,
-        type: 'OPENING_MISMATCH',
-        itemName: 'Opening Stock Inconsistency',
-        expected: 0,
-        actual: 0,
-        variance: 0,
-        monetaryValue: 0,
-        severity: 'MEDIUM',
-        status: 'FLAGGED',
-        ownerNotes: params.inconsistencyNote || 'Physical stock at shift start differed from system expectation.',
-        timestamp: new Date().toISOString(),
+
+      products.forEach((product) => {
+        const inv = currentInventory.find((i) => i.productId === product.id);
+        const systemCount = inv ? inv.quantityOnHand : 0;
+        const physicalCount =
+          params.physicalCounts[product.id] !== undefined
+            ? params.physicalCounts[product.id]
+            : systemCount;
+
+        if (physicalCount !== systemCount) {
+          const variance = physicalCount - systemCount;
+          const isShortage = variance < 0;
+          const missingUnits = Math.abs(variance);
+          const monetaryValue = missingUnits * product.sellingPrice;
+
+          discrepancies.unshift({
+            id: `disc-open-${Date.now()}-${product.id}`,
+            shiftId,
+            shiftNumber,
+            branchName: 'Nairobi Central Flagship',
+            locationName: location.name,
+            workerName: params.workerName, // Worker who performed and verified the count
+            responsibleWorkerName: isShortage ? prevWorker : undefined, // Previous worker is responsible for missing stock!
+            previousShiftId: lastClosedShift?.id,
+            type: isShortage ? 'STOCK_SHORTAGE' : 'STOCK_OVERAGE',
+            itemId: product.id,
+            itemName: `${product.name} (Handover Count)`,
+            expected: systemCount,
+            actual: physicalCount,
+            variance,
+            monetaryValue,
+            severity: missingUnits >= 2 ? 'HIGH' : 'MEDIUM',
+            status: 'FLAGGED',
+            ownerNotes: isShortage
+              ? `Missing ${missingUnits} unit(s) of ${product.name} (KES ${monetaryValue.toLocaleString()}). Identified during counter handover takeover by ${params.workerName}. ${prevWorker} is held accountable for missing items.`
+              : `Found +${missingUnits} extra unit(s) of ${product.name} during handover count by ${params.workerName}.`,
+            timestamp: new Date().toISOString(),
+          });
+        }
       });
+
       this.set(STORAGE_KEYS.DISCREPANCIES, discrepancies);
+
+      this.addEvent({
+        type: 'DISCREPANCY_FLAGGED',
+        title: `Handover Shortage Flagged (${prevWorker} Liable)`,
+        description: `${params.workerName} took over counter and reported missing items left from ${prevWorker}'s shift. ${params.inconsistencyNote || ''}`,
+        locationName: location.name,
+        actorName: params.workerName,
+        severity: 'WARNING',
+      });
     }
 
     this.notify();
@@ -863,31 +906,36 @@ class OperationalRealityStore {
     let totalCostOfGoodsSold = 0;
 
     const reconciledStockItems = shiftStockItems.map((item) => {
-      // Expected stock calculation
-      const expectedClosing =
+      // Total available bottles on counter during shift
+      const availableStock =
         item.openingPhysicalCount +
         item.additions +
         item.transfersIn -
-        item.recordedSales -
         item.transfersOut -
         item.damages;
 
+      // What worker counts is left on the counter
       const physicalClosing =
         params.closingPhysicalCounts[item.productId] !== undefined
           ? params.closingPhysicalCounts[item.productId]
-          : expectedClosing;
+          : availableStock;
 
-      const discrepancyCount = physicalClosing - expectedClosing; // negative = shortage, positive = overage
-      const discrepancyValue = discrepancyCount * item.sellingPrice;
+      // System calculates what was sold: Available Stock - What's Left on Counter!
+      const calculatedSold = Math.max(0, availableStock - physicalClosing);
 
-      expectedSalesRevenue += item.recordedSales * item.sellingPrice;
-      totalCostOfGoodsSold += item.recordedSales * item.costPrice;
+      // If what is left is more than available stock, that is a counter surplus/overage
+      const overageCount = physicalClosing > availableStock ? physicalClosing - availableStock : 0;
+      const discrepancyValue = overageCount * item.sellingPrice;
+
+      expectedSalesRevenue += calculatedSold * item.sellingPrice;
+      totalCostOfGoodsSold += calculatedSold * item.costPrice;
 
       return {
         ...item,
+        recordedSales: calculatedSold, // Calculated automatically by the system
         closingPhysicalCount: physicalClosing,
-        expectedClosingCount: expectedClosing,
-        discrepancyCount,
+        expectedClosingCount: availableStock,
+        discrepancyCount: overageCount,
         discrepancyValue,
       };
     });

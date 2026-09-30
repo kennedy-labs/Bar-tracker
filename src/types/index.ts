@@ -216,6 +216,8 @@ export interface Discrepancy {
   branchName: string;
   locationName: string;
   workerName: string;
+  responsibleWorkerName?: string;
+  previousShiftId?: string;
   type: DiscrepancyType;
   itemId?: string;
   itemName: string;

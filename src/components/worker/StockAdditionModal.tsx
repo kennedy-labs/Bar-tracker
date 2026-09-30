@@ -62,7 +62,7 @@ export const StockAdditionModal: React.FC<StockAdditionModalProps> = ({
               onChange={(e) => setSelectedProductId(e.target.value)}
               className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
             >
-              {products.map((p) => (
+              {[...products].sort((a, b) => a.name.localeCompare(b.name)).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name} ({p.unit})
                 </option>

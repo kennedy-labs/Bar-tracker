@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   User,
   Product,
-  ProductCategory,
   StockLocation,
   Shift,
   ShiftStockItem,
@@ -11,26 +10,23 @@ import {
 } from '../../types';
 import { store } from '../../services/store';
 import { ShiftOpeningModal } from './ShiftOpeningModal';
-import { FastSaleModal } from './FastSaleModal';
 import { StockAdditionModal } from './StockAdditionModal';
 import { StockTransferModal } from './StockTransferModal';
 import { ShiftExpenseModal } from './ShiftExpenseModal';
 import { ShiftClosingModal } from './ShiftClosingModal';
 import {
-  Beer,
-  Wine,
-  GlassWater,
-  Sparkles,
   Smartphone,
   Coins,
   PackagePlus,
   ArrowRightLeft,
   Receipt,
   Lock,
-  Plus,
   Clock,
   CheckCircle,
   AlertCircle,
+  Search,
+  ShieldCheck,
+  Wine,
 } from 'lucide-react';
 
 interface WorkerTerminalProps {
@@ -38,11 +34,10 @@ interface WorkerTerminalProps {
 }
 
 export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) => {
-  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeModal, setActiveModal] = useState<
-    'NONE' | 'FAST_SALE' | 'ADD_STOCK' | 'TRANSFER' | 'EXPENSE' | 'CLOSE_SHIFT'
+    'NONE' | 'ADD_STOCK' | 'TRANSFER' | 'EXPENSE' | 'CLOSE_SHIFT'
   >('NONE');
-  const [selectedProductForSale, setSelectedProductForSale] = useState<Product | null>(null);
 
   const locations = store.getLocations();
   const products = store.getProducts();
@@ -72,27 +67,6 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
       physicalCounts: data.physicalCounts,
       inconsistencyNote: data.inconsistencyNote,
     });
-  };
-
-  // Quick Sale Trigger from Product Card
-  const handleQuickSaleClick = (prod: Product) => {
-    setSelectedProductForSale(prod);
-    setActiveModal('FAST_SALE');
-  };
-
-  const handleConfirmSale = (params: {
-    productId: string;
-    quantity: number;
-    paymentMethod: 'CASH' | 'MPESA';
-    mpesaAccountType?: any;
-    transactionRef?: string;
-  }) => {
-    if (!activeShift) return;
-    store.recordSale({
-      shiftId: activeShift.id,
-      ...params,
-    });
-    setActiveModal('NONE');
   };
 
   const handleConfirmAddition = (params: {
@@ -152,28 +126,22 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
     setActiveModal('NONE');
   };
 
-  // Category filter items
-  const categories: { id: string; label: string; icon: React.ReactNode }[] = [
-    { id: 'ALL', label: 'All Items', icon: <Sparkles className="w-3.5 h-3.5" /> },
-    { id: 'BEER', label: 'Beers', icon: <Beer className="w-3.5 h-3.5" /> },
-    { id: 'CIDER', label: 'Ciders', icon: <Beer className="w-3.5 h-3.5" /> },
-    { id: 'SPIRIT', label: 'Spirits & Tots', icon: <Wine className="w-3.5 h-3.5" /> },
-    { id: 'SOFT_DRINK', label: 'Soft Drinks', icon: <GlassWater className="w-3.5 h-3.5" /> },
-  ];
+  // Sort products alphabetically A to Z (Single column specification)
+  const sortedProducts = [...products].sort((a, b) => a.name.localeCompare(b.name));
 
-  const filteredProducts = products.filter((p) => {
-    if (selectedCategory === 'ALL') return true;
-    return p.category === selectedCategory;
-  });
+  const filteredProducts = sortedProducts.filter((p) =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  // Calculate live shift revenue snapshot for worker reference
-  const currentSalesTotal = shiftStockItems.reduce(
-    (sum, item) => sum + item.recordedSales * item.sellingPrice,
+  // Calculate total initial units on counter
+  const totalStartingUnits = shiftStockItems.reduce(
+    (sum, item) => sum + item.openingPhysicalCount + item.additions,
     0
   );
 
   return (
-    <div className="max-w-4xl mx-auto pb-24 md:pb-12">
+    <div className="max-w-3xl mx-auto pb-24 md:pb-12 space-y-4">
       {/* 1. NO ACTIVE SHIFT: RENDER NON-BYPASSABLE OPENING MODAL */}
       {!activeShift ? (
         <ShiftOpeningModal
@@ -185,23 +153,25 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
           onConfirmOpen={handleConfirmOpen}
         />
       ) : (
-        /* 2. ACTIVE SHIFT SCREEN */
+        /* 2. ACTIVE SHIFT SCREEN: MINIMAL & FAST */
         <div className="space-y-4">
           {/* Active Shift Header Card */}
-          <div className="bg-[#121824] border border-[#1E293B] rounded-3xl p-4 sm:p-5 shadow-lg">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div className="bg-[#121824] border border-[#1E293B] rounded-3xl p-5 shadow-lg">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
               <div className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse ring-4 ring-emerald-500/20" />
+                <div className="w-3.5 h-3.5 rounded-full bg-emerald-400 animate-pulse ring-4 ring-emerald-500/20" />
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-white tracking-tight">
+                    <span className="text-base font-bold text-white tracking-tight">
                       {activeShift.locationName}
                     </span>
-                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800/80">
-                      Active Shift
+                    <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800/80">
+                      Shift Live
                     </span>
                   </div>
                   <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5 font-mono">
+                    <span>Attendant: <strong className="text-slate-200">{activeShift.workerName}</strong></span>
+                    <span>·</span>
                     <span>{activeShift.shiftNumber}</span>
                     <span>·</span>
                     <span className="flex items-center gap-1">
@@ -212,62 +182,103 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
                 </div>
               </div>
 
-              {/* Close Shift Trigger Button */}
+              {/* Primary Close Shift Action */}
               <button
                 onClick={() => setActiveModal('CLOSE_SHIFT')}
-                className="px-3.5 py-2 rounded-xl bg-red-950/40 hover:bg-red-900/50 border border-red-800/80 text-red-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer self-start sm:self-auto"
+                className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow-lg shadow-red-950/40"
               >
-                <Lock className="w-3.5 h-3.5" />
-                <span>Transition to Closing</span>
+                <Lock className="w-4 h-4" />
+                <span>End Shift & Count Counter</span>
               </button>
             </div>
 
-            {/* Handover Balances & Real-Time Shift Metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-3 text-xs">
-              <div className="p-2.5 rounded-xl bg-[#0E1420] border border-slate-800/80">
+            {/* Shift Starting Baselines */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-xs font-mono">
+              <div className="p-3 rounded-2xl bg-[#0E1420] border border-slate-800">
                 <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                  <Smartphone className="w-3 h-3 text-emerald-400" />
-                  <span>Entry M-Pesa</span>
+                  <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Entry M-Pesa Balance</span>
                 </div>
-                <div className="font-mono font-bold text-slate-100 text-sm mt-0.5 tabular-nums">
+                <div className="font-bold text-slate-100 text-sm mt-1 tabular-nums">
                   KES {activeShift.openingMpesaBalance.toLocaleString()}
                 </div>
+                <div className="text-[10px] text-slate-500 mt-0.5">Recorded at clock-in</div>
               </div>
 
-              <div className="p-2.5 rounded-xl bg-[#0E1420] border border-slate-800/80">
+              <div className="p-3 rounded-2xl bg-[#0E1420] border border-slate-800">
                 <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                  <Coins className="w-3 h-3 text-amber-400" />
-                  <span>Cash Float</span>
+                  <Coins className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Opening Cash Float</span>
                 </div>
-                <div className="font-mono font-bold text-slate-100 text-sm mt-0.5 tabular-nums">
+                <div className="font-bold text-slate-100 text-sm mt-1 tabular-nums">
                   KES {activeShift.openingCashFloat.toLocaleString()}
                 </div>
+                <div className="text-[10px] text-slate-500 mt-0.5">Change in till drawer</div>
               </div>
 
-              <div className="p-2.5 rounded-xl bg-[#0E1420] border border-slate-800/80">
-                <div className="text-[10px] text-slate-400">Total Drinks Sold</div>
-                <div className="font-mono font-bold text-emerald-400 text-sm mt-0.5 tabular-nums">
-                  {activeShift.recordedSalesCount || 0} units
+              <div className="p-3 rounded-2xl bg-[#0E1420] border border-slate-800">
+                <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                  <Wine className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Counter Starting Stock</span>
                 </div>
-              </div>
-
-              <div className="p-2.5 rounded-xl bg-[#0E1420] border border-slate-800/80">
-                <div className="text-[10px] text-slate-400">Sales Value</div>
-                <div className="font-mono font-bold text-slate-100 text-sm mt-0.5 tabular-nums">
-                  KES {currentSalesTotal.toLocaleString()}
+                <div className="font-bold text-slate-100 text-sm mt-1 tabular-nums">
+                  {totalStartingUnits} bottles
                 </div>
+                <div className="text-[10px] text-slate-500 mt-0.5">Physical custody verified</div>
               </div>
             </div>
 
             {/* Inconsistency notice if shift opened with mismatch */}
             {activeShift.openingInconsistencyNote && (
-              <div className="mt-3 p-2 rounded-xl bg-amber-950/20 border border-amber-800/50 text-[11px] text-amber-300 flex items-center gap-2">
+              <div className="mt-3 p-2.5 rounded-xl bg-amber-950/20 border border-amber-800/50 text-[11px] text-amber-300 flex items-center gap-2">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-400" />
                 <span className="truncate">
-                  Opening Note: {activeShift.openingInconsistencyNote}
+                  Handover Remarks: {activeShift.openingInconsistencyNote}
                 </span>
               </div>
             )}
+          </div>
+
+          {/* Quick Shift Operations Bar (Store Restock & Expenses) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            <button
+              onClick={() => setActiveModal('ADD_STOCK')}
+              className="p-3 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-[#1E293B] text-left transition-all active:scale-[0.98] cursor-pointer"
+            >
+              <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 mb-1">
+                <PackagePlus className="w-4 h-4" />
+                <span>Receive Restock</span>
+              </div>
+              <div className="text-[11px] text-slate-400">
+                Add crates brought from store
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveModal('EXPENSE')}
+              className="p-3 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-[#1E293B] text-left transition-all active:scale-[0.98] cursor-pointer"
+            >
+              <div className="flex items-center gap-2 text-xs font-bold text-amber-400 mb-1">
+                <Receipt className="w-4 h-4" />
+                <span>Record Expense</span>
+              </div>
+              <div className="text-[11px] text-slate-400">
+                Ice, lemons, transport paid out
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveModal('TRANSFER')}
+              className="p-3 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-[#1E293B] text-left transition-all active:scale-[0.98] cursor-pointer col-span-2 sm:col-span-1"
+            >
+              <div className="flex items-center gap-2 text-xs font-bold text-blue-400 mb-1">
+                <ArrowRightLeft className="w-4 h-4" />
+                <span>Station Transfer</span>
+              </div>
+              <div className="text-[11px] text-slate-400">
+                Move bottles between counters
+              </div>
+            </button>
           </div>
 
           {/* Pending Incoming Transfers Notice */}
@@ -305,134 +316,85 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
             </div>
           )}
 
-          {/* Category Filter Pills (Touch-first button elements) */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-            {categories.map((cat) => (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setSelectedCategory(cat.id)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 transition-all cursor-pointer ${
-                  selectedCategory === cat.id
-                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 font-bold'
-                    : 'bg-[#121824] border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
-                }`}
-              >
-                {cat.icon}
-                <span>{cat.label}</span>
-              </button>
-            ))}
-          </div>
+          {/* Counter Inventory Reference (1 Single Column, Arranged Alphabetically A to Z) */}
+          <div className="bg-[#121824] border border-[#1E293B] rounded-3xl p-5 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800">
+              <div>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Counter Stock Reference (Alphabetical A to Z)
+                </h3>
+                <p className="text-xs text-slate-400">
+                  No need to log individual sales. When leaving, simply tap "End Shift & Count Counter".
+                </p>
+              </div>
 
-          {/* Product Grid for Rapid Touch Sales */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {filteredProducts.map((product) => {
-              const inv = inventory.find((i) => i.productId === product.id);
-              const stockOnHand = inv ? inv.quantityOnHand : 0;
-              const isLow = stockOnHand <= product.reorderLevel;
-              const isOut = stockOnHand <= 0;
+              {/* Search */}
+              <div className="relative w-full sm:w-56">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Filter drink..."
+                  className="w-full bg-[#0E1420] border border-slate-800 rounded-xl pl-8 pr-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-slate-700"
+                />
+              </div>
+            </div>
 
-              return (
-                <button
-                  key={product.id}
-                  type="button"
-                  onClick={() => handleQuickSaleClick(product)}
-                  className={`p-3.5 rounded-2xl border text-left transition-all active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[110px] ${
-                    isOut
-                      ? 'bg-[#101520] border-slate-800/60 opacity-60'
-                      : 'bg-[#121824] hover:bg-[#182132] border-[#1E293B] hover:border-emerald-500/50 shadow-md'
-                  }`}
-                >
-                  <div className="w-full">
-                    <div className="text-xs font-bold text-white line-clamp-2 leading-tight">
-                      {product.name}
+            {/* 1 Single Column List */}
+            <div className="border border-slate-800/80 rounded-2xl divide-y divide-slate-800/80 bg-[#0E1420] max-h-96 overflow-y-auto">
+              {filteredProducts.map((product) => {
+                const ssi = shiftStockItems.find((i) => i.productId === product.id);
+                const inv = inventory.find((i) => i.productId === product.id);
+                const opening = ssi ? ssi.openingPhysicalCount : (inv ? inv.quantityOnHand : 0);
+                const additions = ssi ? ssi.additions : 0;
+                const totalAvailable = opening + additions;
+
+                return (
+                  <div
+                    key={product.id}
+                    className="p-3.5 flex items-center justify-between gap-3 text-xs hover:bg-slate-900/30 transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold text-slate-100 truncate text-sm">
+                        {product.name}
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center gap-2">
+                        <span className="capitalize">{product.category.replace('_', ' ').toLowerCase()}</span>
+                        <span>·</span>
+                        <span className="text-emerald-400 font-bold">KES {product.sellingPrice.toLocaleString()}</span>
+                      </div>
                     </div>
-                    <div className="text-[11px] font-mono text-emerald-400 font-bold mt-1 tabular-nums">
-                      KES {product.sellingPrice.toLocaleString()}
+
+                    <div className="text-right font-mono shrink-0">
+                      <div className="text-xs font-bold text-white">
+                        {totalAvailable} {product.unit.toLowerCase()}s
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        {opening} started {additions > 0 && `(+${additions} added)`}
+                      </div>
                     </div>
                   </div>
-
-                  <div className="w-full flex items-center justify-between pt-2 border-t border-slate-800/80 mt-2">
-                    <span
-                      className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                        isOut
-                          ? 'bg-red-950 text-red-400 border border-red-800'
-                          : isLow
-                          ? 'bg-amber-950 text-amber-300 border border-amber-800'
-                          : 'bg-slate-800 text-slate-300'
-                      }`}
-                    >
-                      {stockOnHand} in shelf
-                    </span>
-
-                    <span className="w-6 h-6 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-                      <Plus className="w-3.5 h-3.5" />
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
-          {/* Sticky Quick-Action Bar in Ergonomic Thumb Zone (Bottom <= 15% Viewport) */}
-          <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#0B0F17]/95 backdrop-blur-md border-t border-slate-800 px-4 py-2.5">
-            <div className="max-w-4xl mx-auto grid grid-cols-4 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedProductForSale(products[0]);
-                  setActiveModal('FAST_SALE');
-                }}
-                className="h-11 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex flex-col items-center justify-center transition-all cursor-pointer shadow-md shadow-emerald-950/50"
-              >
-                <Plus className="w-4 h-4 mb-0.5" />
-                <span className="leading-none text-[10px]">Record Sale</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveModal('ADD_STOCK')}
-                className="h-11 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex flex-col items-center justify-center transition-all cursor-pointer border border-slate-700"
-              >
-                <PackagePlus className="w-4 h-4 mb-0.5 text-emerald-400" />
-                <span className="leading-none text-[10px]">Restock</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveModal('TRANSFER')}
-                className="h-11 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex flex-col items-center justify-center transition-all cursor-pointer border border-slate-700"
-              >
-                <ArrowRightLeft className="w-4 h-4 mb-0.5 text-amber-400" />
-                <span className="leading-none text-[10px]">Transfer</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveModal('EXPENSE')}
-                className="h-11 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex flex-col items-center justify-center transition-all cursor-pointer border border-slate-700"
-              >
-                <Receipt className="w-4 h-4 mb-0.5 text-red-400" />
-                <span className="leading-none text-[10px]">Expense</span>
-              </button>
+          {/* Operational Workflow Reminder Banner */}
+          <div className="p-4 rounded-2xl bg-[#0E1420] border border-slate-800 text-xs text-slate-400 flex items-start gap-3">
+            <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+            <div>
+              <div className="font-bold text-slate-200">Zero In-Shift POS Friction</div>
+              <div className="mt-0.5 text-[11px] leading-relaxed">
+                Serve your customers freely throughout your shift. When taking handover or clocking out, count what remains in the counter. The system calculates sold bottles and expected revenue automatically.
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {/* MODALS */}
-      {activeModal === 'FAST_SALE' && selectedProductForSale && (
-        <FastSaleModal
-          product={selectedProductForSale}
-          currentStock={
-            inventory.find((i) => i.productId === selectedProductForSale.id)?.quantityOnHand || 0
-          }
-          onClose={() => setActiveModal('NONE')}
-          onConfirmSale={handleConfirmSale}
-        />
-      )}
-
-      {activeModal === 'ADD_STOCK' && (
+      {activeModal === 'ADD_STOCK' && activeShift && (
         <StockAdditionModal
           products={products}
           onClose={() => setActiveModal('NONE')}
@@ -440,18 +402,18 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
         />
       )}
 
-      {activeModal === 'TRANSFER' && (
+      {activeModal === 'TRANSFER' && activeShift && (
         <StockTransferModal
           products={products}
           locations={locations}
-          currentLocationId={activeShift?.locationId || assignedLocationId}
+          currentLocationId={activeShift.locationId}
           workerName={currentUser.name}
           onClose={() => setActiveModal('NONE')}
           onConfirmTransfer={handleConfirmTransfer}
         />
       )}
 
-      {activeModal === 'EXPENSE' && (
+      {activeModal === 'EXPENSE' && activeShift && (
         <ShiftExpenseModal
           onClose={() => setActiveModal('NONE')}
           onConfirmExpense={handleConfirmExpense}
