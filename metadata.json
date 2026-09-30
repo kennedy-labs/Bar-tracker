@@ -1,0 +1,6 @@
+{
+  "name": "PombeTrack - Bar Operations & Profit System",
+  "description": "Bar operations reconciliation & profit system connecting physical counter reality to remote owner oversight through strict transition gates, cash & M-Pesa balance tracking, automated calculations, and real-time discrepancy alerts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
