@@ -37,7 +37,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const [keypadUser, setKeypadUser] = useState<string>('');
   const [keypadPin, setKeypadPin] = useState<string>('');
 
-  const users = store.getUsers();
+  const users = store.getUsers().filter((u) => !u.businessId || u.businessId === currentBiz.id);
 
   const handleCredentialsSubmit = (e: React.FormEvent) => {
     e.preventDefault();

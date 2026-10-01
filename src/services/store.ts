@@ -291,6 +291,28 @@ class StoreService {
     return this.get<BusinessProfile[]>(STORAGE_KEYS.BUSINESSES, INITIAL_BUSINESSES);
   }
 
+  public updateCurrentBusiness(updates: Partial<BusinessProfile>) {
+    const currentBiz = this.getCurrentBusiness();
+    const businesses = this.getBusinesses();
+    const biz = businesses.find((b) => b.id === currentBiz.id);
+    if (!biz) return;
+
+    if (updates.name) biz.name = updates.name.trim();
+    if (updates.phone) biz.phone = updates.phone.trim();
+    if (updates.ownerName) biz.ownerName = updates.ownerName.trim();
+    if (updates.address) biz.address = updates.address.trim();
+
+    this.set(STORAGE_KEYS.BUSINESSES, businesses);
+    this.addEvent({
+      type: 'INFO',
+      title: 'Bar Profile Updated',
+      description: `Establishment details updated for ${biz.name}.`,
+      actorName: 'Proprietor',
+      severity: 'INFO',
+    });
+    this.notify();
+  }
+
   // --- Inter-Business Partner Management ---
   public getPartners(): BusinessPartner[] {
     const currentBizId = this.getCurrentBusinessId();
@@ -727,9 +749,11 @@ class StoreService {
     role: Role;
     pinCode: string;
     password?: string;
+    businessId?: string;
   }): User {
     const users = this.getUsers();
     const cleanUsername = params.username.trim().toLowerCase();
+    const bizId = params.businessId || this.getCurrentBusinessId();
 
     if (users.some((u) => u.username.toLowerCase() === cleanUsername)) {
       throw new Error(`Username "${params.username}" is already taken.`);
@@ -737,6 +761,7 @@ class StoreService {
 
     const newUser: User = {
       id: `user-${Date.now()}`,
+      businessId: bizId,
       name: params.name.trim(),
       username: cleanUsername,
       role: params.role,

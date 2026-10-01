@@ -20,7 +20,8 @@ interface StaffManagerProps {
 }
 
 export const StaffManager: React.FC<StaffManagerProps> = ({ currentUser }) => {
-  const users = store.getUsers();
+  const currentBizId = currentUser.businessId || store.getCurrentBusinessId();
+  const users = store.getUsers().filter((u) => !u.businessId || u.businessId === currentBizId);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -71,6 +72,7 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ currentUser }) => {
         role,
         pinCode: pinCode.trim(),
         password: password.trim() || undefined,
+        businessId: currentBizId,
       });
 
       setShowAddModal(false);

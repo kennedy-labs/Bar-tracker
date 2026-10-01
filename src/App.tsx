@@ -10,7 +10,14 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('bartracker_session_user');
-      return saved ? JSON.parse(saved) : null;
+      if (saved) {
+        const u = JSON.parse(saved);
+        if (u.businessId) {
+          store.setCurrentBusiness(u.businessId);
+        }
+        return u;
+      }
+      return null;
     } catch {
       return null;
     }
@@ -29,6 +36,9 @@ export default function App() {
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
+    if (user.businessId) {
+      store.setCurrentBusiness(user.businessId);
+    }
     try {
       localStorage.setItem('bartracker_session_user', JSON.stringify(user));
     } catch (err) {

@@ -11,7 +11,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 
-import { BusinessSwitcher } from './BusinessSwitcher';
+import { BusinessIdentityBadge } from './BusinessIdentityBadge';
 
 interface TopBarProps {
   currentUser: User | null;
@@ -78,8 +78,8 @@ export const TopBar: React.FC<TopBarProps> = ({
             </span>
           </div>
 
-          {/* Business Switcher Widget with 6-digit Connect Code */}
-          <BusinessSwitcher />
+          {/* Business Identity & 6-Digit Connect Code Badge */}
+          <BusinessIdentityBadge />
         </div>
 
         {/* Zone 2: Navigation Links */}

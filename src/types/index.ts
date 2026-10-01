@@ -223,6 +223,7 @@ export interface OperationalEvent {
 
 export interface User {
   id: string;
+  businessId?: string;
   username: string;
   name: string;
   role: Role;

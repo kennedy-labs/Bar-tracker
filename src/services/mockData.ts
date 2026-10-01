@@ -83,6 +83,7 @@ export const INITIAL_TRANSFERS: InterBusinessTransfer[] = [
 export const INITIAL_USERS: User[] = [
   {
     id: 'user-1',
+    businessId: 'biz-1',
     username: 'wanjiku',
     name: 'Wanjiku Kamau (Bar Tender)',
     role: 'WORKER',
@@ -92,6 +93,7 @@ export const INITIAL_USERS: User[] = [
   },
   {
     id: 'user-2',
+    businessId: 'biz-1',
     username: 'kevin',
     name: 'Kevin Omondi (Bar Tender)',
     role: 'WORKER',
@@ -101,6 +103,7 @@ export const INITIAL_USERS: User[] = [
   },
   {
     id: 'user-owner',
+    businessId: 'biz-1',
     username: 'maina',
     name: 'Maina Mwangi (Proprietor)',
     role: 'OWNER',
