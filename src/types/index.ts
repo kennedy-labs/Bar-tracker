@@ -120,6 +120,8 @@ export type StockMovementType =
   | 'OPENING_COUNT'
   | 'SALE'
   | 'ADDITION'
+  | 'TRANSFER_OUT'
+  | 'TRANSFER_IN'
   | 'DAMAGE_BREAKAGE'
   | 'CLOSING_COUNT';
 
@@ -205,6 +207,9 @@ export interface OperationalEvent {
     | 'ADDITION_RECORDED'
     | 'EXPENSE_LOGGED'
     | 'DISCREPANCY_FLAGGED'
+    | 'INTER_BAR_DISPATCH'
+    | 'INTER_BAR_ACCEPTED'
+    | 'INTER_BAR_REJECTED'
     | 'INFO'
     | 'SYNC_COMPLETED';
   title: string;
@@ -221,4 +226,52 @@ export interface User {
   name: string;
   role: Role;
   pinCode: string;
+}
+
+// --- Inter-Business Connection & Stock Transfer Types ---
+
+export interface BusinessProfile {
+  id: string;
+  name: string;
+  connectCode: string; // 6-digit code e.g. "849201"
+  phone: string;       // e.g. "0722 841 902"
+  ownerName: string;
+  address?: string;
+}
+
+export interface BusinessPartner {
+  id: string;
+  businessId: string;
+  partnerBusinessId: string;
+  partnerName: string;
+  partnerPhone: string;
+  partnerConnectCode: string;
+  netCostBalance: number; // Positive = partner owes us cost value; Negative = we owe partner
+  connectedAt: string;
+}
+
+export type TransferStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
+
+export interface InterBusinessTransfer {
+  id: string;
+  fromBusinessId: string;
+  fromBusinessName: string;
+  fromShiftId: string;
+  senderWorkerName: string;
+
+  toBusinessId: string;
+  toBusinessName: string;
+  toShiftId?: string;
+  receiverWorkerName?: string;
+
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitCost: number;       // cost price per unit
+  totalCostValue: number; // quantity * unitCost
+
+  status: TransferStatus;
+  dispatchedAt: string;
+  acceptedAt?: string;
+  notes?: string;
 }

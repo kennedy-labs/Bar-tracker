@@ -11,6 +11,8 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 
+import { BusinessSwitcher } from './BusinessSwitcher';
+
 interface TopBarProps {
   currentUser: User | null;
   onLogout: () => void;
@@ -28,6 +30,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 }) => {
   const isOnline = store.isOnline();
   const offlineQueueCount = store.getOfflineQueueCount();
+  const incomingTransfersCount = store.getPendingIncomingTransfers().length;
 
   const handleToggleOnline = () => {
     store.toggleOnlineStatus();
@@ -47,6 +50,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   const ownerNavItems: NavItem[] = [
     { id: 'overview', label: 'Command Center' },
+    { id: 'partners', label: 'Partner Bars & Transfers', badge: incomingTransfersCount > 0 ? incomingTransfersCount : undefined },
     { id: 'events', label: 'Live Ticker' },
     {
       id: 'discrepancies',
@@ -59,7 +63,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   ];
 
   const workerNavItems: NavItem[] = [
-    { id: 'counter', label: 'Counter Station' },
+    { id: 'counter', label: 'Counter Station', badge: incomingTransfersCount > 0 ? incomingTransfersCount : undefined },
     { id: 'history', label: 'My Shift History' },
   ];
 
@@ -68,19 +72,19 @@ export const TopBar: React.FC<TopBarProps> = ({
   return (
     <header className="sticky top-0 z-50 bg-[#0B0F17]/95 backdrop-blur-md border-b border-[#1E293B] px-4 md:px-6 py-3">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-        {/* Zone 1: Single text element wordmark */}
+        {/* Zone 1: Single text element wordmark + Business Switcher */}
         <div className="flex items-center gap-3 shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-            <Wine className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="text-base font-bold tracking-tight text-white flex items-center gap-2">
-              <span>Bar Tracker</span>
-              <span className="text-[10px] font-mono tracking-widest uppercase px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                {currentUser?.role === 'OWNER' ? 'Owner Portal' : 'Counter Terminal'}
-              </span>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <Wine className="w-4 h-4" />
             </div>
+            <span className="text-base font-bold tracking-tight text-white hidden sm:inline">
+              Bar Tracker
+            </span>
           </div>
+
+          {/* Business Switcher Widget with 6-digit Connect Code */}
+          <BusinessSwitcher />
         </div>
 
         {/* Zone 2: Navigation Links */}

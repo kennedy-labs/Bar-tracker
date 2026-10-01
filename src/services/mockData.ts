@@ -3,7 +3,82 @@ import {
   MpesaAccount,
   User,
   InventoryItem,
+  BusinessProfile,
+  BusinessPartner,
+  InterBusinessTransfer,
 } from '../types';
+
+export const INITIAL_BUSINESSES: BusinessProfile[] = [
+  {
+    id: 'biz-1',
+    name: 'The Alchemist Bar',
+    connectCode: '849201',
+    phone: '0722 841 902',
+    ownerName: 'Maina Mwangi',
+    address: 'Parklands Road, Westlands',
+  },
+  {
+    id: 'biz-2',
+    name: 'The Copper Kettle Lounge',
+    connectCode: '512784',
+    phone: '0733 456 789',
+    ownerName: 'James Kariuki',
+    address: 'Kenyatta Avenue, CBD',
+  },
+  {
+    id: 'biz-3',
+    name: 'Brew Bistro & Taproom',
+    connectCode: '394108',
+    phone: '0711 987 654',
+    ownerName: 'Sarah Mutua',
+    address: 'Piedmont Plaza, Ngong Rd',
+  },
+];
+
+export const INITIAL_PARTNERS: BusinessPartner[] = [
+  {
+    id: 'partner-1-2',
+    businessId: 'biz-1',
+    partnerBusinessId: 'biz-2',
+    partnerName: 'The Copper Kettle Lounge',
+    partnerPhone: '0733 456 789',
+    partnerConnectCode: '512784',
+    netCostBalance: 4560, // Copper Kettle owes Alchemist KES 4,560 for 24 Tuskers
+    connectedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+  },
+  {
+    id: 'partner-2-1',
+    businessId: 'biz-2',
+    partnerBusinessId: 'biz-1',
+    partnerName: 'The Alchemist Bar',
+    partnerPhone: '0722 841 902',
+    partnerConnectCode: '849201',
+    netCostBalance: -4560, // Copper Kettle owes Alchemist
+    connectedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+  },
+];
+
+export const INITIAL_TRANSFERS: InterBusinessTransfer[] = [
+  {
+    id: 'trf-sample-1',
+    fromBusinessId: 'biz-1',
+    fromBusinessName: 'The Alchemist Bar',
+    fromShiftId: 'shift-sample-closed',
+    senderWorkerName: 'Wanjiku Kamau (Bar Tender)',
+    toBusinessId: 'biz-2',
+    toBusinessName: 'The Copper Kettle Lounge',
+    receiverWorkerName: 'Peter Mwiti',
+    productId: 'prod-tusker-500',
+    productName: 'Tusker Lager 500ml',
+    quantity: 24,
+    unitCost: 190,
+    totalCostValue: 4560,
+    status: 'ACCEPTED',
+    dispatchedAt: new Date(Date.now() - 3600000 * 20).toISOString(),
+    acceptedAt: new Date(Date.now() - 3600000 * 19).toISOString(),
+    notes: 'Emergency crate borrowed during Friday night rush',
+  },
+];
 
 export const INITIAL_USERS: User[] = [
   {

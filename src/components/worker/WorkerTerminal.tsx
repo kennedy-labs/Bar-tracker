@@ -11,6 +11,8 @@ import { ShiftOpeningModal } from './ShiftOpeningModal';
 import { StockAdditionModal } from './StockAdditionModal';
 import { ShiftExpenseModal } from './ShiftExpenseModal';
 import { ShiftClosingModal } from './ShiftClosingModal';
+import { InterBusinessDispatchModal } from './InterBusinessDispatchModal';
+import { IncomingTransferBanner } from '../common/IncomingTransferBanner';
 import {
   Smartphone,
   Coins,
@@ -22,6 +24,10 @@ import {
   Search,
   ShieldCheck,
   Wine,
+  Truck,
+  Building2,
+  Check,
+  X,
 } from 'lucide-react';
 
 interface WorkerTerminalProps {
@@ -31,12 +37,16 @@ interface WorkerTerminalProps {
 export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeModal, setActiveModal] = useState<
-    'NONE' | 'ADD_STOCK' | 'EXPENSE' | 'CLOSE_SHIFT'
+    'NONE' | 'ADD_STOCK' | 'EXPENSE' | 'CLOSE_SHIFT' | 'INTER_TRANSFER'
   >('NONE');
+  const [dispatchToast, setDispatchToast] = useState<string | null>(null);
 
+  const currentBiz = store.getCurrentBusiness();
   const products = store.getProducts();
   const activeShift = store.getActiveShift();
   const inventory = store.getInventory();
+  const partners = store.getPartners();
+  const incomingTransfers = store.getPendingIncomingTransfers();
   const shiftStockItems = activeShift ? store.getShiftStockItems(activeShift.id) : [];
   const expenses = activeShift ? store.getExpenses(activeShift.id) : [];
 
@@ -100,7 +110,20 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
     setActiveModal('NONE');
   };
 
-  // Sort products alphabetically A to Z (Single column specification)
+  const handleDispatchSuccess = (info: {
+    partnerName: string;
+    productName: string;
+    quantity: number;
+    cost: number;
+  }) => {
+    setActiveModal('NONE');
+    setDispatchToast(
+      `Dispatched ${info.quantity}x ${info.productName} to ${info.partnerName}! Cost value of KES ${info.cost.toLocaleString()} transferred.`
+    );
+    setTimeout(() => setDispatchToast(null), 6000);
+  };
+
+  // Sort products alphabetically A to Z
   const sortedProducts = [...products].sort((a, b) => a.name.localeCompare(b.name));
 
   const filteredProducts = sortedProducts.filter((p) =>
@@ -108,7 +131,6 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
     p.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Calculate total initial units on bar counter
   const totalStartingUnits = shiftStockItems.reduce(
     (sum, item) => sum + item.openingPhysicalCount + item.additions,
     0
@@ -127,6 +149,22 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
       ) : (
         /* 2. ACTIVE SHIFT SCREEN */
         <div className="space-y-4">
+          {/* Dispatch Success Alert */}
+          {dispatchToast && (
+            <div className="p-3.5 rounded-2xl bg-amber-950/80 border border-amber-500 text-amber-200 text-xs flex items-center justify-between shadow-xl animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="font-medium">{dispatchToast}</span>
+              </div>
+              <button onClick={() => setDispatchToast(null)} className="p-1 hover:text-white">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* INCOMING INTER-BUSINESS TRANSFER NOTIFICATION (1-TAP ACCEPT/REJECT) */}
+          <IncomingTransferBanner transfers={incomingTransfers} />
+
           {/* Active Shift Header Card */}
           <div className="bg-[#121824] border border-[#1E293B] rounded-3xl p-5 shadow-lg">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
@@ -211,36 +249,52 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
             )}
           </div>
 
-          {/* Quick Shift Operations Bar (Delivery Restock & Expenses) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Quick Operations Bar (Restock, Inter-Bar Dispatch, Expenses) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* 1. Receive Restock */}
             <button
               onClick={() => setActiveModal('ADD_STOCK')}
               className="p-3.5 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-[#1E293B] text-left transition-all active:scale-[0.98] cursor-pointer"
             >
               <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 mb-1">
                 <PackagePlus className="w-4 h-4" />
-                <span>Receive Stock Restock / Delivery</span>
+                <span>Receive Restock</span>
               </div>
               <div className="text-[11px] text-slate-400">
-                Add crates received from distributor or supplier
+                Delivery from supplier / brewer
               </div>
             </button>
 
+            {/* 2. Send Stock to Partner Bar */}
+            <button
+              onClick={() => setActiveModal('INTER_TRANSFER')}
+              className="p-3.5 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-amber-500/30 hover:border-amber-500/60 text-left transition-all active:scale-[0.98] cursor-pointer"
+            >
+              <div className="flex items-center gap-2 text-xs font-bold text-amber-400 mb-1">
+                <Truck className="w-4 h-4" />
+                <span>Send to Partner Bar</span>
+              </div>
+              <div className="text-[11px] text-slate-400">
+                Loan crates with automated cost transfer
+              </div>
+            </button>
+
+            {/* 3. Record Expense */}
             <button
               onClick={() => setActiveModal('EXPENSE')}
               className="p-3.5 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-[#1E293B] text-left transition-all active:scale-[0.98] cursor-pointer"
             >
-              <div className="flex items-center gap-2 text-xs font-bold text-amber-400 mb-1">
-                <Receipt className="w-4 h-4" />
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-300 mb-1">
+                <Receipt className="w-4 h-4 text-amber-400" />
                 <span>Record Till Expense</span>
               </div>
               <div className="text-[11px] text-slate-400">
-                Ice, lemons, transport paid out of cash/till
+                Ice, lemons, transport paid in cash
               </div>
             </button>
           </div>
 
-          {/* Counter Inventory Reference (1 Single Column, Arranged Alphabetically A to Z) */}
+          {/* Bar Stock Reference (Single Column Alphabetical A to Z) */}
           <div className="bg-[#121824] border border-[#1E293B] rounded-3xl p-5 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800">
               <div>
@@ -272,7 +326,9 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
                 const inv = inventory.find((i) => i.productId === product.id);
                 const opening = ssi ? ssi.openingPhysicalCount : (inv ? inv.quantityOnHand : 0);
                 const additions = ssi ? ssi.additions : 0;
-                const totalAvailable = opening + additions;
+                const transfersIn = ssi ? ssi.transfersIn : 0;
+                const transfersOut = ssi ? ssi.transfersOut : 0;
+                const currentAvailable = opening + additions + transfersIn - transfersOut;
 
                 return (
                   <div
@@ -287,31 +343,24 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
                         <span className="capitalize">{product.category.replace('_', ' ').toLowerCase()}</span>
                         <span>·</span>
                         <span className="text-emerald-400 font-bold">KES {product.sellingPrice.toLocaleString()}</span>
+                        <span>·</span>
+                        <span className="text-slate-500">Cost: KES {product.costPrice}</span>
                       </div>
                     </div>
 
                     <div className="text-right font-mono shrink-0">
                       <div className="text-xs font-bold text-white">
-                        {totalAvailable} {product.unit.toLowerCase()}s
+                        {currentAvailable} {product.unit.toLowerCase()}s
                       </div>
                       <div className="text-[10px] text-slate-400">
                         {opening} started {additions > 0 && `(+${additions} added)`}
+                        {transfersIn > 0 && ` (+${transfersIn} received)`}
+                        {transfersOut > 0 && ` (-${transfersOut} sent)`}
                       </div>
                     </div>
                   </div>
                 );
               })}
-            </div>
-          </div>
-
-          {/* Operational Workflow Reminder Banner */}
-          <div className="p-4 rounded-2xl bg-[#0E1420] border border-slate-800 text-xs text-slate-400 flex items-start gap-3">
-            <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-            <div>
-              <div className="font-bold text-slate-200">Zero In-Shift POS Friction</div>
-              <div className="mt-0.5 text-[11px] leading-relaxed">
-                Serve your customers freely throughout your shift. When taking handover or clocking out, count what remains in the bar. The system calculates sold bottles and expected revenue automatically.
-              </div>
             </div>
           </div>
         </div>
@@ -323,6 +372,16 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
           products={products}
           onClose={() => setActiveModal('NONE')}
           onConfirmAddition={handleConfirmAddition}
+        />
+      )}
+
+      {activeModal === 'INTER_TRANSFER' && activeShift && (
+        <InterBusinessDispatchModal
+          products={products}
+          inventory={inventory}
+          partners={partners}
+          onClose={() => setActiveModal('NONE')}
+          onSuccess={handleDispatchSuccess}
         />
       )}
 

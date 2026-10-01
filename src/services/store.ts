@@ -11,25 +11,35 @@ import {
   OperationalEvent,
   StockMovement,
   MpesaTransaction,
+  BusinessProfile,
+  BusinessPartner,
+  InterBusinessTransfer,
 } from '../types';
 import {
   INITIAL_PRODUCTS,
   INITIAL_MPESA_ACCOUNTS,
   INITIAL_USERS,
   INITIAL_INVENTORY,
+  INITIAL_BUSINESSES,
+  INITIAL_PARTNERS,
+  INITIAL_TRANSFERS,
 } from './mockData';
 
 const STORAGE_KEYS = {
+  CURRENT_BIZ_ID: 'bar_track_current_biz_id',
+  BUSINESSES: 'bar_track_businesses',
+  PARTNERS: 'bar_track_partners',
+  INTER_TRANSFERS: 'bar_track_inter_transfers',
   PRODUCTS: 'bar_track_products',
   MPESA_ACCOUNTS: 'bar_track_mpesa_accounts',
   USERS: 'bar_track_users',
-  INVENTORY: 'bar_track_inventory',
-  SHIFTS: 'bar_track_shifts',
+  INVENTORY_MAP: 'bar_track_inventory_map',
+  SHIFTS_MAP: 'bar_track_shifts_map',
   SHIFT_STOCK_ITEMS: 'bar_track_shift_stock_items',
   EXPENSES: 'bar_track_expenses',
   STOCK_MOVEMENTS: 'bar_track_stock_movements',
   DISCREPANCIES: 'bar_track_discrepancies',
-  EVENTS: 'bar_track_events',
+  EVENTS_MAP: 'bar_track_events_map',
   MPESA_TXNS: 'bar_track_mpesa_txns',
   OFFLINE_QUEUE: 'bar_track_offline_queue',
   IS_ONLINE: 'bar_track_is_online',
@@ -79,16 +89,33 @@ class StoreService {
   }
 
   private ensureInitialized() {
-    if (!localStorage.getItem(STORAGE_KEYS.PRODUCTS)) {
+    if (!localStorage.getItem(STORAGE_KEYS.PRODUCTS) || !localStorage.getItem(STORAGE_KEYS.BUSINESSES)) {
       this.resetToDefaults();
     }
   }
 
   public resetToDefaults() {
+    this.set(STORAGE_KEYS.CURRENT_BIZ_ID, 'biz-1');
+    this.set(STORAGE_KEYS.BUSINESSES, INITIAL_BUSINESSES);
+    this.set(STORAGE_KEYS.PARTNERS, INITIAL_PARTNERS);
+    this.set(STORAGE_KEYS.INTER_TRANSFERS, INITIAL_TRANSFERS);
     this.set(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
     this.set(STORAGE_KEYS.MPESA_ACCOUNTS, INITIAL_MPESA_ACCOUNTS);
     this.set(STORAGE_KEYS.USERS, INITIAL_USERS);
-    this.set(STORAGE_KEYS.INVENTORY, INITIAL_INVENTORY);
+
+    // Seed inventory for biz-1 and biz-2
+    const inventoryMap: Record<string, InventoryItem[]> = {
+      'biz-1': JSON.parse(JSON.stringify(INITIAL_INVENTORY)),
+      'biz-2': INITIAL_INVENTORY.map((item) => ({
+        ...item,
+        quantityOnHand: Math.floor(item.quantityOnHand * 0.75), // slightly different stock
+      })),
+      'biz-3': INITIAL_INVENTORY.map((item) => ({
+        ...item,
+        quantityOnHand: Math.floor(item.quantityOnHand * 0.9),
+      })),
+    };
+    this.set(STORAGE_KEYS.INVENTORY_MAP, inventoryMap);
 
     const sampleClosedShift: Shift = {
       id: 'shift-sample-closed',
@@ -102,9 +129,9 @@ class StoreService {
       openingMpesaBalance: 10000,
       closingCashActual: 14500,
       closingMpesaBalance: 17000,
-      calculatedMpesaIncome: 7000, // 17,000 - 10,000 = 7,000 KES
-      calculatedCashIncome: 11500, // 14,500 - 3,000 = 11,500 KES
-      totalIncomeReturned: 18500, // 11,500 + 7,000 = 18,500 KES
+      calculatedMpesaIncome: 7000,
+      calculatedCashIncome: 11500,
+      totalIncomeReturned: 18500,
       recordedSalesCount: 71,
       expectedSalesRevenue: 18500,
       totalExpenses: 800,
@@ -114,6 +141,25 @@ class StoreService {
       financialVariance: 800,
       closingNotes: 'Handover complete. Shift balanced.',
     };
+
+    const shiftsMap: Record<string, Shift[]> = {
+      'biz-1': [sampleClosedShift],
+      'biz-2': [
+        {
+          id: 'shift-biz2-active',
+          shiftNumber: 'SH-260930-201',
+          workerId: 'user-2',
+          workerName: 'Peter Mwiti (Bar Tender)',
+          status: 'ACTIVE',
+          openedAt: new Date(Date.now() - 3600000 * 4).toISOString(),
+          openingCashFloat: 2500,
+          openingMpesaBalance: 8000,
+          recordedSalesCount: 14,
+        },
+      ],
+      'biz-3': [],
+    };
+    this.set(STORAGE_KEYS.SHIFTS_MAP, shiftsMap);
 
     const sampleExpenses: Expense[] = [
       {
@@ -126,19 +172,8 @@ class StoreService {
         receiptRef: 'RCP-401',
         timestamp: new Date(Date.now() - 3600000 * 14).toISOString(),
       },
-      {
-        id: 'exp-seed-2',
-        shiftId: 'shift-sample-closed',
-        category: 'LEMONS_LIMES',
-        amount: 300,
-        paymentMethod: 'CASH',
-        description: 'Fresh cocktail limes from Market',
-        receiptRef: 'RCP-402',
-        timestamp: new Date(Date.now() - 3600000 * 12).toISOString(),
-      },
     ];
 
-    this.set(STORAGE_KEYS.SHIFTS, [sampleClosedShift]);
     this.set(STORAGE_KEYS.EXPENSES, sampleExpenses);
     this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
     this.set(STORAGE_KEYS.STOCK_MOVEMENTS, []);
@@ -147,29 +182,34 @@ class StoreService {
     this.set(STORAGE_KEYS.OFFLINE_QUEUE, []);
     this.set(STORAGE_KEYS.IS_ONLINE, true);
 
-    const initialEvents: OperationalEvent[] = [
-      {
-        id: 'evt-init-1',
-        type: 'SHIFT_CLOSED',
-        title: 'Shift SH-260929-101 Reconciled',
-        description: 'Total Returned: KES 18,500 (M-Pesa Net: KES 7,000 | Cash Net: KES 11,500). Net Profit: KES 5,500.',
-        timestamp: new Date(Date.now() - 3600000 * 10).toISOString(),
-        actorName: 'Wanjiku Kamau (Bar Tender)',
-        severity: 'SUCCESS',
-        amount: 18500,
-        currency: 'KES',
-      },
-      {
-        id: 'evt-init-2',
-        type: 'SHIFT_OPENED',
-        title: 'Shift SH-260929-101 Opened',
-        description: 'Opening Cash Float: KES 3,000, M-Pesa Entry Balance: KES 10,000. Verified.',
-        timestamp: new Date(Date.now() - 3600000 * 18).toISOString(),
-        actorName: 'Wanjiku Kamau (Bar Tender)',
-        severity: 'INFO',
-      },
-    ];
-    this.set(STORAGE_KEYS.EVENTS, initialEvents);
+    const eventsMap: Record<string, OperationalEvent[]> = {
+      'biz-1': [
+        {
+          id: 'evt-init-1',
+          type: 'SHIFT_CLOSED',
+          title: 'Shift SH-260929-101 Reconciled',
+          description: 'Total Returned: KES 18,500. Net Profit: KES 5,500.',
+          timestamp: new Date(Date.now() - 3600000 * 10).toISOString(),
+          actorName: 'Wanjiku Kamau (Bar Tender)',
+          severity: 'SUCCESS',
+          amount: 18500,
+          currency: 'KES',
+        },
+      ],
+      'biz-2': [
+        {
+          id: 'evt-biz2-1',
+          type: 'SHIFT_OPENED',
+          title: 'Shift SH-260930-201 Opened',
+          description: 'Cash Float: KES 2,500, M-Pesa Entry: KES 8,000.',
+          timestamp: new Date(Date.now() - 3600000 * 4).toISOString(),
+          actorName: 'Peter Mwiti',
+          severity: 'INFO',
+        },
+      ],
+    };
+    this.set(STORAGE_KEYS.EVENTS_MAP, eventsMap);
+
     this.notify();
   }
 
@@ -181,20 +221,6 @@ class StoreService {
   public toggleOnlineStatus(): boolean {
     const next = !this.isOnline();
     this.set(STORAGE_KEYS.IS_ONLINE, next);
-
-    if (next) {
-      const queue = this.get<unknown[]>(STORAGE_KEYS.OFFLINE_QUEUE, []);
-      if (queue.length > 0) {
-        this.addEvent({
-          type: 'INFO',
-          title: 'Offline Queue Synchronized',
-          description: `Device re-connected. Successfully synced ${queue.length} offline operations to the central register.`,
-          actorName: 'System Sync Engine',
-          severity: 'SUCCESS',
-        });
-        this.set(STORAGE_KEYS.OFFLINE_QUEUE, []);
-      }
-    }
     this.notify();
     return next;
   }
@@ -216,21 +242,435 @@ class StoreService {
     }
   }
 
+  // --- Multi-Business / Current Establishment Profile ---
+  public getCurrentBusinessId(): string {
+    return this.get<string>(STORAGE_KEYS.CURRENT_BIZ_ID, 'biz-1');
+  }
+
+  public getCurrentBusiness(): BusinessProfile {
+    const id = this.getCurrentBusinessId();
+    const businesses = this.getBusinesses();
+    return (
+      businesses.find((b) => b.id === id) ||
+      businesses[0] || {
+        id: 'biz-1',
+        name: 'The Alchemist Bar',
+        connectCode: '849201',
+        phone: '0722 841 902',
+        ownerName: 'Maina Mwangi',
+      }
+    );
+  }
+
+  public setCurrentBusiness(bizId: string) {
+    this.set(STORAGE_KEYS.CURRENT_BIZ_ID, bizId);
+    this.notify();
+  }
+
+  public getBusinesses(): BusinessProfile[] {
+    return this.get<BusinessProfile[]>(STORAGE_KEYS.BUSINESSES, INITIAL_BUSINESSES);
+  }
+
+  // --- Inter-Business Partner Management ---
+  public getPartners(): BusinessPartner[] {
+    const currentBizId = this.getCurrentBusinessId();
+    const allPartners = this.get<BusinessPartner[]>(STORAGE_KEYS.PARTNERS, []);
+    return allPartners.filter((p) => p.businessId === currentBizId);
+  }
+
+  /**
+   * Connect with a partner bar using either their 6-digit Bar Connect Code or Phone Number
+   */
+  public connectPartner(connectInput: string): BusinessPartner {
+    const cleanInput = connectInput.trim().replace(/\s|-/g, '');
+    const currentBiz = this.getCurrentBusiness();
+    const businesses = this.getBusinesses();
+
+    // Search by 6-digit connectCode or phone
+    const targetBiz = businesses.find((b) => {
+      if (b.id === currentBiz.id) return false;
+      const bCode = b.connectCode.replace(/\s|-/g, '');
+      const bPhone = b.phone.replace(/\s|-/g, '');
+      return bCode === cleanInput || bPhone === cleanInput || bPhone.endsWith(cleanInput) || cleanInput.endsWith(bPhone);
+    });
+
+    if (!targetBiz) {
+      throw new Error(`No partner bar found matching "${connectInput}". Please check the 6-digit code or phone number.`);
+    }
+
+    const allPartners = this.get<BusinessPartner[]>(STORAGE_KEYS.PARTNERS, []);
+    const existing = allPartners.find(
+      (p) => p.businessId === currentBiz.id && p.partnerBusinessId === targetBiz.id
+    );
+    if (existing) {
+      return existing;
+    }
+
+    // Create bidirectional link
+    const newPartnerLink: BusinessPartner = {
+      id: `partner-${currentBiz.id}-${targetBiz.id}`,
+      businessId: currentBiz.id,
+      partnerBusinessId: targetBiz.id,
+      partnerName: targetBiz.name,
+      partnerPhone: targetBiz.phone,
+      partnerConnectCode: targetBiz.connectCode,
+      netCostBalance: 0,
+      connectedAt: new Date().toISOString(),
+    };
+
+    const reciprocalLink: BusinessPartner = {
+      id: `partner-${targetBiz.id}-${currentBiz.id}`,
+      businessId: targetBiz.id,
+      partnerBusinessId: currentBiz.id,
+      partnerName: currentBiz.name,
+      partnerPhone: currentBiz.phone,
+      partnerConnectCode: currentBiz.connectCode,
+      netCostBalance: 0,
+      connectedAt: new Date().toISOString(),
+    };
+
+    allPartners.push(newPartnerLink, reciprocalLink);
+    this.set(STORAGE_KEYS.PARTNERS, allPartners);
+
+    this.addEvent({
+      type: 'INFO',
+      title: `Partner Bar Connected: ${targetBiz.name}`,
+      description: `Linked via connect code ${targetBiz.connectCode}. You can now exchange stock directly.`,
+      actorName: 'Business Network',
+      severity: 'SUCCESS',
+    });
+
+    this.notify();
+    return newPartnerLink;
+  }
+
+  // --- Inter-Business Stock Transfers ---
+  public getInterBusinessTransfers(): InterBusinessTransfer[] {
+    const currentBizId = this.getCurrentBusinessId();
+    const allTransfers = this.get<InterBusinessTransfer[]>(STORAGE_KEYS.INTER_TRANSFERS, []);
+    return allTransfers.filter(
+      (t) => t.fromBusinessId === currentBizId || t.toBusinessId === currentBizId
+    );
+  }
+
+  public getPendingIncomingTransfers(): InterBusinessTransfer[] {
+    const currentBizId = this.getCurrentBusinessId();
+    const allTransfers = this.get<InterBusinessTransfer[]>(STORAGE_KEYS.INTER_TRANSFERS, []);
+    return allTransfers.filter(
+      (t) => t.toBusinessId === currentBizId && t.status === 'PENDING'
+    );
+  }
+
+  /**
+   * Operation: Dispatch Stock to a Partner Bar
+   * Decrements local inventory, marks transfersOut on active shift, and creates PENDING transfer
+   */
+  public dispatchInterBusinessTransfer(params: {
+    toBusinessId: string;
+    productId: string;
+    quantity: number;
+    notes?: string;
+  }): InterBusinessTransfer {
+    const currentBiz = this.getCurrentBusiness();
+    const activeShift = this.getActiveShift();
+    if (!activeShift) {
+      throw new Error('You must have an active shift open to dispatch stock.');
+    }
+
+    const businesses = this.getBusinesses();
+    const targetBiz = businesses.find((b) => b.id === params.toBusinessId);
+    if (!targetBiz) throw new Error('Target partner bar not found.');
+
+    const product = this.getProducts().find((p) => p.id === params.productId);
+    if (!product) throw new Error('Product not found.');
+
+    const qty = Number(params.quantity);
+    if (qty <= 0) throw new Error('Quantity must be greater than zero.');
+
+    const currentInventory = this.getInventory();
+    const inv = currentInventory.find((i) => i.productId === product.id);
+    const available = inv ? inv.quantityOnHand : 0;
+
+    if (available < qty) {
+      throw new Error(`Insufficient stock. Only ${available} ${product.unit.toLowerCase()}(s) available.`);
+    }
+
+    // 1. Decrement local stock
+    if (inv) {
+      inv.quantityOnHand -= qty;
+      inv.updatedAt = new Date().toISOString();
+      this.saveCurrentInventory(currentInventory);
+    }
+
+    // 2. Update active shift transfersOut
+    const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
+    const ssi = allSSIs.find(
+      (item) => item.shiftId === activeShift.id && item.productId === params.productId
+    );
+    if (ssi) {
+      ssi.transfersOut += qty;
+      this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
+    }
+
+    // 3. Log movement
+    const movements = this.get<StockMovement[]>(STORAGE_KEYS.STOCK_MOVEMENTS, []);
+    movements.unshift({
+      id: `mov-${Date.now()}`,
+      shiftId: activeShift.id,
+      productId: product.id,
+      productName: product.name,
+      type: 'TRANSFER_OUT',
+      quantity: qty,
+      unitPrice: product.costPrice,
+      timestamp: new Date().toISOString(),
+      note: `Dispatched ${qty} to partner bar ${targetBiz.name}. ${params.notes || ''}`,
+    });
+    this.set(STORAGE_KEYS.STOCK_MOVEMENTS, movements);
+
+    // 4. Create InterBusinessTransfer record
+    const totalCostValue = qty * product.costPrice;
+    const transfer: InterBusinessTransfer = {
+      id: `trf-${Date.now()}`,
+      fromBusinessId: currentBiz.id,
+      fromBusinessName: currentBiz.name,
+      fromShiftId: activeShift.id,
+      senderWorkerName: activeShift.workerName,
+      toBusinessId: targetBiz.id,
+      toBusinessName: targetBiz.name,
+      productId: product.id,
+      productName: product.name,
+      quantity: qty,
+      unitCost: product.costPrice,
+      totalCostValue,
+      status: 'PENDING',
+      dispatchedAt: new Date().toISOString(),
+      notes: params.notes,
+    };
+
+    const allTransfers = this.get<InterBusinessTransfer[]>(STORAGE_KEYS.INTER_TRANSFERS, []);
+    allTransfers.unshift(transfer);
+    this.set(STORAGE_KEYS.INTER_TRANSFERS, allTransfers);
+
+    this.addEvent({
+      type: 'INTER_BAR_DISPATCH',
+      title: `Transfer Sent: ${qty}x ${product.name}`,
+      description: `Dispatched to ${targetBiz.name}. Cost Value: KES ${totalCostValue.toLocaleString()}. Waiting for their acceptance.`,
+      actorName: activeShift.workerName,
+      severity: 'WARNING',
+      amount: totalCostValue,
+      currency: 'KES',
+    });
+
+    this.notify();
+    return transfer;
+  }
+
+  /**
+   * Operation: Accept incoming stock from partner bar (1-tap on active shift screen)
+   * RULE: Cost of product is removed from giver and added to receiver!
+   */
+  public acceptInterBusinessTransfer(transferId: string, receiverWorkerName?: string) {
+    const allTransfers = this.get<InterBusinessTransfer[]>(STORAGE_KEYS.INTER_TRANSFERS, []);
+    const transfer = allTransfers.find((t) => t.id === transferId);
+    if (!transfer || transfer.status !== 'PENDING') {
+      throw new Error('Transfer is not pending.');
+    }
+
+    const currentBiz = this.getCurrentBusiness();
+    const activeShift = this.getActiveShift();
+    const attendant = receiverWorkerName || activeShift?.workerName || currentBiz.ownerName;
+
+    // 1. Mark transfer accepted
+    transfer.status = 'ACCEPTED';
+    transfer.acceptedAt = new Date().toISOString();
+    transfer.receiverWorkerName = attendant;
+    if (activeShift) {
+      transfer.toShiftId = activeShift.id;
+    }
+    this.set(STORAGE_KEYS.INTER_TRANSFERS, allTransfers);
+
+    // 2. Add inventory to receiving bar
+    const currentInventory = this.getInventory();
+    const inv = currentInventory.find((i) => i.productId === transfer.productId);
+    if (inv) {
+      inv.quantityOnHand += transfer.quantity;
+      inv.updatedAt = new Date().toISOString();
+    } else {
+      currentInventory.push({
+        id: `inv-${Date.now()}-${transfer.productId}`,
+        productId: transfer.productId,
+        quantityOnHand: transfer.quantity,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    this.saveCurrentInventory(currentInventory);
+
+    // 3. Update active shift transfersIn
+    if (activeShift) {
+      const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
+      const ssi = allSSIs.find(
+        (item) => item.shiftId === activeShift.id && item.productId === transfer.productId
+      );
+      if (ssi) {
+        ssi.transfersIn += transfer.quantity;
+        this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
+      }
+    }
+
+    // 4. Update Partner Cost Ledger (CRITICAL RULE: Cost removed from giver and added to receiver)
+    const allPartners = this.get<BusinessPartner[]>(STORAGE_KEYS.PARTNERS, []);
+
+    // For receiver: we owe the sender this cost value (netCostBalance decreases)
+    const receiverPartnerLink = allPartners.find(
+      (p) => p.businessId === currentBiz.id && p.partnerBusinessId === transfer.fromBusinessId
+    );
+    if (receiverPartnerLink) {
+      receiverPartnerLink.netCostBalance -= transfer.totalCostValue;
+    } else {
+      allPartners.push({
+        id: `partner-${currentBiz.id}-${transfer.fromBusinessId}`,
+        businessId: currentBiz.id,
+        partnerBusinessId: transfer.fromBusinessId,
+        partnerName: transfer.fromBusinessName,
+        partnerPhone: '',
+        partnerConnectCode: '',
+        netCostBalance: -transfer.totalCostValue,
+        connectedAt: new Date().toISOString(),
+      });
+    }
+
+    // For sender: sender is owed this cost value (netCostBalance increases)
+    const senderPartnerLink = allPartners.find(
+      (p) => p.businessId === transfer.fromBusinessId && p.partnerBusinessId === currentBiz.id
+    );
+    if (senderPartnerLink) {
+      senderPartnerLink.netCostBalance += transfer.totalCostValue;
+    } else {
+      allPartners.push({
+        id: `partner-${transfer.fromBusinessId}-${currentBiz.id}`,
+        businessId: transfer.fromBusinessId,
+        partnerBusinessId: currentBiz.id,
+        partnerName: currentBiz.name,
+        partnerPhone: currentBiz.phone,
+        partnerConnectCode: currentBiz.connectCode,
+        netCostBalance: transfer.totalCostValue,
+        connectedAt: new Date().toISOString(),
+      });
+    }
+    this.set(STORAGE_KEYS.PARTNERS, allPartners);
+
+    // 5. Operational Event
+    this.addEvent({
+      type: 'INTER_BAR_ACCEPTED',
+      title: `Transfer Received: ${transfer.quantity}x ${transfer.productName}`,
+      description: `Accepted from ${transfer.fromBusinessName}. Cost of KES ${transfer.totalCostValue.toLocaleString()} added to bar inventory.`,
+      actorName: attendant,
+      severity: 'SUCCESS',
+      amount: transfer.totalCostValue,
+      currency: 'KES',
+    });
+
+    this.notify();
+  }
+
+  /**
+   * Operation: Reject incoming stock transfer
+   * Reverts stock back to giver
+   */
+  public rejectInterBusinessTransfer(transferId: string, reason?: string) {
+    const allTransfers = this.get<InterBusinessTransfer[]>(STORAGE_KEYS.INTER_TRANSFERS, []);
+    const transfer = allTransfers.find((t) => t.id === transferId);
+    if (!transfer || transfer.status !== 'PENDING') return;
+
+    transfer.status = 'REJECTED';
+    this.set(STORAGE_KEYS.INTER_TRANSFERS, allTransfers);
+
+    // Revert stock on giver business
+    const inventoryMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
+    const giverInventory = inventoryMap[transfer.fromBusinessId] || [];
+    const inv = giverInventory.find((i) => i.productId === transfer.productId);
+    if (inv) {
+      inv.quantityOnHand += transfer.quantity;
+      this.set(STORAGE_KEYS.INVENTORY_MAP, inventoryMap);
+    }
+
+    // Revert SSI transfersOut if shift is still open
+    const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
+    const ssi = allSSIs.find(
+      (item) => item.shiftId === transfer.fromShiftId && item.productId === transfer.productId
+    );
+    if (ssi) {
+      ssi.transfersOut = Math.max(0, ssi.transfersOut - transfer.quantity);
+      this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
+    }
+
+    this.addEvent({
+      type: 'INTER_BAR_REJECTED',
+      title: `Transfer Rejected: ${transfer.quantity}x ${transfer.productName}`,
+      description: `Returned to ${transfer.fromBusinessName}. ${reason || ''}`,
+      actorName: 'Partner Bar Terminal',
+      severity: 'WARNING',
+    });
+
+    this.notify();
+  }
+
+  /**
+   * Settle Partner Debt / Balance (e.g. paying cash or M-Pesa to clear borrowed drinks)
+   */
+  public settlePartnerBalance(partnerBusinessId: string, amount: number, paymentMethod: 'CASH' | 'MPESA', notes?: string) {
+    const currentBiz = this.getCurrentBusiness();
+    const allPartners = this.get<BusinessPartner[]>(STORAGE_KEYS.PARTNERS, []);
+    const partnerLink = allPartners.find(
+      (p) => p.businessId === currentBiz.id && p.partnerBusinessId === partnerBusinessId
+    );
+    if (!partnerLink) return;
+
+    partnerLink.netCostBalance += amount; // paying off our debt brings negative balance towards 0
+
+    // Update reciprocal link
+    const reciprocal = allPartners.find(
+      (p) => p.businessId === partnerBusinessId && p.partnerBusinessId === currentBiz.id
+    );
+    if (reciprocal) {
+      reciprocal.netCostBalance -= amount;
+    }
+
+    this.set(STORAGE_KEYS.PARTNERS, allPartners);
+
+    this.addEvent({
+      type: 'INFO',
+      title: `Loan Settled: KES ${amount.toLocaleString()}`,
+      description: `Paid to ${partnerLink.partnerName} via ${paymentMethod}. ${notes || ''}`,
+      actorName: currentBiz.ownerName,
+      severity: 'SUCCESS',
+      amount,
+      currency: 'KES',
+    });
+
+    this.notify();
+  }
+
   // --- Events and Live Ticker ---
   public getEvents(limit = 40): OperationalEvent[] {
-    const events = this.get<OperationalEvent[]>(STORAGE_KEYS.EVENTS, []);
+    const bizId = this.getCurrentBusinessId();
+    const eventsMap = this.get<Record<string, OperationalEvent[]>>(STORAGE_KEYS.EVENTS_MAP, {});
+    const events = eventsMap[bizId] || [];
     return events.slice(0, limit);
   }
 
   private addEvent(eventData: Omit<OperationalEvent, 'id' | 'timestamp'>) {
-    const events = this.get<OperationalEvent[]>(STORAGE_KEYS.EVENTS, []);
+    const bizId = this.getCurrentBusinessId();
+    const eventsMap = this.get<Record<string, OperationalEvent[]>>(STORAGE_KEYS.EVENTS_MAP, {});
+    const events = eventsMap[bizId] || [];
     const newEvent: OperationalEvent = {
       ...eventData,
       id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       timestamp: new Date().toISOString(),
     };
     events.unshift(newEvent);
-    this.set(STORAGE_KEYS.EVENTS, events.slice(0, 100));
+    eventsMap[bizId] = events.slice(0, 100);
+    this.set(STORAGE_KEYS.EVENTS_MAP, eventsMap);
   }
 
   // --- Read Entities ---
@@ -247,11 +687,26 @@ class StoreService {
   }
 
   public getInventory(): InventoryItem[] {
-    return this.get<InventoryItem[]>(STORAGE_KEYS.INVENTORY, []);
+    const bizId = this.getCurrentBusinessId();
+    const inventoryMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
+    if (!inventoryMap[bizId]) {
+      inventoryMap[bizId] = JSON.parse(JSON.stringify(INITIAL_INVENTORY));
+      this.set(STORAGE_KEYS.INVENTORY_MAP, inventoryMap);
+    }
+    return inventoryMap[bizId];
+  }
+
+  private saveCurrentInventory(inv: InventoryItem[]) {
+    const bizId = this.getCurrentBusinessId();
+    const inventoryMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
+    inventoryMap[bizId] = inv;
+    this.set(STORAGE_KEYS.INVENTORY_MAP, inventoryMap);
   }
 
   public getShifts(): Shift[] {
-    return this.get<Shift[]>(STORAGE_KEYS.SHIFTS, []);
+    const bizId = this.getCurrentBusinessId();
+    const shiftsMap = this.get<Record<string, Shift[]>>(STORAGE_KEYS.SHIFTS_MAP, {});
+    return shiftsMap[bizId] || [];
   }
 
   public getActiveShift(): Shift | undefined {
@@ -293,18 +748,13 @@ class StoreService {
     return discrepancies;
   }
 
-  // --- Business Operations & Transitions ---
-
-  /**
-   * Transition: Initiate & Open Shift
-   * Worker inputs starting M-Pesa balance, opening cash float, and verifies physical stock count.
-   */
+  // --- Shift Operations ---
   public openShift(params: {
     workerId: string;
     workerName: string;
     openingCashFloat: number;
     openingMpesaBalance: number;
-    physicalCounts: Record<string, number>; // productId -> physical count counted
+    physicalCounts: Record<string, number>;
     inconsistencyNote?: string;
   }): Shift {
     this.queueOfflineOperation('openShift', params);
@@ -366,14 +816,13 @@ class StoreService {
     });
 
     // Update actual inventory to reflect opening physical reality
-    const allInventory = this.get<InventoryItem[]>(STORAGE_KEYS.INVENTORY, []);
     shiftStockItems.forEach((ssi) => {
-      const existing = allInventory.find((i) => i.productId === ssi.productId);
+      const existing = currentInventory.find((i) => i.productId === ssi.productId);
       if (existing) {
         existing.quantityOnHand = ssi.openingPhysicalCount;
         existing.updatedAt = new Date().toISOString();
       } else {
-        allInventory.push({
+        currentInventory.push({
           id: `inv-${Date.now()}-${ssi.productId}`,
           productId: ssi.productId,
           quantityOnHand: ssi.openingPhysicalCount,
@@ -381,7 +830,7 @@ class StoreService {
         });
       }
     });
-    this.set(STORAGE_KEYS.INVENTORY, allInventory);
+    this.saveCurrentInventory(currentInventory);
 
     // Save shift stock items
     const existingSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
@@ -404,84 +853,27 @@ class StoreService {
       openingInconsistencyNote: params.inconsistencyNote,
     };
 
-    const shifts = this.getShifts();
+    const bizId = this.getCurrentBusinessId();
+    const shiftsMap = this.get<Record<string, Shift[]>>(STORAGE_KEYS.SHIFTS_MAP, {});
+    const shifts = shiftsMap[bizId] || [];
     shifts.unshift(newShift);
-    this.set(STORAGE_KEYS.SHIFTS, shifts);
+    shiftsMap[bizId] = shifts;
+    this.set(STORAGE_KEYS.SHIFTS_MAP, shiftsMap);
 
-    // Log operational events
     this.addEvent({
       type: 'SHIFT_OPENED',
       title: `Shift Opened`,
-      description: `${params.workerName} opened shift ${shiftNumber}. Cash Float: KES ${params.openingCashFloat.toLocaleString()}, M-Pesa Entry Balance: KES ${params.openingMpesaBalance.toLocaleString()}${
-        hasOpeningInconsistency ? ' [FLAGGED: Stock count mismatch noted]' : ''
-      }`,
+      description: `${params.workerName} opened shift ${shiftNumber}. Cash Float: KES ${params.openingCashFloat.toLocaleString()}, M-Pesa Entry: KES ${params.openingMpesaBalance.toLocaleString()}`,
       actorName: params.workerName,
       severity: hasOpeningInconsistency ? 'WARNING' : 'SUCCESS',
       amount: params.openingMpesaBalance,
       currency: 'KES',
     });
 
-    if (hasOpeningInconsistency) {
-      const lastClosedShift = this.getLastClosedShift();
-      const prevWorker = lastClosedShift ? lastClosedShift.workerName : 'Previous Shift Attendant';
-      const discrepancies = this.get<Discrepancy[]>(STORAGE_KEYS.DISCREPANCIES, []);
-
-      products.forEach((product) => {
-        const inv = currentInventory.find((i) => i.productId === product.id);
-        const systemCount = inv ? inv.quantityOnHand : 0;
-        const physicalCount =
-          params.physicalCounts[product.id] !== undefined
-            ? params.physicalCounts[product.id]
-            : systemCount;
-
-        if (physicalCount !== systemCount) {
-          const variance = physicalCount - systemCount;
-          const isShortage = variance < 0;
-          const missingUnits = Math.abs(variance);
-          const monetaryValue = missingUnits * product.sellingPrice;
-
-          discrepancies.unshift({
-            id: `disc-open-${Date.now()}-${product.id}`,
-            shiftId,
-            shiftNumber,
-            workerName: params.workerName,
-            responsibleWorkerName: isShortage ? prevWorker : undefined,
-            previousShiftId: lastClosedShift?.id,
-            type: isShortage ? 'STOCK_SHORTAGE' : 'STOCK_OVERAGE',
-            itemId: product.id,
-            itemName: `${product.name} (Handover Count)`,
-            expected: systemCount,
-            actual: physicalCount,
-            variance,
-            monetaryValue,
-            severity: missingUnits >= 2 ? 'HIGH' : 'MEDIUM',
-            status: 'FLAGGED',
-            ownerNotes: isShortage
-              ? `Missing ${missingUnits} unit(s) of ${product.name} (KES ${monetaryValue.toLocaleString()}). Identified during handover takeover by ${params.workerName}. ${prevWorker} is held accountable for missing items.`
-              : `Found +${missingUnits} extra unit(s) of ${product.name} during handover count by ${params.workerName}.`,
-            timestamp: new Date().toISOString(),
-          });
-        }
-      });
-
-      this.set(STORAGE_KEYS.DISCREPANCIES, discrepancies);
-
-      this.addEvent({
-        type: 'DISCREPANCY_FLAGGED',
-        title: `Handover Shortage Flagged (${prevWorker} Liable)`,
-        description: `${params.workerName} took over shift and reported missing items left from ${prevWorker}'s shift. ${params.inconsistencyNote || ''}`,
-        actorName: params.workerName,
-        severity: 'WARNING',
-      });
-    }
-
     this.notify();
     return newShift;
   }
 
-  /**
-   * Operation: Record Stock Addition (e.g. Delivery from supplier/distributor)
-   */
   public recordStockAddition(params: {
     shiftId: string;
     productId: string;
@@ -510,12 +902,12 @@ class StoreService {
     }
 
     // Increment bar inventory
-    const inventory = this.get<InventoryItem[]>(STORAGE_KEYS.INVENTORY, []);
-    const inv = inventory.find((i) => i.productId === params.productId);
+    const currentInventory = this.getInventory();
+    const inv = currentInventory.find((i) => i.productId === params.productId);
     if (inv) {
       inv.quantityOnHand += qty;
       inv.updatedAt = new Date().toISOString();
-      this.set(STORAGE_KEYS.INVENTORY, inventory);
+      this.saveCurrentInventory(currentInventory);
     }
 
     // Log movement
@@ -544,9 +936,6 @@ class StoreService {
     this.notify();
   }
 
-  /**
-   * Operation: Record Shift Expense (e.g. Ice, Lemons, Cleaning, Transport, Casual Wages)
-   */
   public recordExpense(params: {
     shiftId: string;
     category: ExpenseCategory;
@@ -589,9 +978,6 @@ class StoreService {
     return expense;
   }
 
-  /**
-   * Transition: Calculate Shift Closing Preview
-   */
   public calculateShiftReconciliation(params: {
     shiftId: string;
     closingPhysicalCounts: Record<string, number>;
@@ -673,9 +1059,6 @@ class StoreService {
     };
   }
 
-  /**
-   * Transition: Close Shift & Commit Reconciliation
-   */
   public closeShift(params: {
     shiftId: string;
     closingPhysicalCounts: Record<string, number>;
@@ -709,7 +1092,10 @@ class StoreService {
       0
     );
 
-    this.set(STORAGE_KEYS.SHIFTS, shifts);
+    const bizId = this.getCurrentBusinessId();
+    const shiftsMap = this.get<Record<string, Shift[]>>(STORAGE_KEYS.SHIFTS_MAP, {});
+    shiftsMap[bizId] = shifts;
+    this.set(STORAGE_KEYS.SHIFTS_MAP, shiftsMap);
 
     // Update Shift Stock Items
     const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
@@ -719,78 +1105,23 @@ class StoreService {
       ...remainingSSIs,
     ]);
 
-    // Update physical inventory to the closing verified counts
-    const inventory = this.get<InventoryItem[]>(STORAGE_KEYS.INVENTORY, []);
+    // Update physical inventory to closing verified counts
+    const currentInventory = this.getInventory();
     recon.reconciledStockItems.forEach((item) => {
-      const inv = inventory.find((i) => i.productId === item.productId);
+      const inv = currentInventory.find((i) => i.productId === item.productId);
       if (inv && item.closingPhysicalCount !== undefined) {
         inv.quantityOnHand = item.closingPhysicalCount;
         inv.updatedAt = new Date().toISOString();
       }
     });
-    this.set(STORAGE_KEYS.INVENTORY, inventory);
-
-    // Generate Discrepancies if any
-    const discrepancies = this.get<Discrepancy[]>(STORAGE_KEYS.DISCREPANCIES, []);
-
-    // 1. Stock overages
-    recon.reconciledStockItems.forEach((item) => {
-      if (item.discrepancyCount && item.discrepancyCount > 0) {
-        discrepancies.unshift({
-          id: `disc-stock-${Date.now()}-${item.productId}`,
-          shiftId: shift.id,
-          shiftNumber: shift.shiftNumber,
-          workerName: shift.workerName,
-          type: 'STOCK_OVERAGE',
-          itemId: item.productId,
-          itemName: item.productName,
-          expected: item.expectedClosingCount || 0,
-          actual: item.closingPhysicalCount || 0,
-          variance: item.discrepancyCount,
-          monetaryValue: Math.abs(item.discrepancyValue || 0),
-          severity: Math.abs(item.discrepancyCount) >= 3 ? 'HIGH' : 'MEDIUM',
-          status: 'FLAGGED',
-          ownerNotes: '',
-          timestamp: new Date().toISOString(),
-        });
-      }
-    });
-
-    // 2. Financial discrepancy
-    if (Math.abs(recon.financialVariance) > 5) {
-      discrepancies.unshift({
-        id: `disc-fin-${Date.now()}`,
-        shiftId: shift.id,
-        shiftNumber: shift.shiftNumber,
-        workerName: shift.workerName,
-        type:
-          recon.financialVariance < 0 ? 'FINANCIAL_SHORTAGE' : 'FINANCIAL_OVERAGE',
-        itemName:
-          recon.financialVariance < 0
-            ? 'Cash & M-Pesa Shortage'
-            : 'Cash & M-Pesa Surplus',
-        expected: recon.expectedSalesRevenue,
-        actual: recon.totalIncomeReturned + recon.totalExpenses,
-        variance: recon.financialVariance,
-        monetaryValue: Math.abs(recon.financialVariance),
-        severity: Math.abs(recon.financialVariance) >= 2000 ? 'HIGH' : 'MEDIUM',
-        status: 'FLAGGED',
-        ownerNotes:
-          recon.financialVariance < 0
-            ? `Net returned funds (KES ${recon.totalIncomeReturned.toLocaleString()} + KES ${recon.totalExpenses.toLocaleString()} expenses) fell short of calculated consumption (KES ${recon.expectedSalesRevenue.toLocaleString()}).`
-            : `Collected funds exceed calculated drink consumption.`,
-        timestamp: new Date().toISOString(),
-      });
-    }
-    this.set(STORAGE_KEYS.DISCREPANCIES, discrepancies);
+    this.saveCurrentInventory(currentInventory);
 
     this.addEvent({
       type: 'SHIFT_CLOSED',
       title: `Shift Closed: ${shift.shiftNumber}`,
-      description: `Reconciled by ${shift.workerName}. Net Money Returned: KES ${recon.totalIncomeReturned.toLocaleString()} | Sales: KES ${recon.expectedSalesRevenue.toLocaleString()} | Net Profit: KES ${recon.netProfit.toLocaleString()}`,
+      description: `Reconciled by ${shift.workerName}. Net Money Returned: KES ${recon.totalIncomeReturned.toLocaleString()} | Net Profit: KES ${recon.netProfit.toLocaleString()}`,
       actorName: shift.workerName,
-      severity:
-        Math.abs(recon.financialVariance) > 5 ? 'WARNING' : 'SUCCESS',
+      severity: Math.abs(recon.financialVariance) > 5 ? 'WARNING' : 'SUCCESS',
       amount: recon.totalIncomeReturned,
       currency: 'KES',
     });
