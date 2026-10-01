@@ -11,6 +11,7 @@ import { store } from '../../services/store';
 import { ShiftDetailModal } from './ShiftDetailModal';
 import { DiscrepancyResolveModal } from './DiscrepancyResolveModal';
 import { PartnerBarsManager } from './PartnerBarsManager';
+import { StaffManager } from './StaffManager';
 import {
   TrendingUp,
   AlertTriangle,
@@ -848,6 +849,11 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
       {/* 7. PARTNER BARS & TRANSFERS TAB */}
       {activeTab === 'partners' && (
         <PartnerBarsManager />
+      )}
+
+      {/* 8. STAFF & SECURITY ACCESS TAB */}
+      {activeTab === 'staff' && (
+        <StaffManager currentUser={currentUser} />
       )}
 
       {/* Audit Detail Modal */}

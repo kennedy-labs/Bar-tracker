@@ -36,12 +36,6 @@ export const TopBar: React.FC<TopBarProps> = ({
     store.toggleOnlineStatus();
   };
 
-  const handleResetData = () => {
-    if (window.confirm('Reset all demo data back to default Kenyan bar state?')) {
-      store.resetToDefaults();
-    }
-  };
-
   interface NavItem {
     id: string;
     label: string;
@@ -50,6 +44,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   const ownerNavItems: NavItem[] = [
     { id: 'overview', label: 'Command Center' },
+    { id: 'staff', label: 'Staff & Security' },
     { id: 'partners', label: 'Partner Bars & Transfers', badge: incomingTransfersCount > 0 ? incomingTransfersCount : undefined },
     { id: 'events', label: 'Live Ticker' },
     {
@@ -111,18 +106,17 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         {/* Zone 3: Primary Actions (Offline Toggle, Reset, User, Logout) */}
         <div className="flex items-center gap-2">
-          {/* Offline/Online Simulator Button */}
-          <button
-            onClick={handleToggleOnline}
+          {/* Connectivity Status Indicator */}
+          <div
             title={
               isOnline
-                ? 'Network Active. Click to simulate bar basement offline mode.'
-                : 'Offline Mode Active. Click to reconnect and sync.'
+                ? 'System Online · Real-time synchronization active'
+                : `Offline Mode · ${offlineQueueCount} local record(s) queued for sync`
             }
-            className={`px-2.5 py-1 text-xs font-mono rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-2.5 py-1 text-xs font-mono rounded-lg border transition-all flex items-center gap-1.5 ${
               isOnline
-                ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/50 hover:bg-emerald-900/40'
-                : 'bg-amber-950/50 text-amber-300 border-amber-800 hover:bg-amber-900/40 animate-pulse'
+                ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/50'
+                : 'bg-amber-950/50 text-amber-300 border-amber-800 animate-pulse'
             }`}
           >
             {isOnline ? (
@@ -136,31 +130,22 @@ export const TopBar: React.FC<TopBarProps> = ({
                 <span>Offline {offlineQueueCount > 0 && `(${offlineQueueCount})`}</span>
               </>
             )}
-          </button>
+          </div>
 
-          {/* Reset Demo Data button */}
-          <button
-            onClick={handleResetData}
-            title="Reset to default bar inventory & balances"
-            className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 rounded-lg transition-colors border border-transparent hover:border-slate-700"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Current User & Logout */}
+          {/* Current User Profile & Sign Out */}
           {currentUser && (
             <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
               <div className="hidden sm:block text-right">
-                <div className="text-xs font-medium text-slate-200 truncate max-w-[130px]">
+                <div className="text-xs font-semibold text-slate-200 truncate max-w-[130px]">
                   {currentUser.name.split(' ')[0]}
                 </div>
-                <div className="text-[10px] text-slate-500 font-mono">
-                  PIN: {currentUser.pinCode}
+                <div className="text-[10px] text-slate-400 font-mono">
+                  @{currentUser.username} · {currentUser.role === 'OWNER' ? 'Proprietor' : 'Attendant'}
                 </div>
               </div>
               <button
                 onClick={onLogout}
-                title="Switch User / Lock with PIN"
+                title="Sign Out / Lock Terminal"
                 className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-red-400 border border-slate-800 transition-colors cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />

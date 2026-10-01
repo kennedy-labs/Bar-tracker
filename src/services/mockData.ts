@@ -83,21 +83,30 @@ export const INITIAL_TRANSFERS: InterBusinessTransfer[] = [
 export const INITIAL_USERS: User[] = [
   {
     id: 'user-1',
+    username: 'wanjiku',
     name: 'Wanjiku Kamau (Bar Tender)',
     role: 'WORKER',
     pinCode: '1234',
+    password: 'password123',
+    createdAt: new Date().toISOString(),
   },
   {
     id: 'user-2',
+    username: 'kevin',
     name: 'Kevin Omondi (Bar Tender)',
     role: 'WORKER',
     pinCode: '5678',
+    password: 'password123',
+    createdAt: new Date().toISOString(),
   },
   {
     id: 'user-owner',
+    username: 'maina',
     name: 'Maina Mwangi (Proprietor)',
     role: 'OWNER',
     pinCode: '8888',
+    password: 'adminpassword',
+    createdAt: new Date().toISOString(),
   },
 ];
 

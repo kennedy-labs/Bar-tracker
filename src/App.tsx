@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User } from './types';
 import { store } from './services/store';
-import { PinAuthScreen } from './components/auth/PinAuthScreen';
+import { AuthScreen } from './components/auth/AuthScreen';
 import { TopBar } from './components/common/TopBar';
 import { WorkerTerminal } from './components/worker/WorkerTerminal';
 import { OwnerDashboard } from './components/owner/OwnerDashboard';
@@ -9,7 +9,7 @@ import { OwnerDashboard } from './components/owner/OwnerDashboard';
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
-      const saved = localStorage.getItem('pombetrack_active_user');
+      const saved = localStorage.getItem('bartracker_session_user');
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
@@ -30,7 +30,7 @@ export default function App() {
   const handleLogin = (user: User) => {
     setCurrentUser(user);
     try {
-      localStorage.setItem('pombetrack_active_user', JSON.stringify(user));
+      localStorage.setItem('bartracker_session_user', JSON.stringify(user));
     } catch (err) {
       console.error(err);
     }
@@ -41,18 +41,17 @@ export default function App() {
   const handleLogout = () => {
     setCurrentUser(null);
     try {
-      localStorage.removeItem('pombetrack_active_user');
+      localStorage.removeItem('bartracker_session_user');
     } catch (err) {
       console.error(err);
     }
   };
 
-  const users = store.getUsers();
   const discrepancies = store.getDiscrepancies({ status: 'FLAGGED' });
 
-  // If not logged in, show PIN Authentication Keypad Screen
+  // If not logged in, show production Authentication Screen
   if (!currentUser) {
-    return <PinAuthScreen users={users} onLogin={handleLogin} />;
+    return <AuthScreen onLogin={handleLogin} />;
   }
 
   return (
@@ -78,40 +77,6 @@ export default function App() {
           <WorkerTerminal currentUser={currentUser} />
         )}
       </main>
-
-      {/* Quick Role Switcher Bar for rapid auditing & evaluation */}
-      <div className="py-2.5 px-4 bg-[#0E1420] border-t border-slate-900 text-center text-xs text-slate-500 flex flex-wrap items-center justify-center gap-3">
-        <span className="font-mono text-[11px] text-slate-400">
-          Current: <strong className="text-white">{currentUser.name}</strong> ({currentUser.role})
-        </span>
-        <span className="text-slate-700">|</span>
-        <button
-          onClick={() => {
-            const owner = users.find((u) => u.role === 'OWNER');
-            if (owner) handleLogin(owner);
-          }}
-          className="text-emerald-400 hover:underline cursor-pointer font-medium"
-        >
-          Switch to Owner Dashboard (PIN: 8888)
-        </button>
-        <span className="text-slate-700">|</span>
-        <button
-          onClick={() => {
-            const worker = users.find((u) => u.role === 'WORKER');
-            if (worker) handleLogin(worker);
-          }}
-          className="text-amber-400 hover:underline cursor-pointer font-medium"
-        >
-          Switch to Worker Terminal (PIN: 1234)
-        </button>
-        <span className="text-slate-700">|</span>
-        <button
-          onClick={handleLogout}
-          className="text-slate-400 hover:text-white cursor-pointer"
-        >
-          Lock / Keypad
-        </button>
-      </div>
     </div>
   );
 }

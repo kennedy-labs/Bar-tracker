@@ -2,6 +2,7 @@ import {
   Product,
   MpesaAccount,
   User,
+  Role,
   InventoryItem,
   Shift,
   ShiftStockItem,
@@ -91,6 +92,25 @@ class StoreService {
   private ensureInitialized() {
     if (!localStorage.getItem(STORAGE_KEYS.PRODUCTS) || !localStorage.getItem(STORAGE_KEYS.BUSINESSES)) {
       this.resetToDefaults();
+    } else {
+      // Migrate users to ensure username field exists
+      const users = this.get<User[]>(STORAGE_KEYS.USERS, []);
+      let changed = false;
+      const updatedUsers = users.map((u) => {
+        if (!u.username) {
+          changed = true;
+          const fallbackUsername = u.id === 'user-owner' ? 'maina' : u.id === 'user-2' ? 'kevin' : 'wanjiku';
+          return {
+            ...u,
+            username: fallbackUsername,
+            password: u.role === 'OWNER' ? 'adminpassword' : 'password123',
+          };
+        }
+        return u;
+      });
+      if (changed) {
+        this.set(STORAGE_KEYS.USERS, updatedUsers);
+      }
     }
   }
 
@@ -673,9 +693,119 @@ class StoreService {
     this.set(STORAGE_KEYS.EVENTS_MAP, eventsMap);
   }
 
-  // --- Read Entities ---
+  // --- Read & Manage Users ---
   public getUsers(): User[] {
     return this.get<User[]>(STORAGE_KEYS.USERS, []);
+  }
+
+  public authenticateUser(usernameInput: string, credentialInput: string): User | null {
+    const cleanUsername = usernameInput.trim().toLowerCase();
+    const cleanCredential = credentialInput.trim();
+    if (!cleanUsername || !cleanCredential) return null;
+
+    const users = this.getUsers();
+    const user = users.find(
+      (u) =>
+        u.username.toLowerCase() === cleanUsername ||
+        u.name.toLowerCase() === cleanUsername ||
+        u.id.toLowerCase() === cleanUsername
+    );
+
+    if (!user) return null;
+
+    // Check PIN or Password
+    if (user.pinCode === cleanCredential || (user.password && user.password === cleanCredential)) {
+      return user;
+    }
+
+    return null;
+  }
+
+  public addUser(params: {
+    name: string;
+    username: string;
+    role: Role;
+    pinCode: string;
+    password?: string;
+  }): User {
+    const users = this.getUsers();
+    const cleanUsername = params.username.trim().toLowerCase();
+
+    if (users.some((u) => u.username.toLowerCase() === cleanUsername)) {
+      throw new Error(`Username "${params.username}" is already taken.`);
+    }
+
+    const newUser: User = {
+      id: `user-${Date.now()}`,
+      name: params.name.trim(),
+      username: cleanUsername,
+      role: params.role,
+      pinCode: params.pinCode.trim(),
+      password: params.password?.trim() || undefined,
+      createdAt: new Date().toISOString(),
+    };
+
+    users.push(newUser);
+    this.set(STORAGE_KEYS.USERS, users);
+
+    this.addEvent({
+      type: 'INFO',
+      title: `Staff Member Added: ${newUser.name}`,
+      description: `Role: ${newUser.role} (@${newUser.username}) added to system access.`,
+      actorName: 'Owner Admin',
+      severity: 'INFO',
+    });
+
+    this.notify();
+    return newUser;
+  }
+
+  public updateUser(userId: string, updates: Partial<User>) {
+    const users = this.getUsers();
+    const user = users.find((u) => u.id === userId);
+    if (!user) throw new Error('User not found.');
+
+    if (updates.username) {
+      const cleanUsername = updates.username.trim().toLowerCase();
+      if (users.some((u) => u.id !== userId && u.username.toLowerCase() === cleanUsername)) {
+        throw new Error(`Username "${updates.username}" is already taken.`);
+      }
+      user.username = cleanUsername;
+    }
+
+    if (updates.name) user.name = updates.name.trim();
+    if (updates.role) user.role = updates.role;
+    if (updates.pinCode) user.pinCode = updates.pinCode.trim();
+    if (updates.password !== undefined) user.password = updates.password.trim();
+
+    this.set(STORAGE_KEYS.USERS, users);
+    this.notify();
+  }
+
+  public deleteUser(userId: string) {
+    const users = this.getUsers();
+    const target = users.find((u) => u.id === userId);
+    if (!target) return;
+
+    if (target.role === 'OWNER') {
+      const ownerCount = users.filter((u) => u.role === 'OWNER').length;
+      if (ownerCount <= 1) {
+        throw new Error('Cannot delete the sole proprietor/owner account.');
+      }
+    }
+
+    const remaining = users.filter((u) => u.id !== userId);
+    this.set(STORAGE_KEYS.USERS, remaining);
+
+    this.addEvent({
+      type: 'INFO',
+      title: `Staff Access Revoked: ${target.name}`,
+      description: `Username @${target.username} was removed from the system.`,
+      actorName: 'Owner Admin',
+      severity: 'WARNING',
+    });
+
+    this.notify();
   }
 
   public getProducts(): Product[] {

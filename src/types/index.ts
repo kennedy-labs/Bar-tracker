@@ -223,9 +223,12 @@ export interface OperationalEvent {
 
 export interface User {
   id: string;
+  username: string;
   name: string;
   role: Role;
   pinCode: string;
+  password?: string;
+  createdAt?: string;
 }
 
 // --- Inter-Business Connection & Stock Transfer Types ---
