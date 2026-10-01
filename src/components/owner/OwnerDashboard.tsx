@@ -4,7 +4,6 @@ import {
   Product,
   Discrepancy,
   OperationalEvent,
-  StockLocation,
   InventoryItem,
   User,
 } from '../../types';
@@ -55,7 +54,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
   const shifts = store.getShifts();
   const products = store.getProducts();
-  const locations = store.getLocations();
   const inventory = store.getInventory();
   const events = store.getEvents(50);
   const discrepancies = store.getDiscrepancies();
@@ -252,11 +250,11 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                     <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                       <div>
                         <div className="text-base font-bold text-white flex items-center gap-2">
-                          <span>{shift.locationName}</span>
+                          <span>Shift #{shift.shiftNumber}</span>
                           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                         </div>
                         <div className="text-xs text-slate-400 font-mono mt-0.5">
-                          Attendant: <span className="text-slate-200">{shift.workerName}</span> · Shift #{shift.shiftNumber}
+                          Attendant: <span className="text-slate-200">{shift.workerName}</span>
                         </div>
                       </div>
                       <button
@@ -328,7 +326,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                     <div>
                       <div className="text-xs font-bold text-white">{d.itemName}</div>
                       <div className="text-[10px] text-slate-400 font-mono">
-                        {d.locationName} · {d.workerName}
+                        Attendant: {d.workerName}
                       </div>
                       <div className="text-[11px] font-mono font-bold text-red-400 mt-1">
                         Variance: {d.variance} (KES {d.monetaryValue.toLocaleString()})
@@ -372,7 +370,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   <div className="min-w-0">
                     <div className="font-semibold text-white truncate">{evt.title}</div>
                     <div className="text-[11px] text-slate-400 truncate">
-                      {evt.description} · <span className="font-mono text-slate-500">{evt.locationName} ({evt.actorName})</span>
+                      {evt.description} · <span className="font-mono text-slate-500">By {evt.actorName}</span>
                     </div>
                   </div>
                   <div className="text-[10px] text-slate-500 font-mono shrink-0">
@@ -440,7 +438,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                     <div className="font-semibold text-white text-sm">{evt.title}</div>
                     <div className="text-slate-300 text-xs mt-0.5">{evt.description}</div>
                     <div className="text-[11px] text-slate-500 font-mono mt-1">
-                      {evt.locationName} · Performed by {evt.actorName}
+                      Recorded by {evt.actorName}
                     </div>
                   </div>
                 </div>
@@ -517,7 +515,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                     <div>
                       <div className="text-sm font-bold text-white">{d.itemName}</div>
                       <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                        Shift #{d.shiftNumber} · {d.locationName}
+                        Shift #{d.shiftNumber}
                       </div>
                     </div>
                     <span
@@ -602,7 +600,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               <thead className="bg-[#151D2C] text-slate-400 font-mono text-[10px] uppercase border-b border-slate-800">
                 <tr>
                   <th className="p-3">Shift #</th>
-                  <th className="p-3">Station & Attendant</th>
+                  <th className="p-3">Attendant</th>
                   <th className="p-3 text-right">Entry M-Pesa</th>
                   <th className="p-3 text-right">Closing M-Pesa</th>
                   <th className="p-3 text-right text-emerald-400">Net M-Pesa</th>
@@ -629,8 +627,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                     <tr key={s.id} className="hover:bg-slate-900/50">
                       <td className="p-3 font-bold text-white">{s.shiftNumber}</td>
                       <td className="p-3 font-sans">
-                        <div className="font-semibold text-slate-200">{s.locationName}</div>
-                        <div className="text-[10px] text-slate-500 font-mono">{s.workerName}</div>
+                        <div className="font-semibold text-slate-200">{s.workerName}</div>
+                        <div className="text-[10px] text-slate-500 font-mono">
+                          {new Date(s.openedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })} · {new Date(s.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
                       </td>
                       <td className="p-3 text-right text-slate-400">
                         {s.openingMpesaBalance.toLocaleString()}
@@ -685,10 +685,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
             <div>
               <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
                 <Wine className="w-5 h-5 text-emerald-400" />
-                <span>Real-Time Inventory Balances Across Locations</span>
+                <span>Real-Time Bar Inventory Balances</span>
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Physical bottle counts per station vs. reorder safety thresholds
+                Physical bottle counts vs. reorder safety thresholds
               </p>
             </div>
           </div>
@@ -701,36 +701,29 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   <th className="p-3">Category</th>
                   <th className="p-3 text-center">Selling Price</th>
                   <th className="p-3 text-center">Cost Price</th>
-                  <th className="p-3 text-center text-emerald-400">Main Bar Counter</th>
-                  <th className="p-3 text-center text-blue-400">Central Store</th>
-                  <th className="p-3 text-center">Total In Stock</th>
+                  <th className="p-3 text-center text-emerald-400">Stock On Hand</th>
+                  <th className="p-3 text-center text-slate-400">Reorder Safety Level</th>
                   <th className="p-3 text-center">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 font-mono">
                 {[...products].sort((a, b) => a.name.localeCompare(b.name)).map((p) => {
-                  const counterStock =
-                    inventory.find((i) => i.locationId === 'loc-counter-1' && i.productId === p.id)
-                      ?.quantityOnHand || 0;
-                  const storeStock =
-                    inventory.find((i) => i.locationId === 'loc-store' && i.productId === p.id)
-                      ?.quantityOnHand || 0;
-                  const totalOnHand = counterStock + storeStock;
-                  const isLow = counterStock <= p.reorderLevel;
+                  const inv = inventory.find((i) => i.productId === p.id);
+                  const stockOnHand = inv ? inv.quantityOnHand : 0;
+                  const isLow = stockOnHand <= p.reorderLevel;
 
                   return (
                     <tr key={p.id} className="hover:bg-slate-900/50">
                       <td className="p-3 font-sans font-medium text-white">{p.name}</td>
-                      <td className="p-3 font-sans text-slate-400">{p.category}</td>
+                      <td className="p-3 font-sans text-slate-400 capitalize">{p.category.replace('_', ' ').toLowerCase()}</td>
                       <td className="p-3 text-center text-slate-200">KES {p.sellingPrice}</td>
                       <td className="p-3 text-center text-slate-400">KES {p.costPrice}</td>
                       <td className="p-3 text-center font-bold text-emerald-400">
-                        {counterStock} {p.unit.toLowerCase()}s
+                        {stockOnHand} {p.unit.toLowerCase()}s
                       </td>
-                      <td className="p-3 text-center font-bold text-blue-400">
-                        {storeStock} {p.unit.toLowerCase()}s
+                      <td className="p-3 text-center text-slate-400">
+                        {p.reorderLevel} {p.unit.toLowerCase()}s
                       </td>
-                      <td className="p-3 text-center font-bold text-white">{totalOnHand}</td>
                       <td className="p-3 text-center">
                         <span
                           className={`text-[10px] font-sans px-2 py-0.5 rounded font-bold ${

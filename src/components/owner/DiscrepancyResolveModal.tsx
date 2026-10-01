@@ -42,7 +42,7 @@ export const DiscrepancyResolveModal: React.FC<DiscrepancyResolveModalProps> = (
           <div className="p-3 rounded-2xl bg-red-950/20 border border-red-800/40 text-xs space-y-1">
             <div className="font-bold text-white text-sm">{discrepancy.itemName}</div>
             <div className="text-slate-400">
-              Shift: <span className="font-mono text-slate-300">{discrepancy.shiftNumber}</span> ({discrepancy.locationName})
+              Shift: <span className="font-mono text-slate-300">{discrepancy.shiftNumber}</span>
             </div>
             <div className="text-slate-400">
               Worker on duty: <span className="text-emerald-400">{discrepancy.workerName}</span>

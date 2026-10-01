@@ -2,27 +2,22 @@ import React, { useState } from 'react';
 import {
   User,
   Product,
-  StockLocation,
   Shift,
   ShiftStockItem,
   Expense,
-  Transfer,
 } from '../../types';
 import { store } from '../../services/store';
 import { ShiftOpeningModal } from './ShiftOpeningModal';
 import { StockAdditionModal } from './StockAdditionModal';
-import { StockTransferModal } from './StockTransferModal';
 import { ShiftExpenseModal } from './ShiftExpenseModal';
 import { ShiftClosingModal } from './ShiftClosingModal';
 import {
   Smartphone,
   Coins,
   PackagePlus,
-  ArrowRightLeft,
   Receipt,
   Lock,
   Clock,
-  CheckCircle,
   AlertCircle,
   Search,
   ShieldCheck,
@@ -36,23 +31,17 @@ interface WorkerTerminalProps {
 export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeModal, setActiveModal] = useState<
-    'NONE' | 'ADD_STOCK' | 'TRANSFER' | 'EXPENSE' | 'CLOSE_SHIFT'
+    'NONE' | 'ADD_STOCK' | 'EXPENSE' | 'CLOSE_SHIFT'
   >('NONE');
 
-  const locations = store.getLocations();
   const products = store.getProducts();
-  const assignedLocationId = currentUser.assignedLocationId || 'loc-counter-1';
-  const activeShift = store.getActiveShift(assignedLocationId) || store.getActiveShift();
-  const inventory = store.getInventory(activeShift?.locationId || assignedLocationId);
+  const activeShift = store.getActiveShift();
+  const inventory = store.getInventory();
   const shiftStockItems = activeShift ? store.getShiftStockItems(activeShift.id) : [];
   const expenses = activeShift ? store.getExpenses(activeShift.id) : [];
-  const pendingTransfers = store
-    .getTransfers()
-    .filter((t) => t.toLocationId === (activeShift?.locationId || assignedLocationId) && t.status === 'PENDING');
 
   // Handle Opening Shift
   const handleConfirmOpen = (data: {
-    locationId: string;
     openingCashFloat: number;
     openingMpesaBalance: number;
     physicalCounts: Record<string, number>;
@@ -61,7 +50,6 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
     store.openShift({
       workerId: currentUser.id,
       workerName: currentUser.name,
-      locationId: data.locationId,
       openingCashFloat: data.openingCashFloat,
       openingMpesaBalance: data.openingMpesaBalance,
       physicalCounts: data.physicalCounts,
@@ -77,20 +65,6 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
   }) => {
     if (!activeShift) return;
     store.recordStockAddition({
-      shiftId: activeShift.id,
-      ...params,
-    });
-    setActiveModal('NONE');
-  };
-
-  const handleConfirmTransfer = (params: {
-    productId: string;
-    toLocationId: string;
-    quantity: number;
-    senderName: string;
-  }) => {
-    if (!activeShift) return;
-    store.createTransfer({
       shiftId: activeShift.id,
       ...params,
     });
@@ -134,7 +108,7 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
     p.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Calculate total initial units on counter
+  // Calculate total initial units on bar counter
   const totalStartingUnits = shiftStockItems.reduce(
     (sum, item) => sum + item.openingPhysicalCount + item.additions,
     0
@@ -142,18 +116,16 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
 
   return (
     <div className="max-w-3xl mx-auto pb-24 md:pb-12 space-y-4">
-      {/* 1. NO ACTIVE SHIFT: RENDER NON-BYPASSABLE OPENING MODAL */}
+      {/* 1. NO ACTIVE SHIFT: RENDER OPENING MODAL */}
       {!activeShift ? (
         <ShiftOpeningModal
-          locations={locations}
           products={products}
           inventory={inventory}
           workerName={currentUser.name}
-          defaultLocationId={assignedLocationId}
           onConfirmOpen={handleConfirmOpen}
         />
       ) : (
-        /* 2. ACTIVE SHIFT SCREEN: MINIMAL & FAST */
+        /* 2. ACTIVE SHIFT SCREEN */
         <div className="space-y-4">
           {/* Active Shift Header Card */}
           <div className="bg-[#121824] border border-[#1E293B] rounded-3xl p-5 shadow-lg">
@@ -163,10 +135,10 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-base font-bold text-white tracking-tight">
-                      {activeShift.locationName}
+                      Active Bar Shift
                     </span>
                     <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800/80">
-                      Shift Live
+                      Live
                     </span>
                   </div>
                   <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5 font-mono">
@@ -188,7 +160,7 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
                 className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow-lg shadow-red-950/40"
               >
                 <Lock className="w-4 h-4" />
-                <span>End Shift & Count Counter</span>
+                <span>End Shift & Count Remaining</span>
               </button>
             </div>
 
@@ -219,7 +191,7 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
               <div className="p-3 rounded-2xl bg-[#0E1420] border border-slate-800">
                 <div className="text-[10px] text-slate-400 flex items-center gap-1">
                   <Wine className="w-3.5 h-3.5 text-blue-400" />
-                  <span>Counter Starting Stock</span>
+                  <span>Bar Starting Stock</span>
                 </div>
                 <div className="font-bold text-slate-100 text-sm mt-1 tabular-nums">
                   {totalStartingUnits} bottles
@@ -239,92 +211,44 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
             )}
           </div>
 
-          {/* Quick Shift Operations Bar (Store Restock & Expenses) */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+          {/* Quick Shift Operations Bar (Delivery Restock & Expenses) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button
               onClick={() => setActiveModal('ADD_STOCK')}
-              className="p-3 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-[#1E293B] text-left transition-all active:scale-[0.98] cursor-pointer"
+              className="p-3.5 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-[#1E293B] text-left transition-all active:scale-[0.98] cursor-pointer"
             >
               <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 mb-1">
                 <PackagePlus className="w-4 h-4" />
-                <span>Receive Restock</span>
+                <span>Receive Stock Restock / Delivery</span>
               </div>
               <div className="text-[11px] text-slate-400">
-                Add crates brought from store
+                Add crates received from distributor or supplier
               </div>
             </button>
 
             <button
               onClick={() => setActiveModal('EXPENSE')}
-              className="p-3 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-[#1E293B] text-left transition-all active:scale-[0.98] cursor-pointer"
+              className="p-3.5 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-[#1E293B] text-left transition-all active:scale-[0.98] cursor-pointer"
             >
               <div className="flex items-center gap-2 text-xs font-bold text-amber-400 mb-1">
                 <Receipt className="w-4 h-4" />
-                <span>Record Expense</span>
+                <span>Record Till Expense</span>
               </div>
               <div className="text-[11px] text-slate-400">
-                Ice, lemons, transport paid out
-              </div>
-            </button>
-
-            <button
-              onClick={() => setActiveModal('TRANSFER')}
-              className="p-3 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-[#1E293B] text-left transition-all active:scale-[0.98] cursor-pointer col-span-2 sm:col-span-1"
-            >
-              <div className="flex items-center gap-2 text-xs font-bold text-blue-400 mb-1">
-                <ArrowRightLeft className="w-4 h-4" />
-                <span>Station Transfer</span>
-              </div>
-              <div className="text-[11px] text-slate-400">
-                Move bottles between counters
+                Ice, lemons, transport paid out of cash/till
               </div>
             </button>
           </div>
-
-          {/* Pending Incoming Transfers Notice */}
-          {pendingTransfers.length > 0 && (
-            <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-800/80 text-xs text-amber-200">
-              <div className="font-bold flex items-center justify-between mb-2">
-                <span className="flex items-center gap-1.5">
-                  <ArrowRightLeft className="w-4 h-4 text-amber-400" />
-                  <span>{pendingTransfers.length} Incoming Transfer Pending</span>
-                </span>
-              </div>
-              <div className="space-y-2">
-                {pendingTransfers.map((trf) => (
-                  <div
-                    key={trf.id}
-                    className="p-2.5 rounded-xl bg-[#121824] border border-amber-900/60 flex items-center justify-between gap-2"
-                  >
-                    <div>
-                      <div className="font-semibold text-white">
-                        {trf.quantity}x {trf.productName}
-                      </div>
-                      <div className="text-[10px] text-slate-400">
-                        Dispatched by {trf.senderName} from {trf.fromLocationName}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => store.acceptTransfer(trf.id, currentUser.name)}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors cursor-pointer"
-                    >
-                      Accept Stock
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Counter Inventory Reference (1 Single Column, Arranged Alphabetically A to Z) */}
           <div className="bg-[#121824] border border-[#1E293B] rounded-3xl p-5 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800">
               <div>
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                  Counter Stock Reference (Alphabetical A to Z)
+                  Bar Stock Reference (Alphabetical A to Z)
                 </h3>
                 <p className="text-xs text-slate-400">
-                  No need to log individual sales. When leaving, simply tap "End Shift & Count Counter".
+                  No need to log individual sales. When leaving, simply tap "End Shift & Count Remaining".
                 </p>
               </div>
 
@@ -386,7 +310,7 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
             <div>
               <div className="font-bold text-slate-200">Zero In-Shift POS Friction</div>
               <div className="mt-0.5 text-[11px] leading-relaxed">
-                Serve your customers freely throughout your shift. When taking handover or clocking out, count what remains in the counter. The system calculates sold bottles and expected revenue automatically.
+                Serve your customers freely throughout your shift. When taking handover or clocking out, count what remains in the bar. The system calculates sold bottles and expected revenue automatically.
               </div>
             </div>
           </div>
@@ -399,17 +323,6 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
           products={products}
           onClose={() => setActiveModal('NONE')}
           onConfirmAddition={handleConfirmAddition}
-        />
-      )}
-
-      {activeModal === 'TRANSFER' && activeShift && (
-        <StockTransferModal
-          products={products}
-          locations={locations}
-          currentLocationId={activeShift.locationId}
-          workerName={currentUser.name}
-          onClose={() => setActiveModal('NONE')}
-          onConfirmTransfer={handleConfirmTransfer}
         />
       )}
 

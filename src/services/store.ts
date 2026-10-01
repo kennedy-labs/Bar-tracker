@@ -1,81 +1,76 @@
 import {
   Product,
-  StockLocation,
   MpesaAccount,
-  Shift,
-  ShiftStockItem,
-  StockMovement,
-  Transfer,
-  Expense,
-  MpesaTransaction,
-  Discrepancy,
-  OperationalEvent,
   User,
   InventoryItem,
+  Shift,
+  ShiftStockItem,
+  Expense,
   ExpenseCategory,
+  Discrepancy,
+  OperationalEvent,
+  StockMovement,
+  MpesaTransaction,
 } from '../types';
 import {
   INITIAL_PRODUCTS,
-  INITIAL_LOCATIONS,
   INITIAL_MPESA_ACCOUNTS,
   INITIAL_USERS,
   INITIAL_INVENTORY,
 } from './mockData';
 
 const STORAGE_KEYS = {
-  PRODUCTS: 'pombetrack_products',
-  LOCATIONS: 'pombetrack_locations',
-  MPESA_ACCOUNTS: 'pombetrack_mpesa_accounts',
-  USERS: 'pombetrack_users',
-  INVENTORY: 'pombetrack_inventory',
-  SHIFTS: 'pombetrack_shifts',
-  SHIFT_STOCK_ITEMS: 'pombetrack_shift_stock_items',
-  STOCK_MOVEMENTS: 'pombetrack_stock_movements',
-  TRANSFERS: 'pombetrack_transfers',
-  EXPENSES: 'pombetrack_expenses',
-  MPESA_TXNS: 'pombetrack_mpesa_txns',
-  DISCREPANCIES: 'pombetrack_discrepancies',
-  EVENTS: 'pombetrack_events',
-  OFFLINE_QUEUE: 'pombetrack_offline_queue',
-  IS_ONLINE: 'pombetrack_is_online',
+  PRODUCTS: 'bar_track_products',
+  MPESA_ACCOUNTS: 'bar_track_mpesa_accounts',
+  USERS: 'bar_track_users',
+  INVENTORY: 'bar_track_inventory',
+  SHIFTS: 'bar_track_shifts',
+  SHIFT_STOCK_ITEMS: 'bar_track_shift_stock_items',
+  EXPENSES: 'bar_track_expenses',
+  STOCK_MOVEMENTS: 'bar_track_stock_movements',
+  DISCREPANCIES: 'bar_track_discrepancies',
+  EVENTS: 'bar_track_events',
+  MPESA_TXNS: 'bar_track_mpesa_txns',
+  OFFLINE_QUEUE: 'bar_track_offline_queue',
+  IS_ONLINE: 'bar_track_is_online',
 };
 
-type Listener = () => void;
-
-class OperationalRealityStore {
-  private listeners: Listener[] = [];
+class StoreService {
+  private subscribers: (() => void)[] = [];
 
   constructor() {
     this.ensureInitialized();
   }
 
-  public subscribe(listener: Listener): () => void {
-    this.listeners.push(listener);
+  public subscribe(callback: () => void) {
+    this.subscribers.push(callback);
     return () => {
-      this.listeners = this.listeners.filter((l) => l !== listener);
+      this.subscribers = this.subscribers.filter((s) => s !== callback);
     };
   }
 
   private notify() {
-    this.listeners.forEach((listener) => {
+    this.subscribers.forEach((cb) => {
       try {
-        listener();
-      } catch (err) {
-        console.error('Listener notification error:', err);
+        cb();
+      } catch (e) {
+        console.error('Subscriber callback error:', e);
       }
     });
   }
 
-  private get<T>(key: string, fallback: T): T {
+  private get<T>(key: string, defaultValue: T): T {
     try {
-      const data = localStorage.getItem(key);
-      return data ? (JSON.parse(data) as T) : fallback;
-    } catch {
-      return fallback;
+      const raw = localStorage.getItem(key);
+      if (!raw) return defaultValue;
+      return JSON.parse(raw);
+    } catch (err) {
+      console.error(`Failed to read from localStorage for key ${key}:`, err);
+      return defaultValue;
     }
   }
 
-  private set<T>(key: string, value: T): void {
+  private set(key: string, value: unknown) {
     try {
       localStorage.setItem(key, JSON.stringify(value));
     } catch (err) {
@@ -91,20 +86,13 @@ class OperationalRealityStore {
 
   public resetToDefaults() {
     this.set(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
-    this.set(STORAGE_KEYS.LOCATIONS, INITIAL_LOCATIONS);
     this.set(STORAGE_KEYS.MPESA_ACCOUNTS, INITIAL_MPESA_ACCOUNTS);
     this.set(STORAGE_KEYS.USERS, INITIAL_USERS);
     this.set(STORAGE_KEYS.INVENTORY, INITIAL_INVENTORY);
-    // Seed sample closed shift matching user's exact example:
-    // Opening M-Pesa 10,000, Closing M-Pesa 17,000 -> Net M-Pesa 7,000
-    // Opening Cash 3,000, Ending Cash 14,500 -> Net Cash 11,500 -> Total Returned: 18,500
+
     const sampleClosedShift: Shift = {
       id: 'shift-sample-closed',
       shiftNumber: 'SH-260929-101',
-      branchId: 'branch-1',
-      branchName: 'Nairobi Central Flagship',
-      locationId: 'loc-counter-1',
-      locationName: 'Main Counter Station',
       workerId: 'user-1',
       workerName: 'Wanjiku Kamau (Bar Tender)',
       status: 'CLOSED',
@@ -144,7 +132,7 @@ class OperationalRealityStore {
         category: 'LEMONS_LIMES',
         amount: 300,
         paymentMethod: 'CASH',
-        description: 'Fresh cocktail limes from City Market',
+        description: 'Fresh cocktail limes from Market',
         receiptRef: 'RCP-402',
         timestamp: new Date(Date.now() - 3600000 * 12).toISOString(),
       },
@@ -154,7 +142,6 @@ class OperationalRealityStore {
     this.set(STORAGE_KEYS.EXPENSES, sampleExpenses);
     this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
     this.set(STORAGE_KEYS.STOCK_MOVEMENTS, []);
-    this.set(STORAGE_KEYS.TRANSFERS, []);
     this.set(STORAGE_KEYS.MPESA_TXNS, []);
     this.set(STORAGE_KEYS.DISCREPANCIES, []);
     this.set(STORAGE_KEYS.OFFLINE_QUEUE, []);
@@ -165,9 +152,8 @@ class OperationalRealityStore {
         id: 'evt-init-1',
         type: 'SHIFT_CLOSED',
         title: 'Shift SH-260929-101 Reconciled',
-        description: 'Total Returned: KES 18,500 (M-Pesa Net: KES 7,000 [17,000 - 10,000] | Cash Net: KES 11,500). Net Profit: KES 5,500.',
+        description: 'Total Returned: KES 18,500 (M-Pesa Net: KES 7,000 | Cash Net: KES 11,500). Net Profit: KES 5,500.',
         timestamp: new Date(Date.now() - 3600000 * 10).toISOString(),
-        locationName: 'Main Counter Station',
         actorName: 'Wanjiku Kamau (Bar Tender)',
         severity: 'SUCCESS',
         amount: 18500,
@@ -179,7 +165,6 @@ class OperationalRealityStore {
         title: 'Shift SH-260929-101 Opened',
         description: 'Opening Cash Float: KES 3,000, M-Pesa Entry Balance: KES 10,000. Verified.',
         timestamp: new Date(Date.now() - 3600000 * 18).toISOString(),
-        locationName: 'Main Counter Station',
         actorName: 'Wanjiku Kamau (Bar Tender)',
         severity: 'INFO',
       },
@@ -198,14 +183,12 @@ class OperationalRealityStore {
     this.set(STORAGE_KEYS.IS_ONLINE, next);
 
     if (next) {
-      // Sync queued events
       const queue = this.get<unknown[]>(STORAGE_KEYS.OFFLINE_QUEUE, []);
       if (queue.length > 0) {
         this.addEvent({
           type: 'INFO',
           title: 'Offline Queue Synchronized',
           description: `Device re-connected. Successfully synced ${queue.length} offline operations to the central register.`,
-          locationName: 'Local Terminal',
           actorName: 'System Sync Engine',
           severity: 'SUCCESS',
         });
@@ -247,7 +230,7 @@ class OperationalRealityStore {
       timestamp: new Date().toISOString(),
     };
     events.unshift(newEvent);
-    this.set(STORAGE_KEYS.EVENTS, events.slice(0, 100)); // retain last 100 events
+    this.set(STORAGE_KEYS.EVENTS, events.slice(0, 100));
   }
 
   // --- Read Entities ---
@@ -259,39 +242,28 @@ class OperationalRealityStore {
     return this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
   }
 
-  public getLocations(): StockLocation[] {
-    return this.get<StockLocation[]>(STORAGE_KEYS.LOCATIONS, []);
-  }
-
   public getMpesaAccounts(): MpesaAccount[] {
     return this.get<MpesaAccount[]>(STORAGE_KEYS.MPESA_ACCOUNTS, []);
   }
 
-  public getInventory(locationId?: string): InventoryItem[] {
-    const items = this.get<InventoryItem[]>(STORAGE_KEYS.INVENTORY, []);
-    return locationId ? items.filter((i) => i.locationId === locationId) : items;
+  public getInventory(): InventoryItem[] {
+    return this.get<InventoryItem[]>(STORAGE_KEYS.INVENTORY, []);
   }
 
   public getShifts(): Shift[] {
     return this.get<Shift[]>(STORAGE_KEYS.SHIFTS, []);
   }
 
-  public getActiveShift(locationId?: string): Shift | undefined {
+  public getActiveShift(): Shift | undefined {
     const shifts = this.getShifts();
     return shifts.find(
-      (s) =>
-        (s.status === 'ACTIVE' || s.status === 'OPENING_VERIFICATION') &&
-        (!locationId || s.locationId === locationId)
+      (s) => s.status === 'ACTIVE' || s.status === 'OPENING_VERIFICATION'
     );
   }
 
-  public getLastClosedShift(locationId?: string): Shift | undefined {
+  public getLastClosedShift(): Shift | undefined {
     const shifts = this.getShifts();
-    return shifts.find(
-      (s) =>
-        s.status === 'CLOSED' &&
-        (!locationId || s.locationId === locationId)
-    );
+    return shifts.find((s) => s.status === 'CLOSED');
   }
 
   public getShiftById(shiftId: string): Shift | undefined {
@@ -301,11 +273,6 @@ class OperationalRealityStore {
   public getShiftStockItems(shiftId: string): ShiftStockItem[] {
     const items = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
     return items.filter((i) => i.shiftId === shiftId);
-  }
-
-  public getTransfers(shiftId?: string): Transfer[] {
-    const transfers = this.get<Transfer[]>(STORAGE_KEYS.TRANSFERS, []);
-    return shiftId ? transfers.filter((t) => t.shiftId === shiftId) : transfers;
   }
 
   public getExpenses(shiftId?: string): Expense[] {
@@ -335,7 +302,6 @@ class OperationalRealityStore {
   public openShift(params: {
     workerId: string;
     workerName: string;
-    locationId: string;
     openingCashFloat: number;
     openingMpesaBalance: number;
     physicalCounts: Record<string, number>; // productId -> physical count counted
@@ -343,10 +309,8 @@ class OperationalRealityStore {
   }): Shift {
     this.queueOfflineOperation('openShift', params);
 
-    const locations = this.getLocations();
-    const location = locations.find((l) => l.id === params.locationId) || locations[1];
     const products = this.getProducts();
-    const currentInventory = this.getInventory(params.locationId);
+    const currentInventory = this.getInventory();
 
     const shiftId = `shift-${Date.now()}`;
     const shiftNumber = `SH-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${Math.floor(
@@ -388,14 +352,11 @@ class OperationalRealityStore {
       };
       shiftStockItems.push(item);
 
-      // Record movement for opening baseline
       stockMovements.push({
         id: `mov-${Date.now()}-${product.id}`,
         shiftId,
         productId: product.id,
         productName: product.name,
-        locationId: params.locationId,
-        locationName: location.name,
         type: 'OPENING_COUNT',
         quantity: physicalCount,
         unitPrice: product.sellingPrice,
@@ -407,9 +368,7 @@ class OperationalRealityStore {
     // Update actual inventory to reflect opening physical reality
     const allInventory = this.get<InventoryItem[]>(STORAGE_KEYS.INVENTORY, []);
     shiftStockItems.forEach((ssi) => {
-      const existing = allInventory.find(
-        (i) => i.locationId === params.locationId && i.productId === ssi.productId
-      );
+      const existing = allInventory.find((i) => i.productId === ssi.productId);
       if (existing) {
         existing.quantityOnHand = ssi.openingPhysicalCount;
         existing.updatedAt = new Date().toISOString();
@@ -417,7 +376,6 @@ class OperationalRealityStore {
         allInventory.push({
           id: `inv-${Date.now()}-${ssi.productId}`,
           productId: ssi.productId,
-          locationId: params.locationId,
           quantityOnHand: ssi.openingPhysicalCount,
           updatedAt: new Date().toISOString(),
         });
@@ -436,10 +394,6 @@ class OperationalRealityStore {
     const newShift: Shift = {
       id: shiftId,
       shiftNumber,
-      branchId: location.branchId,
-      branchName: 'Nairobi Central Flagship',
-      locationId: params.locationId,
-      locationName: location.name,
       workerId: params.workerId,
       workerName: params.workerName,
       status: 'ACTIVE',
@@ -457,11 +411,10 @@ class OperationalRealityStore {
     // Log operational events
     this.addEvent({
       type: 'SHIFT_OPENED',
-      title: `Shift Opened: ${location.name}`,
+      title: `Shift Opened`,
       description: `${params.workerName} opened shift ${shiftNumber}. Cash Float: KES ${params.openingCashFloat.toLocaleString()}, M-Pesa Entry Balance: KES ${params.openingMpesaBalance.toLocaleString()}${
         hasOpeningInconsistency ? ' [FLAGGED: Stock count mismatch noted]' : ''
       }`,
-      locationName: location.name,
       actorName: params.workerName,
       severity: hasOpeningInconsistency ? 'WARNING' : 'SUCCESS',
       amount: params.openingMpesaBalance,
@@ -469,7 +422,7 @@ class OperationalRealityStore {
     });
 
     if (hasOpeningInconsistency) {
-      const lastClosedShift = this.getLastClosedShift(params.locationId);
+      const lastClosedShift = this.getLastClosedShift();
       const prevWorker = lastClosedShift ? lastClosedShift.workerName : 'Previous Shift Attendant';
       const discrepancies = this.get<Discrepancy[]>(STORAGE_KEYS.DISCREPANCIES, []);
 
@@ -491,10 +444,8 @@ class OperationalRealityStore {
             id: `disc-open-${Date.now()}-${product.id}`,
             shiftId,
             shiftNumber,
-            branchName: 'Nairobi Central Flagship',
-            locationName: location.name,
-            workerName: params.workerName, // Worker who performed and verified the count
-            responsibleWorkerName: isShortage ? prevWorker : undefined, // Previous worker is responsible for missing stock!
+            workerName: params.workerName,
+            responsibleWorkerName: isShortage ? prevWorker : undefined,
             previousShiftId: lastClosedShift?.id,
             type: isShortage ? 'STOCK_SHORTAGE' : 'STOCK_OVERAGE',
             itemId: product.id,
@@ -506,7 +457,7 @@ class OperationalRealityStore {
             severity: missingUnits >= 2 ? 'HIGH' : 'MEDIUM',
             status: 'FLAGGED',
             ownerNotes: isShortage
-              ? `Missing ${missingUnits} unit(s) of ${product.name} (KES ${monetaryValue.toLocaleString()}). Identified during counter handover takeover by ${params.workerName}. ${prevWorker} is held accountable for missing items.`
+              ? `Missing ${missingUnits} unit(s) of ${product.name} (KES ${monetaryValue.toLocaleString()}). Identified during handover takeover by ${params.workerName}. ${prevWorker} is held accountable for missing items.`
               : `Found +${missingUnits} extra unit(s) of ${product.name} during handover count by ${params.workerName}.`,
             timestamp: new Date().toISOString(),
           });
@@ -518,8 +469,7 @@ class OperationalRealityStore {
       this.addEvent({
         type: 'DISCREPANCY_FLAGGED',
         title: `Handover Shortage Flagged (${prevWorker} Liable)`,
-        description: `${params.workerName} took over counter and reported missing items left from ${prevWorker}'s shift. ${params.inconsistencyNote || ''}`,
-        locationName: location.name,
+        description: `${params.workerName} took over shift and reported missing items left from ${prevWorker}'s shift. ${params.inconsistencyNote || ''}`,
         actorName: params.workerName,
         severity: 'WARNING',
       });
@@ -530,115 +480,7 @@ class OperationalRealityStore {
   }
 
   /**
-   * Operation: Record a physical drink sale
-   * Decrements counter inventory, logs movement, increments shift sales
-   */
-  public recordSale(params: {
-    shiftId: string;
-    productId: string;
-    quantity: number;
-    paymentMethod: 'CASH' | 'MPESA';
-    mpesaAccountType?: 'BUY_GOODS_TILL' | 'PAYBILL' | 'POCHI_LA_BIASHARA' | 'SEND_MONEY';
-    transactionRef?: string;
-  }) {
-    this.queueOfflineOperation('recordSale', params);
-
-    const shift = this.getShiftById(params.shiftId);
-    if (!shift || shift.status !== 'ACTIVE') {
-      throw new Error('Shift is not active.');
-    }
-
-    const product = this.getProducts().find((p) => p.id === params.productId);
-    if (!product) throw new Error('Product not found.');
-
-    const qty = Number(params.quantity) || 1;
-    const totalAmount = qty * product.sellingPrice;
-
-    // 1. Update ShiftStockItem
-    const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
-    const ssi = allSSIs.find(
-      (item) => item.shiftId === params.shiftId && item.productId === params.productId
-    );
-    if (ssi) {
-      ssi.recordedSales += qty;
-      this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
-    }
-
-    // 2. Decrement physical inventory
-    const inventory = this.get<InventoryItem[]>(STORAGE_KEYS.INVENTORY, []);
-    const inv = inventory.find(
-      (i) => i.locationId === shift.locationId && i.productId === params.productId
-    );
-    if (inv) {
-      inv.quantityOnHand = Math.max(0, inv.quantityOnHand - qty);
-      inv.updatedAt = new Date().toISOString();
-      this.set(STORAGE_KEYS.INVENTORY, inventory);
-    }
-
-    // 3. Record stock movement
-    const movements = this.get<StockMovement[]>(STORAGE_KEYS.STOCK_MOVEMENTS, []);
-    movements.unshift({
-      id: `mov-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      shiftId: params.shiftId,
-      productId: params.productId,
-      productName: product.name,
-      locationId: shift.locationId,
-      locationName: shift.locationName,
-      type: 'SALE',
-      quantity: qty,
-      unitPrice: product.sellingPrice,
-      timestamp: new Date().toISOString(),
-      note: `Sold via ${params.paymentMethod}${
-        params.transactionRef ? ` (Ref: ${params.transactionRef})` : ''
-      }`,
-    });
-    this.set(STORAGE_KEYS.STOCK_MOVEMENTS, movements);
-
-    // 4. Update Shift sales counter
-    const shifts = this.getShifts();
-    const currentShift = shifts.find((s) => s.id === params.shiftId);
-    if (currentShift) {
-      currentShift.recordedSalesCount = (currentShift.recordedSalesCount || 0) + qty;
-      this.set(STORAGE_KEYS.SHIFTS, shifts);
-    }
-
-    // 5. If M-Pesa, optionally log transaction record
-    if (params.paymentMethod === 'MPESA') {
-      const mpesaTxns = this.get<MpesaTransaction[]>(STORAGE_KEYS.MPESA_TXNS, []);
-      const mpesaAccounts = this.getMpesaAccounts();
-      const account = mpesaAccounts[0];
-      mpesaTxns.unshift({
-        id: `mpesa-${Date.now()}`,
-        shiftId: params.shiftId,
-        mpesaAccountId: account?.id || 'till-1',
-        accountType: params.mpesaAccountType || 'BUY_GOODS_TILL',
-        transactionCode:
-          params.transactionRef ||
-          `QA${Math.floor(10000000 + Math.random() * 90000000)}`,
-        amount: totalAmount,
-        timestamp: new Date().toISOString(),
-        note: `${qty}x ${product.name}`,
-      });
-      this.set(STORAGE_KEYS.MPESA_TXNS, mpesaTxns);
-    }
-
-    // 6. Operational event
-    this.addEvent({
-      type: 'SALE_RECORDED',
-      title: `${qty}x ${product.name} Sold`,
-      description: `${qty} ${product.unit.toLowerCase()}(s) paid via ${params.paymentMethod} (KES ${totalAmount.toLocaleString()})`,
-      locationName: shift.locationName,
-      actorName: shift.workerName,
-      severity: 'INFO',
-      amount: totalAmount,
-      currency: 'KES',
-    });
-
-    this.notify();
-  }
-
-  /**
-   * Operation: Record Stock Addition (e.g. Restock from supplier or issue from main warehouse)
+   * Operation: Record Stock Addition (e.g. Delivery from supplier/distributor)
    */
   public recordStockAddition(params: {
     shiftId: string;
@@ -667,11 +509,9 @@ class OperationalRealityStore {
       this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
     }
 
-    // Increment counter inventory
+    // Increment bar inventory
     const inventory = this.get<InventoryItem[]>(STORAGE_KEYS.INVENTORY, []);
-    const inv = inventory.find(
-      (i) => i.locationId === shift.locationId && i.productId === params.productId
-    );
+    const inv = inventory.find((i) => i.productId === params.productId);
     if (inv) {
       inv.quantityOnHand += qty;
       inv.updatedAt = new Date().toISOString();
@@ -685,8 +525,6 @@ class OperationalRealityStore {
       shiftId: params.shiftId,
       productId: params.productId,
       productName: product.name,
-      locationId: shift.locationId,
-      locationName: shift.locationName,
       type: 'ADDITION',
       quantity: qty,
       unitPrice: product.costPrice,
@@ -698,124 +536,8 @@ class OperationalRealityStore {
     this.addEvent({
       type: 'ADDITION_RECORDED',
       title: `+${qty} ${product.name} Restocked`,
-      description: `Added to counter from ${params.source}`,
-      locationName: shift.locationName,
+      description: `Added to bar from ${params.source}`,
       actorName: shift.workerName,
-      severity: 'SUCCESS',
-    });
-
-    this.notify();
-  }
-
-  /**
-   * Operation: Stock Transfer between Bar locations
-   */
-  public createTransfer(params: {
-    shiftId: string;
-    productId: string;
-    toLocationId: string;
-    quantity: number;
-    senderName: string;
-  }): Transfer {
-    this.queueOfflineOperation('createTransfer', params);
-
-    const shift = this.getShiftById(params.shiftId);
-    if (!shift) throw new Error('Shift not found.');
-    const product = this.getProducts().find((p) => p.id === params.productId);
-    if (!product) throw new Error('Product not found.');
-    const locations = this.getLocations();
-    const toLocation = locations.find((l) => l.id === params.toLocationId);
-    if (!toLocation) throw new Error('Destination location not found.');
-
-    const qty = Number(params.quantity);
-
-    // Update SSI transfersOut
-    const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
-    const ssi = allSSIs.find(
-      (item) => item.shiftId === params.shiftId && item.productId === params.productId
-    );
-    if (ssi) {
-      ssi.transfersOut += qty;
-      this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
-    }
-
-    // Decrement from sender location
-    const inventory = this.get<InventoryItem[]>(STORAGE_KEYS.INVENTORY, []);
-    const senderInv = inventory.find(
-      (i) => i.locationId === shift.locationId && i.productId === params.productId
-    );
-    if (senderInv) {
-      senderInv.quantityOnHand = Math.max(0, senderInv.quantityOnHand - qty);
-      senderInv.updatedAt = new Date().toISOString();
-      this.set(STORAGE_KEYS.INVENTORY, inventory);
-    }
-
-    const transfer: Transfer = {
-      id: `trf-${Date.now()}`,
-      shiftId: params.shiftId,
-      productId: params.productId,
-      productName: product.name,
-      fromLocationId: shift.locationId,
-      fromLocationName: shift.locationName,
-      toLocationId: toLocation.id,
-      toLocationName: toLocation.name,
-      quantity: qty,
-      status: 'PENDING',
-      senderName: params.senderName,
-      timestamp: new Date().toISOString(),
-    };
-
-    const transfers = this.get<Transfer[]>(STORAGE_KEYS.TRANSFERS, []);
-    transfers.unshift(transfer);
-    this.set(STORAGE_KEYS.TRANSFERS, transfers);
-
-    this.addEvent({
-      type: 'TRANSFER_DISPATCHED',
-      title: `Transfer: ${qty}x ${product.name}`,
-      description: `Dispatched from ${shift.locationName} to ${toLocation.name}`,
-      locationName: shift.locationName,
-      actorName: params.senderName,
-      severity: 'WARNING',
-    });
-
-    this.notify();
-    return transfer;
-  }
-
-  public acceptTransfer(transferId: string, receiverName: string) {
-    const transfers = this.get<Transfer[]>(STORAGE_KEYS.TRANSFERS, []);
-    const transfer = transfers.find((t) => t.id === transferId);
-    if (!transfer || transfer.status !== 'PENDING') return;
-
-    transfer.status = 'ACCEPTED';
-    transfer.receiverName = receiverName;
-    this.set(STORAGE_KEYS.TRANSFERS, transfers);
-
-    // Increment inventory in receiver location
-    const inventory = this.get<InventoryItem[]>(STORAGE_KEYS.INVENTORY, []);
-    const receiverInv = inventory.find(
-      (i) => i.locationId === transfer.toLocationId && i.productId === transfer.productId
-    );
-    if (receiverInv) {
-      receiverInv.quantityOnHand += transfer.quantity;
-      receiverInv.updatedAt = new Date().toISOString();
-    } else {
-      inventory.push({
-        id: `inv-${Date.now()}`,
-        productId: transfer.productId,
-        locationId: transfer.toLocationId,
-        quantityOnHand: transfer.quantity,
-        updatedAt: new Date().toISOString(),
-      });
-    }
-    this.set(STORAGE_KEYS.INVENTORY, inventory);
-
-    this.addEvent({
-      type: 'TRANSFER_RECEIVED',
-      title: `Transfer Accepted: ${transfer.quantity}x ${transfer.productName}`,
-      description: `Received at ${transfer.toLocationName} by ${receiverName}`,
-      locationName: transfer.toLocationName,
-      actorName: receiverName,
       severity: 'SUCCESS',
     });
 
@@ -857,7 +579,6 @@ class OperationalRealityStore {
       type: 'EXPENSE_LOGGED',
       title: `Expense: KES ${expense.amount.toLocaleString()} (${params.category})`,
       description: `${params.description} paid via ${params.paymentMethod}`,
-      locationName: shift.locationName,
       actorName: shift.workerName,
       severity: 'INFO',
       amount: expense.amount,
@@ -870,14 +591,6 @@ class OperationalRealityStore {
 
   /**
    * Transition: Calculate Shift Closing Preview
-   * Deterministically calculates:
-   * 1. Net M-Pesa Income = Closing M-Pesa - Opening M-Pesa
-   * 2. Net Cash Income = Closing Cash in Drawer - Opening Cash Float
-   * 3. Total Income Returned = Net Cash + Net M-Pesa
-   * 4. Expected Stock Sales Revenue = sum(recordedSales * sellingPrice)
-   * 5. Total Expenses = sum(expenses)
-   * 6. Financial Variance = (Total Income + Expenses) - Expected Stock Sales Revenue
-   * 7. Expected Closing Stock per item & Discrepancies
    */
   public calculateShiftReconciliation(params: {
     shiftId: string;
@@ -891,22 +604,20 @@ class OperationalRealityStore {
     const shiftStockItems = this.getShiftStockItems(params.shiftId);
     const expenses = this.getExpenses(params.shiftId);
 
-    // M-Pesa and Cash calculations as explicitly specified by user
     const openingMpesa = shift.openingMpesaBalance || 0;
     const closingMpesa = Number(params.closingMpesaBalance) || 0;
-    const calculatedMpesaIncome = closingMpesa - openingMpesa; // e.g. 17,000 - 10,000 = 7,000 KES
+    const calculatedMpesaIncome = closingMpesa - openingMpesa;
 
     const openingCashFloat = shift.openingCashFloat || 0;
     const closingCashActual = Number(params.closingCashActual) || 0;
-    const calculatedCashIncome = closingCashActual - openingCashFloat; // Net cash from sales
+    const calculatedCashIncome = closingCashActual - openingCashFloat;
 
-    const totalIncomeReturned = calculatedCashIncome + calculatedMpesaIncome; // Total money brought in
+    const totalIncomeReturned = calculatedCashIncome + calculatedMpesaIncome;
 
     let expectedSalesRevenue = 0;
     let totalCostOfGoodsSold = 0;
 
     const reconciledStockItems = shiftStockItems.map((item) => {
-      // Total available bottles on counter during shift
       const availableStock =
         item.openingPhysicalCount +
         item.additions +
@@ -914,16 +625,12 @@ class OperationalRealityStore {
         item.transfersOut -
         item.damages;
 
-      // What worker counts is left on the counter
       const physicalClosing =
         params.closingPhysicalCounts[item.productId] !== undefined
           ? params.closingPhysicalCounts[item.productId]
           : availableStock;
 
-      // System calculates what was sold: Available Stock - What's Left on Counter!
       const calculatedSold = Math.max(0, availableStock - physicalClosing);
-
-      // If what is left is more than available stock, that is a counter surplus/overage
       const overageCount = physicalClosing > availableStock ? physicalClosing - availableStock : 0;
       const discrepancyValue = overageCount * item.sellingPrice;
 
@@ -932,7 +639,7 @@ class OperationalRealityStore {
 
       return {
         ...item,
-        recordedSales: calculatedSold, // Calculated automatically by the system
+        recordedSales: calculatedSold,
         closingPhysicalCount: physicalClosing,
         expectedClosingCount: availableStock,
         discrepancyCount: overageCount,
@@ -944,9 +651,6 @@ class OperationalRealityStore {
     const grossProfit = expectedSalesRevenue - totalCostOfGoodsSold;
     const netProfit = grossProfit - totalExpenses;
 
-    // Financial variance:
-    // If bartender paid expenses out of cash or mpesa during shift, then
-    // (money collected in till + money spent on authorized expenses) should equal expected drink sales!
     const financialVariance =
       totalIncomeReturned + totalExpenses - expectedSalesRevenue;
 
@@ -971,7 +675,6 @@ class OperationalRealityStore {
 
   /**
    * Transition: Close Shift & Commit Reconciliation
-   * Finalizes shift state, records discrepancies, and fires alerts to Owner
    */
   public closeShift(params: {
     shiftId: string;
@@ -987,7 +690,6 @@ class OperationalRealityStore {
     const shift = shifts.find((s) => s.id === params.shiftId);
     if (!shift) throw new Error('Shift not found.');
 
-    // Update Shift record
     shift.status = 'CLOSED';
     shift.closedAt = new Date().toISOString();
     shift.closingCashActual = recon.closingCashActual;
@@ -1002,6 +704,10 @@ class OperationalRealityStore {
     shift.netProfit = recon.netProfit;
     shift.financialVariance = recon.financialVariance;
     shift.closingNotes = params.closingNotes;
+    shift.recordedSalesCount = recon.reconciledStockItems.reduce(
+      (sum, item) => sum + item.recordedSales,
+      0
+    );
 
     this.set(STORAGE_KEYS.SHIFTS, shifts);
 
@@ -1016,9 +722,7 @@ class OperationalRealityStore {
     // Update physical inventory to the closing verified counts
     const inventory = this.get<InventoryItem[]>(STORAGE_KEYS.INVENTORY, []);
     recon.reconciledStockItems.forEach((item) => {
-      const inv = inventory.find(
-        (i) => i.locationId === shift.locationId && i.productId === item.productId
-      );
+      const inv = inventory.find((i) => i.productId === item.productId);
       if (inv && item.closingPhysicalCount !== undefined) {
         inv.quantityOnHand = item.closingPhysicalCount;
         inv.updatedAt = new Date().toISOString();
@@ -1029,17 +733,15 @@ class OperationalRealityStore {
     // Generate Discrepancies if any
     const discrepancies = this.get<Discrepancy[]>(STORAGE_KEYS.DISCREPANCIES, []);
 
-    // 1. Stock discrepancies
+    // 1. Stock overages
     recon.reconciledStockItems.forEach((item) => {
-      if (item.discrepancyCount && item.discrepancyCount !== 0) {
+      if (item.discrepancyCount && item.discrepancyCount > 0) {
         discrepancies.unshift({
           id: `disc-stock-${Date.now()}-${item.productId}`,
           shiftId: shift.id,
           shiftNumber: shift.shiftNumber,
-          branchName: shift.branchName,
-          locationName: shift.locationName,
           workerName: shift.workerName,
-          type: item.discrepancyCount < 0 ? 'STOCK_SHORTAGE' : 'STOCK_OVERAGE',
+          type: 'STOCK_OVERAGE',
           itemId: item.productId,
           itemName: item.productName,
           expected: item.expectedClosingCount || 0,
@@ -1060,47 +762,35 @@ class OperationalRealityStore {
         id: `disc-fin-${Date.now()}`,
         shiftId: shift.id,
         shiftNumber: shift.shiftNumber,
-        branchName: shift.branchName,
-        locationName: shift.locationName,
         workerName: shift.workerName,
         type:
           recon.financialVariance < 0 ? 'FINANCIAL_SHORTAGE' : 'FINANCIAL_OVERAGE',
         itemName:
           recon.financialVariance < 0
-            ? 'Cash / M-Pesa Shortage'
-            : 'Cash / M-Pesa Surplus',
+            ? 'Cash & M-Pesa Shortage'
+            : 'Cash & M-Pesa Surplus',
         expected: recon.expectedSalesRevenue,
         actual: recon.totalIncomeReturned + recon.totalExpenses,
         variance: recon.financialVariance,
         monetaryValue: Math.abs(recon.financialVariance),
-        severity: Math.abs(recon.financialVariance) > 500 ? 'HIGH' : 'MEDIUM',
+        severity: Math.abs(recon.financialVariance) >= 2000 ? 'HIGH' : 'MEDIUM',
         status: 'FLAGGED',
-        ownerNotes: '',
+        ownerNotes:
+          recon.financialVariance < 0
+            ? `Net returned funds (KES ${recon.totalIncomeReturned.toLocaleString()} + KES ${recon.totalExpenses.toLocaleString()} expenses) fell short of calculated consumption (KES ${recon.expectedSalesRevenue.toLocaleString()}).`
+            : `Collected funds exceed calculated drink consumption.`,
         timestamp: new Date().toISOString(),
       });
     }
-
     this.set(STORAGE_KEYS.DISCREPANCIES, discrepancies);
-
-    // Event broadcast
-    const stockDiscrepancyCount = recon.reconciledStockItems.filter(
-      (i) => i.discrepancyCount && i.discrepancyCount !== 0
-    ).length;
 
     this.addEvent({
       type: 'SHIFT_CLOSED',
-      title: `Shift Closed: ${shift.locationName}`,
-      description: `Total Returned: KES ${recon.totalIncomeReturned.toLocaleString()} (M-Pesa: ${recon.calculatedMpesaIncome.toLocaleString()} | Cash: ${recon.calculatedCashIncome.toLocaleString()}). Net Profit: KES ${recon.netProfit.toLocaleString()}.${
-        stockDiscrepancyCount > 0 || Math.abs(recon.financialVariance) > 5
-          ? ` [ALERT: ${stockDiscrepancyCount} stock & financial variance flagged]`
-          : ' [Reconciliation Balanced]'
-      }`,
-      locationName: shift.locationName,
+      title: `Shift Closed: ${shift.shiftNumber}`,
+      description: `Reconciled by ${shift.workerName}. Net Money Returned: KES ${recon.totalIncomeReturned.toLocaleString()} | Sales: KES ${recon.expectedSalesRevenue.toLocaleString()} | Net Profit: KES ${recon.netProfit.toLocaleString()}`,
       actorName: shift.workerName,
       severity:
-        stockDiscrepancyCount > 0 || Math.abs(recon.financialVariance) > 5
-          ? 'ALERT'
-          : 'SUCCESS',
+        Math.abs(recon.financialVariance) > 5 ? 'WARNING' : 'SUCCESS',
       amount: recon.totalIncomeReturned,
       currency: 'KES',
     });
@@ -1109,52 +799,53 @@ class OperationalRealityStore {
     return shift;
   }
 
-  public resolveDiscrepancy(
-    discrepancyId: string,
-    ownerNotes: string,
-    status: 'INVESTIGATING' | 'RESOLVED' = 'RESOLVED'
-  ) {
-    const discrepancies = this.get<Discrepancy[]>(STORAGE_KEYS.DISCREPANCIES, []);
-    const item = discrepancies.find((d) => d.id === discrepancyId);
-    if (item) {
-      item.status = status;
-      item.ownerNotes = ownerNotes;
-      this.set(STORAGE_KEYS.DISCREPANCIES, discrepancies);
-
-      this.addEvent({
-        type: 'INFO',
-        title: `Discrepancy Updated (${status})`,
-        description: `${item.itemName} on ${item.shiftNumber}: ${ownerNotes}`,
-        locationName: item.locationName,
-        actorName: 'Maina Mwangi (Proprietor)',
-        severity: 'INFO',
-      });
-
-      this.notify();
-    }
-  }
-
-  // --- Product Catalog Management (Owner action) ---
   public updateProductPricing(productId: string, sellingPrice: number, costPrice: number) {
     const products = this.getProducts();
     const product = products.find((p) => p.id === productId);
-    if (product) {
-      product.sellingPrice = Number(sellingPrice);
-      product.costPrice = Number(costPrice);
-      this.set(STORAGE_KEYS.PRODUCTS, products);
+    if (!product) return;
 
-      this.addEvent({
-        type: 'INFO',
-        title: `Catalog Updated: ${product.name}`,
-        description: `New Sell: KES ${product.sellingPrice.toLocaleString()}, Cost: KES ${product.costPrice.toLocaleString()}`,
-        locationName: 'Headquarters',
-        actorName: 'Proprietor',
-        severity: 'INFO',
-      });
+    product.sellingPrice = sellingPrice;
+    product.costPrice = costPrice;
+    this.set(STORAGE_KEYS.PRODUCTS, products);
 
-      this.notify();
-    }
+    this.addEvent({
+      type: 'INFO',
+      title: `Price Updated: ${product.name}`,
+      description: `Selling: KES ${sellingPrice.toLocaleString()} | Cost: KES ${costPrice.toLocaleString()}`,
+      actorName: 'Owner Audit Desk',
+      severity: 'INFO',
+    });
+
+    this.notify();
+  }
+
+  public resolveDiscrepancy(
+    idOrParams: string | { discrepancyId: string; resolutionStatus: 'RESOLVED' | 'INVESTIGATING'; ownerNotes: string },
+    notes?: string,
+    status?: 'RESOLVED' | 'INVESTIGATING'
+  ) {
+    const discrepancyId = typeof idOrParams === 'string' ? idOrParams : idOrParams.discrepancyId;
+    const ownerNotes = typeof idOrParams === 'string' ? (notes || '') : idOrParams.ownerNotes;
+    const resolutionStatus = typeof idOrParams === 'string' ? (status || 'RESOLVED') : idOrParams.resolutionStatus;
+
+    const discrepancies = this.get<Discrepancy[]>(STORAGE_KEYS.DISCREPANCIES, []);
+    const item = discrepancies.find((d) => d.id === discrepancyId);
+    if (!item) throw new Error('Discrepancy not found.');
+
+    item.status = resolutionStatus;
+    item.ownerNotes = ownerNotes;
+    this.set(STORAGE_KEYS.DISCREPANCIES, discrepancies);
+
+    this.addEvent({
+      type: 'INFO',
+      title: `Discrepancy ${resolutionStatus}`,
+      description: `Shift #${item.shiftNumber} (${item.itemName}): ${ownerNotes}`,
+      actorName: 'Owner Audit Desk',
+      severity: resolutionStatus === 'RESOLVED' ? 'SUCCESS' : 'INFO',
+    });
+
+    this.notify();
   }
 }
 
-export const store = new OperationalRealityStore();
+export const store = new StoreService();

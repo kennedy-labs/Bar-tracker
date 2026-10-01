@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Product, StockLocation, InventoryItem } from '../../types';
+import { Product, InventoryItem } from '../../types';
 import { store } from '../../services/store';
 import {
   Smartphone,
@@ -15,13 +15,10 @@ import {
 } from 'lucide-react';
 
 interface ShiftOpeningModalProps {
-  locations: StockLocation[];
   products: Product[];
   inventory: InventoryItem[];
   workerName: string;
-  defaultLocationId: string;
   onConfirmOpen: (data: {
-    locationId: string;
     openingCashFloat: number;
     openingMpesaBalance: number;
     physicalCounts: Record<string, number>;
@@ -30,21 +27,15 @@ interface ShiftOpeningModalProps {
 }
 
 export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
-  locations,
   products,
   inventory,
   workerName,
-  defaultLocationId,
   onConfirmOpen,
 }) => {
-  const counterLocations = locations.filter((l) => l.isCounter);
-  const [selectedLocationId, setSelectedLocationId] = useState<string>(
-    defaultLocationId || counterLocations[0]?.id || ''
-  );
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Retrieve previous shift for this counter location to identify who is liable
-  const lastClosedShift = store.getLastClosedShift(selectedLocationId);
+  // Retrieve previous shift to identify who is liable if items are missing
+  const lastClosedShift = store.getLastClosedShift();
   const previousAttendant = lastClosedShift ? lastClosedShift.workerName : 'Previous Shift Attendant';
 
   // M-Pesa entry business balance
@@ -56,9 +47,7 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
   const [physicalCounts, setPhysicalCounts] = useState<Record<string, number>>(() => {
     const initial: Record<string, number> = {};
     products.forEach((p) => {
-      const inv = inventory.find(
-        (i) => i.locationId === selectedLocationId && i.productId === p.id
-      );
+      const inv = inventory.find((i) => i.productId === p.id);
       initial[p.id] = inv ? inv.quantityOnHand : 0;
     });
     return initial;
@@ -84,9 +73,7 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
   }[] = [];
 
   products.forEach((p) => {
-    const inv = inventory.find(
-      (i) => i.locationId === selectedLocationId && i.productId === p.id
-    );
+    const inv = inventory.find((i) => i.productId === p.id);
     const systemQty = inv ? inv.quantityOnHand : 0;
     const physicalQty = physicalCounts[p.id] !== undefined ? physicalCounts[p.id] : systemQty;
     if (physicalQty < systemQty) {
@@ -125,7 +112,6 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onConfirmOpen({
-      locationId: selectedLocationId,
       openingCashFloat: parseFloat(openingCashFloat) || 0,
       openingMpesaBalance: parseFloat(openingMpesaBalance) || 0,
       physicalCounts,
@@ -145,7 +131,7 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
         </div>
         <div>
           <h2 className="text-lg font-bold text-white tracking-tight">
-            Shift Opening & Counter Handover
+            Shift Opening & Stock Handover
           </h2>
           <p className="text-xs text-slate-400">
             Attendant: <span className="text-emerald-400 font-medium">{workerName}</span>
@@ -157,26 +143,6 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
       </div>
 
       <form onSubmit={handleSubmit} className="mt-5 space-y-6">
-        {/* Counter Location Selector */}
-        {counterLocations.length > 1 && (
-          <div>
-            <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider block mb-1.5">
-              Assigned Counter
-            </label>
-            <select
-              value={selectedLocationId}
-              onChange={(e) => setSelectedLocationId(e.target.value)}
-              className="w-full bg-[#151D2C] border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
-            >
-              {counterLocations.map((loc) => (
-                <option key={loc.id} value={loc.id}>
-                  {loc.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
         {/* Financial Inputs: M-Pesa & Cash Float */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {/* M-Pesa Starting Balance */}
@@ -235,7 +201,7 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <label className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
-                Counter Stock Count (Alphabetical A to Z)
+                Bar Stock Physical Count (Alphabetical A to Z)
               </label>
               <span className="text-[11px] text-slate-400">
                 Verify what is physically present. If bottles are missing, {previousAttendant} is liable.
@@ -257,9 +223,7 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
           {/* 1 Single Column List */}
           <div className="border border-slate-800 rounded-2xl divide-y divide-slate-800/80 bg-[#0E1420] max-h-80 overflow-y-auto">
             {filteredProducts.map((product) => {
-              const inv = inventory.find(
-                (i) => i.locationId === selectedLocationId && i.productId === product.id
-              );
+              const inv = inventory.find((i) => i.productId === product.id);
               const systemCount = inv ? inv.quantityOnHand : 0;
               const currentPhysical =
                 physicalCounts[product.id] !== undefined
@@ -346,7 +310,7 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
                 type="text"
                 value={inconsistencyNote}
                 onChange={(e) => setInconsistencyNote(e.target.value)}
-                placeholder="e.g. Counter was locked, bottles missing from top shelf"
+                placeholder="e.g. Bottles missing from bottom shelf"
                 className="w-full bg-[#121824] border border-red-900 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none"
               />
             </div>

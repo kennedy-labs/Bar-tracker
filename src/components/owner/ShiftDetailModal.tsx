@@ -45,7 +45,7 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({ shift, onClo
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5 font-mono">
-              Attendant: {shift.workerName} · {shift.locationName} · {new Date(shift.openedAt).toLocaleString()}
+              Attendant: {shift.workerName} · {new Date(shift.openedAt).toLocaleString()}
             </p>
           </div>
           <button

@@ -161,7 +161,7 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
                 Close Shift & Record Ending Counter
               </h2>
               <p className="text-xs text-slate-400 font-mono">
-                {shift.locationName} · Attendant: {shift.workerName}
+                Shift #{shift.shiftNumber} · Attendant: {shift.workerName}
               </p>
             </div>
           </div>

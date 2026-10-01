@@ -37,17 +37,9 @@ export interface ProductCostHistory {
   effectiveDate: string;
 }
 
-export interface StockLocation {
-  id: string;
-  name: string;
-  branchId: string;
-  isCounter: boolean;
-}
-
 export interface InventoryItem {
   id?: string;
   productId: string;
-  locationId: string;
   quantityOnHand: number;
   updatedAt: string;
 }
@@ -60,7 +52,6 @@ export type MpesaAccountType =
 
 export interface MpesaAccount {
   id: string;
-  branchId: string;
   accountName: string;
   accountType: MpesaAccountType;
   identifier: string; // Till number, Paybill shortcode, phone
@@ -92,10 +83,6 @@ export interface ShiftStockItem {
 export interface Shift {
   id: string;
   shiftNumber: string;
-  branchId: string;
-  branchName: string;
-  locationId: string;
-  locationName: string;
   workerId: string;
   workerName: string;
   status: ShiftStatus;
@@ -133,8 +120,6 @@ export type StockMovementType =
   | 'OPENING_COUNT'
   | 'SALE'
   | 'ADDITION'
-  | 'TRANSFER_IN'
-  | 'TRANSFER_OUT'
   | 'DAMAGE_BREAKAGE'
   | 'CLOSING_COUNT';
 
@@ -143,29 +128,11 @@ export interface StockMovement {
   shiftId: string;
   productId: string;
   productName: string;
-  locationId: string;
-  locationName: string;
   type: StockMovementType;
   quantity: number;
   unitPrice: number;
   timestamp: string;
   note?: string;
-}
-
-export interface Transfer {
-  id: string;
-  shiftId: string;
-  productId: string;
-  productName: string;
-  fromLocationId: string;
-  fromLocationName: string;
-  toLocationId: string;
-  toLocationName: string;
-  quantity: number;
-  status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
-  senderName: string;
-  receiverName?: string;
-  timestamp: string;
 }
 
 export type ExpenseCategory =
@@ -213,8 +180,6 @@ export interface Discrepancy {
   id: string;
   shiftId: string;
   shiftNumber: string;
-  branchName: string;
-  locationName: string;
   workerName: string;
   responsibleWorkerName?: string;
   previousShiftId?: string;
@@ -238,8 +203,6 @@ export interface OperationalEvent {
     | 'SHIFT_CLOSED'
     | 'SALE_RECORDED'
     | 'ADDITION_RECORDED'
-    | 'TRANSFER_DISPATCHED'
-    | 'TRANSFER_RECEIVED'
     | 'EXPENSE_LOGGED'
     | 'DISCREPANCY_FLAGGED'
     | 'INFO'
@@ -247,7 +210,6 @@ export interface OperationalEvent {
   title: string;
   description: string;
   timestamp: string;
-  locationName: string;
   actorName: string;
   severity: 'INFO' | 'SUCCESS' | 'WARNING' | 'ALERT';
   amount?: number;
@@ -259,5 +221,4 @@ export interface User {
   name: string;
   role: Role;
   pinCode: string;
-  assignedLocationId?: string;
 }
