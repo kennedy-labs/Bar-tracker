@@ -237,7 +237,9 @@ export interface User {
 export interface BusinessProfile {
   id: string;
   name: string;
-  connectCode: string; // 6-digit code e.g. "849201"
+  connectCode?: string;
+  activeShiftTransferCode?: string; // Ephemeral 6-digit one-time code valid strictly for current shift
+  activeShiftId?: string; // ID of the shift this code is locked to
   phone: string;       // e.g. "0722 841 902"
   ownerName: string;
   address?: string;

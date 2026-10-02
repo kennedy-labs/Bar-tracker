@@ -17,12 +17,15 @@ import {
   Smartphone,
   ShieldCheck,
   AlertCircle,
+  RefreshCw,
+  Lock,
 } from 'lucide-react';
 
 export const PartnerBarsManager: React.FC = () => {
   const currentBiz = store.getCurrentBusiness();
   const partners = store.getPartners();
   const transfers = store.getInterBusinessTransfers();
+  const shiftCodeInfo = store.getShiftTransferCode();
 
   const [connectInput, setConnectInput] = useState('');
   const [connectError, setConnectError] = useState<string | null>(null);
@@ -35,9 +38,20 @@ export const PartnerBarsManager: React.FC = () => {
   const [settleMethod, setSettleMethod] = useState<'CASH' | 'MPESA'>('CASH');
 
   const handleCopyCode = () => {
-    navigator.clipboard.writeText(currentBiz.connectCode);
+    if (!shiftCodeInfo.code) return;
+    navigator.clipboard.writeText(shiftCodeInfo.code);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  const handleRegenerateCode = () => {
+    try {
+      store.regenerateShiftTransferCode();
+      setConnectSuccess('New one-time shift transfer code generated.');
+      setTimeout(() => setConnectSuccess(null), 4000);
+    } catch (err: any) {
+      setConnectError(err.message || 'Failed to rotate code.');
+    }
   };
 
   const handleConnect = (e: React.FormEvent) => {
@@ -76,45 +90,70 @@ export const PartnerBarsManager: React.FC = () => {
           <div>
             <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 uppercase tracking-wider">
               <Building2 className="w-4 h-4" />
-              <span>Your Bar Connection Credentials</span>
+              <span>Shift-Scoped Stock Transfers</span>
             </div>
             <h3 className="text-base sm:text-lg font-bold text-white mt-1">
               {currentBiz.name}
             </h3>
             <p className="text-xs text-slate-400">
-              Share your 6-digit code or phone number with neighboring bar owners to link together
+              One-time pairing code valid strictly for the active shift. Expires automatically when the shift closes.
             </p>
           </div>
 
-          {/* 6-Digit Code Box */}
-          <div className="flex items-center gap-3 bg-[#0E1420] border border-slate-800 p-3 rounded-2xl">
-            <div>
-              <div className="text-[10px] uppercase font-mono text-slate-400">Bar Connect Code</div>
-              <div className="text-xl font-mono font-bold text-emerald-400 tracking-widest mt-0.5">
-                {currentBiz.connectCode}
+          {/* One-Time Shift Code Box */}
+          {shiftCodeInfo.isShiftActive ? (
+            <div className="flex items-center gap-3 bg-[#0E1420] border border-slate-800 p-3 rounded-2xl">
+              <div>
+                <div className="flex items-center gap-1.5 text-[10px] uppercase font-mono text-emerald-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>Shift One-Time Code</span>
+                </div>
+                <div className="text-xl font-mono font-bold text-emerald-400 tracking-widest mt-0.5">
+                  {shiftCodeInfo.code}
+                </div>
+                <div className="text-[9px] text-slate-500 font-mono">
+                  Shift: {shiftCodeInfo.shiftId}
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <button
+                  onClick={handleCopyCode}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                  title="Copy 1-Time Shift Code"
+                >
+                  {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  onClick={handleRegenerateCode}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                  title="Rotate / Generate New Code"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
-            <button
-              onClick={handleCopyCode}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
-              title="Copy Code"
-            >
-              {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-            </button>
-          </div>
+          ) : (
+            <div className="p-3 rounded-2xl bg-amber-950/30 border border-amber-800/60 text-xs text-amber-300 flex items-center gap-2">
+              <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+              <div>
+                <div className="font-bold">No Active Shift Open</div>
+                <div className="text-[10px] text-amber-400/80">Open a shift on the Counter to generate a one-time transfer code.</div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Connect New Bar Input Form */}
         <form onSubmit={handleConnect} className="space-y-3">
           <label className="block text-xs font-bold text-slate-200 uppercase tracking-wider">
-            Connect a Neighboring Bar
+            Link Neighboring Bar for Stock Loan
           </label>
           <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               value={connectInput}
               onChange={(e) => setConnectInput(e.target.value)}
-              placeholder="Enter their 6-digit code (e.g. 512784) or phone number (0733 456 789)"
+              placeholder="Enter neighbor's 6-digit one-time shift code (e.g. 512784) or phone number"
               className="flex-1 bg-[#0E1420] border border-slate-700 focus:border-emerald-500 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none"
             />
             <button

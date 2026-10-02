@@ -313,6 +313,60 @@ class StoreService {
     this.notify();
   }
 
+  // --- Shift-Scoped One-Time Transfer Code Management ---
+  public getShiftTransferCode(): { code: string; shiftId: string | null; isShiftActive: boolean } {
+    const activeShift = this.getActiveShift();
+    if (!activeShift) {
+      return { code: '', shiftId: null, isShiftActive: false };
+    }
+
+    const currentBiz = this.getCurrentBusiness();
+    const businesses = this.getBusinesses();
+    const biz = businesses.find((b) => b.id === currentBiz.id);
+
+    if (biz?.activeShiftId === activeShift.id && biz.activeShiftTransferCode) {
+      return { code: biz.activeShiftTransferCode, shiftId: activeShift.id, isShiftActive: true };
+    }
+
+    // Generate fresh 6-digit one-time code for this shift
+    const freshCode = String(Math.floor(100000 + Math.random() * 900000));
+    if (biz) {
+      biz.activeShiftTransferCode = freshCode;
+      biz.activeShiftId = activeShift.id;
+      this.set(STORAGE_KEYS.BUSINESSES, businesses);
+    }
+
+    return { code: freshCode, shiftId: activeShift.id, isShiftActive: true };
+  }
+
+  public regenerateShiftTransferCode(): string {
+    const activeShift = this.getActiveShift();
+    if (!activeShift) {
+      throw new Error('An active shift must be open to generate a shift transfer code.');
+    }
+
+    const currentBiz = this.getCurrentBusiness();
+    const businesses = this.getBusinesses();
+    const biz = businesses.find((b) => b.id === currentBiz.id);
+    if (!biz) throw new Error('Establishment not found.');
+
+    const freshCode = String(Math.floor(100000 + Math.random() * 900000));
+    biz.activeShiftTransferCode = freshCode;
+    biz.activeShiftId = activeShift.id;
+    this.set(STORAGE_KEYS.BUSINESSES, businesses);
+
+    this.addEvent({
+      type: 'INFO',
+      title: 'Shift Transfer Code Refreshed',
+      description: `New one-time transfer code generated for shift ${activeShift.id}.`,
+      actorName: 'Bar Attendant',
+      severity: 'INFO',
+    });
+
+    this.notify();
+    return freshCode;
+  }
+
   // --- Inter-Business Partner Management ---
   public getPartners(): BusinessPartner[] {
     const currentBizId = this.getCurrentBusinessId();
@@ -321,23 +375,38 @@ class StoreService {
   }
 
   /**
-   * Connect with a partner bar using either their 6-digit Bar Connect Code or Phone Number
+   * Connect with a partner bar using their one-time Shift Transfer Code or Phone Number
    */
   public connectPartner(connectInput: string): BusinessPartner {
     const cleanInput = connectInput.trim().replace(/\s|-/g, '');
     const currentBiz = this.getCurrentBusiness();
     const businesses = this.getBusinesses();
 
-    // Search by 6-digit connectCode or phone
+    // Search by activeShiftTransferCode or phone
     const targetBiz = businesses.find((b) => {
       if (b.id === currentBiz.id) return false;
-      const bCode = b.connectCode.replace(/\s|-/g, '');
+      const bShiftCode = b.activeShiftTransferCode ? b.activeShiftTransferCode.replace(/\s|-/g, '') : '';
+      const bLegacyCode = b.connectCode ? b.connectCode.replace(/\s|-/g, '') : '';
       const bPhone = b.phone.replace(/\s|-/g, '');
-      return bCode === cleanInput || bPhone === cleanInput || bPhone.endsWith(cleanInput) || cleanInput.endsWith(bPhone);
+      return (
+        (bShiftCode && bShiftCode === cleanInput) ||
+        (bLegacyCode && bLegacyCode === cleanInput) ||
+        bPhone === cleanInput ||
+        bPhone.endsWith(cleanInput) ||
+        cleanInput.endsWith(bPhone)
+      );
     });
 
     if (!targetBiz) {
-      throw new Error(`No partner bar found matching "${connectInput}". Please check the 6-digit code or phone number.`);
+      throw new Error(
+        `No partner bar found matching "${connectInput}". The one-time shift transfer code may have expired or is incorrect.`
+      );
+    }
+
+    // Once connected via OTP shift code, rotate or consume that code
+    if (targetBiz.activeShiftTransferCode && targetBiz.activeShiftTransferCode.replace(/\s|-/g, '') === cleanInput) {
+      targetBiz.activeShiftTransferCode = String(Math.floor(100000 + Math.random() * 900000));
+      this.set(STORAGE_KEYS.BUSINESSES, businesses);
     }
 
     const allPartners = this.get<BusinessPartner[]>(STORAGE_KEYS.PARTNERS, []);
@@ -355,7 +424,7 @@ class StoreService {
       partnerBusinessId: targetBiz.id,
       partnerName: targetBiz.name,
       partnerPhone: targetBiz.phone,
-      partnerConnectCode: targetBiz.connectCode,
+      partnerConnectCode: targetBiz.activeShiftTransferCode || targetBiz.connectCode || 'LINKED',
       netCostBalance: 0,
       connectedAt: new Date().toISOString(),
     };
@@ -366,7 +435,7 @@ class StoreService {
       partnerBusinessId: currentBiz.id,
       partnerName: currentBiz.name,
       partnerPhone: currentBiz.phone,
-      partnerConnectCode: currentBiz.connectCode,
+      partnerConnectCode: currentBiz.activeShiftTransferCode || currentBiz.connectCode || 'LINKED',
       netCostBalance: 0,
       connectedAt: new Date().toISOString(),
     };
@@ -376,9 +445,9 @@ class StoreService {
 
     this.addEvent({
       type: 'INFO',
-      title: `Partner Bar Connected: ${targetBiz.name}`,
-      description: `Linked via connect code ${targetBiz.connectCode}. You can now exchange stock directly.`,
-      actorName: 'Business Network',
+      title: `Partner Bar Linked: ${targetBiz.name}`,
+      description: `Established via shift transfer verification. Ready for stock exchange.`,
+      actorName: 'Shift Attendant',
       severity: 'SUCCESS',
     });
 
@@ -594,7 +663,7 @@ class StoreService {
         partnerBusinessId: currentBiz.id,
         partnerName: currentBiz.name,
         partnerPhone: currentBiz.phone,
-        partnerConnectCode: currentBiz.connectCode,
+        partnerConnectCode: currentBiz.activeShiftTransferCode || currentBiz.connectCode || 'LINKED',
         netCostBalance: transfer.totalCostValue,
         connectedAt: new Date().toISOString(),
       });
@@ -1280,6 +1349,15 @@ class StoreService {
       amount: recon.totalIncomeReturned,
       currency: 'KES',
     });
+
+    // Invalidate one-time shift transfer code at shift closure (lasts strictly one shift)
+    const businesses = this.getBusinesses();
+    const targetB = businesses.find((b) => b.id === bizId);
+    if (targetB) {
+      targetB.activeShiftTransferCode = undefined;
+      targetB.activeShiftId = undefined;
+      this.set(STORAGE_KEYS.BUSINESSES, businesses);
+    }
 
     this.notify();
     return shift;
