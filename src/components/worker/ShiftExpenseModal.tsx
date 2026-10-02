@@ -18,9 +18,9 @@ export const ShiftExpenseModal: React.FC<ShiftExpenseModalProps> = ({
   onConfirmExpense,
 }) => {
   const [category, setCategory] = useState<ExpenseCategory>('ICE');
-  const [amount, setAmount] = useState<string>('500');
+  const [amount, setAmount] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'MPESA'>('CASH');
-  const [description, setDescription] = useState<string>('2 Bags of Crushed Ice from Ice Vendor');
+  const [description, setDescription] = useState<string>('');
   const [receiptRef, setReceiptRef] = useState<string>('');
 
   const categories: { cat: ExpenseCategory; label: string }[] = [
@@ -97,6 +97,7 @@ export const ShiftExpenseModal: React.FC<ShiftExpenseModalProps> = ({
                 required
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
+                placeholder="e.g. 500"
                 className="w-full bg-[#0E1420] border border-slate-700 rounded-xl pl-12 pr-3 py-2.5 text-lg font-mono font-bold text-white focus:outline-none focus:border-red-500 tabular-nums"
               />
             </div>

@@ -50,11 +50,9 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
     return initial;
   });
 
-  // 2. Financials
-  const [closingCashActual, setClosingCashActual] = useState<string>('14500');
-  const [closingMpesaBalance, setClosingMpesaBalance] = useState<string>(
-    String((shift.openingMpesaBalance || 10000) + 7000)
-  );
+  // 2. Financials (Empty initially with helpful placeholder)
+  const [closingCashActual, setClosingCashActual] = useState<string>('');
+  const [closingMpesaBalance, setClosingMpesaBalance] = useState<string>('');
   const [closingNotes, setClosingNotes] = useState<string>('');
 
   const adjustCount = (productId: string, delta: number) => {
@@ -256,12 +254,16 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
                     required
                     value={closingCashActual}
                     onChange={(e) => setClosingCashActual(e.target.value)}
-                    placeholder="14500"
+                    placeholder="e.g. 14,500"
                     className="w-full bg-[#151D2C] border border-slate-700 focus:border-emerald-500 rounded-xl pl-14 pr-4 py-3 text-lg font-bold text-white focus:outline-none tabular-nums"
                   />
                 </div>
                 <div className="text-[11px] text-slate-500 mt-1">
-                  Cash collected from sales: KES {Math.max(0, netCashIncome).toLocaleString()}
+                  {closingCashActual.trim() ? (
+                    <span>Cash collected from sales: <strong className="text-white font-mono">KES {Math.max(0, netCashIncome).toLocaleString()}</strong></span>
+                  ) : (
+                    <span>Opening drawer float was <strong className="text-slate-400 font-mono">KES {openingCashFloat.toLocaleString()}</strong></span>
+                  )}
                 </div>
               </div>
 
@@ -282,12 +284,16 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
                     required
                     value={closingMpesaBalance}
                     onChange={(e) => setClosingMpesaBalance(e.target.value)}
-                    placeholder="17000"
+                    placeholder="e.g. 17,000"
                     className="w-full bg-[#151D2C] border border-slate-700 focus:border-emerald-500 rounded-xl pl-14 pr-4 py-3 text-lg font-bold text-white focus:outline-none tabular-nums"
                   />
                 </div>
                 <div className="text-[11px] text-slate-500 mt-1">
-                  M-Pesa collected from sales: KES {Math.max(0, netMpesaIncome).toLocaleString()}
+                  {closingMpesaBalance.trim() ? (
+                    <span>M-Pesa collected from sales: <strong className="text-emerald-400 font-mono">KES {Math.max(0, netMpesaIncome).toLocaleString()}</strong></span>
+                  ) : (
+                    <span>Opening till balance was <strong className="text-slate-400 font-mono">KES {openingMpesa.toLocaleString()}</strong></span>
+                  )}
                 </div>
               </div>
 

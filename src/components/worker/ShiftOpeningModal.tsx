@@ -36,9 +36,9 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
   // Retrieve previous shift info if any
   const lastClosedShift = store.getLastClosedShift();
 
-  // Step 1: Money
-  const [openingMpesaBalance, setOpeningMpesaBalance] = useState<string>('10000');
-  const [openingCashFloat, setOpeningCashFloat] = useState<string>('3000');
+  // Step 1: Money (Empty initially with helpful placeholder)
+  const [openingMpesaBalance, setOpeningMpesaBalance] = useState<string>('');
+  const [openingCashFloat, setOpeningCashFloat] = useState<string>('');
 
   // Step 2: Physical Counts
   const [physicalCounts, setPhysicalCounts] = useState<Record<string, number>>(() => {
@@ -151,7 +151,7 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
                 required
                 value={openingCashFloat}
                 onChange={(e) => setOpeningCashFloat(e.target.value)}
-                placeholder="3000"
+                placeholder="e.g. 3,000"
                 className="w-full bg-[#151D2C] border border-slate-700 focus:border-emerald-500 rounded-xl pl-14 pr-4 py-3 text-lg font-bold text-white focus:outline-none tabular-nums"
               />
             </div>
@@ -177,7 +177,7 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
                 required
                 value={openingMpesaBalance}
                 onChange={(e) => setOpeningMpesaBalance(e.target.value)}
-                placeholder="10000"
+                placeholder="e.g. 10,000"
                 className="w-full bg-[#151D2C] border border-slate-700 focus:border-emerald-500 rounded-xl pl-14 pr-4 py-3 text-lg font-bold text-white focus:outline-none tabular-nums"
               />
             </div>

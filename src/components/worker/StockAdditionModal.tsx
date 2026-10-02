@@ -19,7 +19,7 @@ export const StockAdditionModal: React.FC<StockAdditionModalProps> = ({
   onConfirmAddition,
 }) => {
   const [selectedProductId, setSelectedProductId] = useState<string>(products[0]?.id || '');
-  const [quantity, setQuantity] = useState<number>(24);
+  const [quantity, setQuantity] = useState<string>('');
   const [source, setSource] = useState<string>('Central Warehouse / Storekeeper');
   const [note, setNote] = useState<string>('');
 
@@ -27,10 +27,11 @@ export const StockAdditionModal: React.FC<StockAdditionModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (quantity <= 0 || !selectedProductId) return;
+    const qty = parseInt(quantity) || 0;
+    if (qty <= 0 || !selectedProductId) return;
     onConfirmAddition({
       productId: selectedProductId,
-      quantity,
+      quantity: qty,
       source,
       note,
     });
@@ -79,7 +80,8 @@ export const StockAdditionModal: React.FC<StockAdditionModalProps> = ({
               min="1"
               required
               value={quantity}
-              onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 0))}
+              onChange={(e) => setQuantity(e.target.value)}
+              placeholder="e.g. 24"
               className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2.5 text-lg font-mono font-bold text-white focus:outline-none focus:border-emerald-500 tabular-nums"
             />
             <div className="flex gap-2 mt-2">
@@ -87,8 +89,8 @@ export const StockAdditionModal: React.FC<StockAdditionModalProps> = ({
                 <button
                   key={q}
                   type="button"
-                  onClick={() => setQuantity(q)}
-                  className="px-2.5 py-1 rounded-lg border border-slate-800 bg-slate-900 text-xs font-mono text-slate-300 hover:border-slate-700"
+                  onClick={() => setQuantity(String(q))}
+                  className="px-2.5 py-1 rounded-lg border border-slate-800 bg-slate-900 text-xs font-mono text-slate-300 hover:border-slate-700 cursor-pointer"
                 >
                   +{q} ({Math.round(q / 24)} crate)
                 </button>
