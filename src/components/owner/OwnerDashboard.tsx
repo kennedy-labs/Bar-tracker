@@ -582,22 +582,93 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
         </div>
       )}
 
-      {/* 4. SHIFT LEDGERS TAB (HISTORICAL ACCOUNTABILITY) */}
+      {/* 4. SHIFTS TAB (HISTORICAL ACCOUNTABILITY) */}
       {activeTab === 'shifts' && (
-        <div className="p-5 md:p-6 rounded-3xl bg-[#121824] border border-[#1E293B] space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+        <div className="p-4 sm:p-6 rounded-3xl bg-[#121824] border border-[#1E293B] space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
             <div>
               <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
                 <Layers className="w-5 h-5 text-emerald-400" />
-                <span>Shift Ledgers & Reconciliation Archives</span>
+                <span>Shift Records & Handover Receipts</span>
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Every shift handover with entry/exit M-Pesa balances and physical cash surrendered
+                Detailed record of every shift worked, money collected, and stock balances
               </p>
             </div>
           </div>
 
-          <div className="overflow-x-auto border border-slate-800 rounded-2xl bg-[#0E1420]">
+          {/* Mobile Shift Cards (for Phones) */}
+          <div className="md:hidden space-y-3">
+            {shifts.map((s) => {
+              const netMpesa =
+                s.calculatedMpesaIncome !== undefined
+                  ? s.calculatedMpesaIncome
+                  : (s.closingMpesaBalance || 0) - s.openingMpesaBalance;
+              const netCash =
+                s.calculatedCashIncome !== undefined
+                  ? s.calculatedCashIncome
+                  : (s.closingCashActual || 0) - s.openingCashFloat;
+              const totalInc = s.totalIncomeReturned || netCash + netMpesa;
+              const variance = s.financialVariance || 0;
+
+              return (
+                <div
+                  key={s.id}
+                  className="p-4 rounded-2xl bg-[#0E1420] border border-slate-800 space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-bold text-white">{s.workerName}</div>
+                      <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                        Shift #{s.shiftNumber} · {new Date(s.openedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                      </div>
+                    </div>
+                    <span
+                      className={`text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded ${
+                        s.status === 'ACTIVE'
+                          ? 'bg-blue-950 text-blue-400 border border-blue-800'
+                          : Math.abs(variance) <= 10
+                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                          : 'bg-red-950 text-red-400 border border-red-800'
+                      }`}
+                    >
+                      {s.status === 'ACTIVE'
+                        ? '🟢 Live'
+                        : Math.abs(variance) <= 10
+                        ? '✅ Balanced'
+                        : `⚠️ Short KES ${Math.abs(variance).toLocaleString()}`}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-800/80">
+                    <div className="p-2 rounded-xl bg-[#151D2C]">
+                      <div className="text-[10px] text-slate-400 uppercase">Money Collected</div>
+                      <div className="font-mono font-bold text-white mt-0.5">
+                        KES {totalInc.toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-xl bg-[#151D2C]">
+                      <div className="text-[10px] text-slate-400 uppercase">Net Profit</div>
+                      <div className="font-mono font-bold text-emerald-400 mt-0.5">
+                        {s.netProfit !== undefined ? `KES ${s.netProfit.toLocaleString()}` : '-'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setSelectedShiftForAudit(s)}
+                    className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>View Receipt & Audit</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Shift Table (for Larger Screens) */}
+          <div className="hidden md:block overflow-x-auto border border-slate-800 rounded-2xl bg-[#0E1420]">
             <table className="w-full text-xs text-left">
               <thead className="bg-[#151D2C] text-slate-400 font-mono text-[10px] uppercase border-b border-slate-800">
                 <tr>

@@ -2,9 +2,6 @@ import React, { useState } from 'react';
 import {
   User,
   Product,
-  Shift,
-  ShiftStockItem,
-  Expense,
 } from '../../types';
 import { store } from '../../services/store';
 import { ShiftOpeningModal } from './ShiftOpeningModal';
@@ -14,20 +11,15 @@ import { ShiftClosingModal } from './ShiftClosingModal';
 import { InterBusinessDispatchModal } from './InterBusinessDispatchModal';
 import { IncomingTransferBanner } from '../common/IncomingTransferBanner';
 import {
-  Smartphone,
-  Coins,
   PackagePlus,
   Receipt,
-  Lock,
-  Clock,
-  AlertCircle,
   Search,
   ShieldCheck,
   Wine,
   Truck,
-  Building2,
-  Check,
   X,
+  LogOut,
+  Clock,
 } from 'lucide-react';
 
 interface WorkerTerminalProps {
@@ -41,11 +33,9 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
   >('NONE');
   const [dispatchToast, setDispatchToast] = useState<string | null>(null);
 
-  const currentBiz = store.getCurrentBusiness();
   const products = store.getProducts();
   const activeShift = store.getActiveShift();
   const inventory = store.getInventory();
-  const partners = store.getPartners();
   const incomingTransfers = store.getPendingIncomingTransfers();
   const shiftStockItems = activeShift ? store.getShiftStockItems(activeShift.id) : [];
   const expenses = activeShift ? store.getExpenses(activeShift.id) : [];
@@ -118,12 +108,12 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
   }) => {
     setActiveModal('NONE');
     setDispatchToast(
-      `Dispatched ${info.quantity}x ${info.productName} to ${info.partnerName}! Cost value of KES ${info.cost.toLocaleString()} transferred.`
+      `Sent ${info.quantity}x ${info.productName} to ${info.partnerName}.`
     );
-    setTimeout(() => setDispatchToast(null), 6000);
+    setTimeout(() => setDispatchToast(null), 5000);
   };
 
-  // Sort products alphabetically A to Z
+  // Sort products alphabetically
   const sortedProducts = [...products].sort((a, b) => a.name.localeCompare(b.name));
 
   const filteredProducts = sortedProducts.filter((p) =>
@@ -137,8 +127,8 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
   );
 
   return (
-    <div className="max-w-3xl mx-auto pb-24 md:pb-12 space-y-4">
-      {/* 1. NO ACTIVE SHIFT: RENDER OPENING MODAL */}
+    <div className="max-w-xl mx-auto pb-28 md:pb-12 px-3 sm:px-0 space-y-4">
+      {/* 1. NO ACTIVE SHIFT: GUIDED OPENING TRAINER */}
       {!activeShift ? (
         <ShiftOpeningModal
           products={products}
@@ -147,11 +137,11 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
           onConfirmOpen={handleConfirmOpen}
         />
       ) : (
-        /* 2. ACTIVE SHIFT SCREEN */
+        /* 2. ACTIVE SHIFT SCREEN (SIMPLIFIED MOBILE WORKSPACE) */
         <div className="space-y-4">
-          {/* Dispatch Success Alert */}
+          {/* Dispatch Toast */}
           {dispatchToast && (
-            <div className="p-3.5 rounded-2xl bg-amber-950/80 border border-amber-500 text-amber-200 text-xs flex items-center justify-between shadow-xl animate-in fade-in slide-in-from-top-2">
+            <div className="p-3.5 rounded-2xl bg-amber-950/80 border border-amber-500 text-amber-200 text-xs flex items-center justify-between shadow-xl">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
                 <span className="font-medium">{dispatchToast}</span>
@@ -162,212 +152,172 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
             </div>
           )}
 
-          {/* INCOMING INTER-BUSINESS TRANSFER NOTIFICATION (1-TAP ACCEPT/REJECT) */}
+          {/* INCOMING STOCK LOANS BANNER */}
           <IncomingTransferBanner transfers={incomingTransfers} />
 
-          {/* Active Shift Header Card */}
-          <div className="bg-[#121824] border border-[#1E293B] rounded-3xl p-5 shadow-lg">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="w-3.5 h-3.5 rounded-full bg-emerald-400 animate-pulse ring-4 ring-emerald-500/20" />
+          {/* Clean Shift Status Card */}
+          <div className="bg-[#121824] border border-[#1E293B] rounded-3xl p-4 sm:p-5 shadow-lg space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse ring-4 ring-emerald-500/20" />
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-base font-bold text-white tracking-tight">
-                      Active Bar Shift
-                    </span>
-                    <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800/80">
-                      Live
-                    </span>
+                  <div className="text-sm sm:text-base font-black text-white">
+                    Shift in Progress
                   </div>
-                  <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5 font-mono">
-                    <span>Attendant: <strong className="text-slate-200">{activeShift.workerName}</strong></span>
-                    <span>·</span>
-                    <span>{activeShift.shiftNumber}</span>
+                  <div className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
+                    <span>Attendant: <strong className="text-emerald-400">{activeShift.workerName.split(' ')[0]}</strong></span>
                     <span>·</span>
                     <span className="flex items-center gap-1">
                       <Clock className="w-3 h-3 text-slate-500" />
-                      Opened {new Date(activeShift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      Started {new Date(activeShift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Primary Close Shift Action */}
+              {/* End Shift Button on Header */}
               <button
                 onClick={() => setActiveModal('CLOSE_SHIFT')}
-                className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow-lg shadow-red-950/40"
+                className="py-2 px-3.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-red-950/40 transition-all active:scale-95 cursor-pointer shrink-0"
               >
-                <Lock className="w-4 h-4" />
-                <span>End Shift & Count Remaining</span>
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Finish Shift</span>
               </button>
             </div>
 
-            {/* Shift Starting Baselines */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-xs font-mono">
-              <div className="p-3 rounded-2xl bg-[#0E1420] border border-slate-800">
-                <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                  <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Entry M-Pesa Balance</span>
-                </div>
-                <div className="font-bold text-slate-100 text-sm mt-1 tabular-nums">
-                  KES {activeShift.openingMpesaBalance.toLocaleString()}
-                </div>
-                <div className="text-[10px] text-slate-500 mt-0.5">Recorded at clock-in</div>
-              </div>
-
-              <div className="p-3 rounded-2xl bg-[#0E1420] border border-slate-800">
-                <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                  <Coins className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Opening Cash Float</span>
-                </div>
-                <div className="font-bold text-slate-100 text-sm mt-1 tabular-nums">
+            {/* Quick Shift Summary Pills */}
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80 text-xs">
+              <div className="p-2.5 rounded-xl bg-[#0E1420] border border-slate-800">
+                <div className="text-[10px] text-slate-500 uppercase">Cash Float</div>
+                <div className="font-mono font-bold text-slate-200 mt-0.5">
                   KES {activeShift.openingCashFloat.toLocaleString()}
                 </div>
-                <div className="text-[10px] text-slate-500 mt-0.5">Change in till drawer</div>
               </div>
-
-              <div className="p-3 rounded-2xl bg-[#0E1420] border border-slate-800">
-                <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                  <Wine className="w-3.5 h-3.5 text-blue-400" />
-                  <span>Bar Starting Stock</span>
+              <div className="p-2.5 rounded-xl bg-[#0E1420] border border-slate-800">
+                <div className="text-[10px] text-slate-500 uppercase">M-Pesa Float</div>
+                <div className="font-mono font-bold text-slate-200 mt-0.5">
+                  KES {activeShift.openingMpesaBalance.toLocaleString()}
                 </div>
-                <div className="font-bold text-slate-100 text-sm mt-1 tabular-nums">
-                  {totalStartingUnits} bottles
-                </div>
-                <div className="text-[10px] text-slate-500 mt-0.5">Physical custody verified</div>
               </div>
             </div>
-
-            {/* Inconsistency notice if shift opened with mismatch */}
-            {activeShift.openingInconsistencyNote && (
-              <div className="mt-3 p-2.5 rounded-xl bg-amber-950/20 border border-amber-800/50 text-[11px] text-amber-300 flex items-center gap-2">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-400" />
-                <span className="truncate">
-                  Handover Remarks: {activeShift.openingInconsistencyNote}
-                </span>
-              </div>
-            )}
           </div>
 
-          {/* Quick Operations Bar (Restock, Inter-Bar Dispatch, Expenses) */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Operational Quick Actions (Big Thumb Buttons) */}
+          <div className="grid grid-cols-3 gap-2">
             {/* 1. Receive Restock */}
             <button
               onClick={() => setActiveModal('ADD_STOCK')}
-              className="p-3.5 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-[#1E293B] text-left transition-all active:scale-[0.98] cursor-pointer"
+              className="p-3 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-[#1E293B] text-center transition-all active:scale-95 cursor-pointer flex flex-col items-center justify-center gap-1.5 shadow-sm"
             >
-              <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 mb-1">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
                 <PackagePlus className="w-4 h-4" />
-                <span>Receive Restock</span>
               </div>
-              <div className="text-[11px] text-slate-400">
-                Delivery from supplier / brewer
-              </div>
+              <span className="text-xs font-bold text-white">Receive Drinks</span>
+              <span className="text-[10px] text-slate-400">New Delivery</span>
             </button>
 
-            {/* 2. Send Stock to Partner Bar */}
+            {/* 2. Borrow / Lend */}
             <button
               onClick={() => setActiveModal('INTER_TRANSFER')}
-              className="p-3.5 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-amber-500/30 hover:border-amber-500/60 text-left transition-all active:scale-[0.98] cursor-pointer"
+              className="p-3 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-amber-500/30 text-center transition-all active:scale-95 cursor-pointer flex flex-col items-center justify-center gap-1.5 shadow-sm"
             >
-              <div className="flex items-center gap-2 text-xs font-bold text-amber-400 mb-1">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
                 <Truck className="w-4 h-4" />
-                <span>Send to Partner Bar</span>
               </div>
-              <div className="text-[11px] text-slate-400">
-                Loan crates with automated cost transfer
-              </div>
+              <span className="text-xs font-bold text-white">Lend / Borrow</span>
+              <span className="text-[10px] text-slate-400">Neighbor Bar</span>
             </button>
 
             {/* 3. Record Expense */}
             <button
               onClick={() => setActiveModal('EXPENSE')}
-              className="p-3.5 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-[#1E293B] text-left transition-all active:scale-[0.98] cursor-pointer"
+              className="p-3 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-[#1E293B] text-center transition-all active:scale-95 cursor-pointer flex flex-col items-center justify-center gap-1.5 shadow-sm"
             >
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-300 mb-1">
+              <div className="w-8 h-8 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center">
                 <Receipt className="w-4 h-4 text-amber-400" />
-                <span>Record Till Expense</span>
               </div>
-              <div className="text-[11px] text-slate-400">
-                Ice, lemons, transport paid in cash
-              </div>
+              <span className="text-xs font-bold text-white">Pay Expense</span>
+              <span className="text-[10px] text-slate-400">Ice, Lemons</span>
             </button>
           </div>
 
-          {/* Bar Stock Reference (Single Column Alphabetical A to Z) */}
-          <div className="bg-[#121824] border border-[#1E293B] rounded-3xl p-5 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800">
+          {/* Clean Drink Shelf Reference */}
+          <div className="bg-[#121824] border border-[#1E293B] rounded-3xl p-4 sm:p-5 space-y-3">
+            <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-800">
               <div>
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                  Bar Stock Reference (Alphabetical A to Z)
+                <h3 className="text-sm font-bold text-white">
+                  Drinks on Counter
                 </h3>
-                <p className="text-xs text-slate-400">
-                  No need to log individual sales. When leaving, simply tap "End Shift & Count Remaining".
+                <p className="text-[11px] text-slate-400">
+                  Total starting stock: {totalStartingUnits} bottles
                 </p>
               </div>
 
-              {/* Search */}
-              <div className="relative w-full sm:w-56">
+              {/* Quick Search */}
+              <div className="relative w-36 sm:w-48">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Filter drink..."
-                  className="w-full bg-[#0E1420] border border-slate-800 rounded-xl pl-8 pr-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-slate-700"
+                  placeholder="Find drink..."
+                  className="w-full bg-[#0E1420] border border-slate-800 rounded-xl pl-8 pr-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none"
                 />
               </div>
             </div>
 
-            {/* 1 Single Column List */}
-            <div className="border border-slate-800/80 rounded-2xl divide-y divide-slate-800/80 bg-[#0E1420] max-h-96 overflow-y-auto">
-              {filteredProducts.map((product) => {
-                const ssi = shiftStockItems.find((i) => i.productId === product.id);
-                const inv = inventory.find((i) => i.productId === product.id);
-                const opening = ssi ? ssi.openingPhysicalCount : (inv ? inv.quantityOnHand : 0);
-                const additions = ssi ? ssi.additions : 0;
-                const transfersIn = ssi ? ssi.transfersIn : 0;
-                const transfersOut = ssi ? ssi.transfersOut : 0;
-                const currentAvailable = opening + additions + transfersIn - transfersOut;
+            {/* Drink List */}
+            <div className="space-y-2">
+              {filteredProducts.map((p) => {
+                const ssi = shiftStockItems.find((item) => item.productId === p.id);
+                const count = ssi
+                  ? ssi.openingPhysicalCount + ssi.additions + ssi.transfersIn - ssi.transfersOut - ssi.damages
+                  : 0;
 
                 return (
                   <div
-                    key={product.id}
-                    className="p-3.5 flex items-center justify-between gap-3 text-xs hover:bg-slate-900/30 transition-colors"
+                    key={p.id}
+                    className="flex items-center justify-between p-3 rounded-2xl bg-[#0E1420] border border-slate-800/80"
                   >
-                    <div className="min-w-0 flex-1">
-                      <div className="font-semibold text-slate-100 truncate text-sm">
-                        {product.name}
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-slate-800/80 flex items-center justify-center text-slate-400 shrink-0">
+                        <Wine className="w-4 h-4" />
                       </div>
-                      <div className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center gap-2">
-                        <span className="capitalize">{product.category.replace('_', ' ').toLowerCase()}</span>
-                        <span>·</span>
-                        <span className="text-emerald-400 font-bold">KES {product.sellingPrice.toLocaleString()}</span>
-                        <span>·</span>
-                        <span className="text-slate-500">Cost: KES {product.costPrice}</span>
+                      <div>
+                        <div className="text-sm font-bold text-white">{p.name}</div>
+                        <div className="text-[11px] text-emerald-400 font-mono">
+                          KES {p.sellingPrice.toLocaleString()}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="text-right font-mono shrink-0">
-                      <div className="text-xs font-bold text-white">
-                        {currentAvailable} {product.unit.toLowerCase()}s
-                      </div>
-                      <div className="text-[10px] text-slate-400">
-                        {opening} started {additions > 0 && `(+${additions} added)`}
-                        {transfersIn > 0 && ` (+${transfersIn} received)`}
-                        {transfersOut > 0 && ` (-${transfersOut} sent)`}
-                      </div>
+                    <div className="text-right">
+                      <span className="text-base font-mono font-bold text-white">
+                        {count}
+                      </span>
+                      <span className="text-[11px] text-slate-500 ml-1">bottles</span>
                     </div>
                   </div>
                 );
               })}
             </div>
           </div>
+
+          {/* Persistent Sticky Finish Shift Button on Mobile */}
+          <div className="pt-2">
+            <button
+              onClick={() => setActiveModal('CLOSE_SHIFT')}
+              className="w-full py-4 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-black text-sm tracking-wide flex items-center justify-center gap-2 shadow-xl shadow-red-950/60 transition-all active:scale-[0.98] cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Finish Shift & Hand Over 🔒</span>
+            </button>
+          </div>
         </div>
       )}
 
       {/* MODALS */}
-      {activeModal === 'ADD_STOCK' && activeShift && (
+      {activeModal === 'ADD_STOCK' && (
         <StockAdditionModal
           products={products}
           onClose={() => setActiveModal('NONE')}
@@ -375,20 +325,20 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({ currentUser }) =
         />
       )}
 
-      {activeModal === 'INTER_TRANSFER' && activeShift && (
-        <InterBusinessDispatchModal
-          products={products}
-          inventory={inventory}
-          partners={partners}
-          onClose={() => setActiveModal('NONE')}
-          onSuccess={handleDispatchSuccess}
-        />
-      )}
-
-      {activeModal === 'EXPENSE' && activeShift && (
+      {activeModal === 'EXPENSE' && (
         <ShiftExpenseModal
           onClose={() => setActiveModal('NONE')}
           onConfirmExpense={handleConfirmExpense}
+        />
+      )}
+
+      {activeModal === 'INTER_TRANSFER' && (
+        <InterBusinessDispatchModal
+          products={products}
+          inventory={inventory}
+          partners={store.getPartners()}
+          onClose={() => setActiveModal('NONE')}
+          onSuccess={handleDispatchSuccess}
         />
       )}
 
