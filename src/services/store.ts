@@ -28,6 +28,7 @@ import {
   INITIAL_PARTNERS,
   INITIAL_TRANSFERS,
 } from './mockData';
+import { firestoreSync } from './firestoreSync';
 
 const STORAGE_KEYS = {
   CURRENT_BIZ_ID: 'bar_track_current_biz_id',
@@ -57,6 +58,61 @@ class StoreService {
 
   constructor() {
     this.ensureInitialized();
+    if (typeof window !== 'undefined') {
+      setTimeout(() => {
+        this.setupFirestoreSync();
+      }, 300);
+    }
+  }
+
+  private setupFirestoreSync() {
+    const bizId = this.getCurrentBusinessId();
+    firestoreSync.initListeners(bizId, {
+      onShiftsUpdated: (remoteShifts) => {
+        if (remoteShifts && remoteShifts.length > 0) {
+          const shiftsMap = this.get<Record<string, Shift[]>>(STORAGE_KEYS.SHIFTS_MAP, {});
+          shiftsMap[bizId] = remoteShifts;
+          this.set(STORAGE_KEYS.SHIFTS_MAP, shiftsMap);
+          this.notify();
+        }
+      },
+      onInventoryUpdated: (remoteInv) => {
+        if (remoteInv && remoteInv.length > 0) {
+          const invMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
+          invMap[bizId] = remoteInv;
+          this.set(STORAGE_KEYS.INVENTORY_MAP, invMap);
+          this.notify();
+        }
+      },
+      onMpesaAccountsUpdated: (remoteAccounts) => {
+        if (remoteAccounts && remoteAccounts.length > 0) {
+          const map = this.get<Record<string, MpesaAccount[]>>(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, {});
+          map[bizId] = remoteAccounts;
+          this.set(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, map);
+          this.notify();
+        }
+      },
+      onExpensesUpdated: (remoteExpenses) => {
+        if (remoteExpenses && remoteExpenses.length > 0) {
+          this.set(STORAGE_KEYS.EXPENSES, remoteExpenses);
+          this.notify();
+        }
+      },
+      onStockAdditionsUpdated: (remoteAdditions) => {
+        if (remoteAdditions && remoteAdditions.length > 0) {
+          this.set(STORAGE_KEYS.STOCK_ADDITIONS, remoteAdditions);
+          this.notify();
+        }
+      },
+      onEventsUpdated: (remoteEvents) => {
+        if (remoteEvents && remoteEvents.length > 0) {
+          const eventsMap = this.get<Record<string, OperationalEvent[]>>(STORAGE_KEYS.EVENTS_MAP, {});
+          eventsMap[bizId] = remoteEvents;
+          this.set(STORAGE_KEYS.EVENTS_MAP, eventsMap);
+          this.notify();
+        }
+      },
+    });
   }
 
   public subscribe(callback: () => void) {
@@ -290,6 +346,7 @@ class StoreService {
 
   public setCurrentBusiness(bizId: string) {
     this.set(STORAGE_KEYS.CURRENT_BIZ_ID, bizId);
+    this.setupFirestoreSync();
     this.notify();
   }
 
@@ -1020,6 +1077,7 @@ class StoreService {
     });
 
     this.notify();
+    firestoreSync.saveMpesaAccount(newAccount);
     return newAccount;
   }
 
@@ -1060,6 +1118,7 @@ class StoreService {
     });
 
     this.notify();
+    firestoreSync.saveMpesaAccount(account);
     return account;
   }
 
@@ -1078,6 +1137,7 @@ class StoreService {
 
     accounts.forEach((a) => {
       a.isPrimary = a.id === accountId;
+      firestoreSync.saveMpesaAccount(a);
     });
 
     map[bizId] = accounts;
@@ -1111,6 +1171,7 @@ class StoreService {
     });
 
     this.notify();
+    firestoreSync.deleteMpesaAccount(accountId);
     return true;
   }
 
@@ -1129,6 +1190,9 @@ class StoreService {
     const inventoryMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
     inventoryMap[bizId] = inv;
     this.set(STORAGE_KEYS.INVENTORY_MAP, inventoryMap);
+    inv.forEach((item) => {
+      firestoreSync.saveInventoryItem(item, bizId);
+    });
   }
 
   public getShifts(): Shift[] {
@@ -1299,6 +1363,7 @@ class StoreService {
     });
 
     this.notify();
+    firestoreSync.saveShift(newShift);
     return newShift;
   }
 
@@ -1382,6 +1447,7 @@ class StoreService {
     });
 
     this.notify();
+    firestoreSync.saveStockAddition(additionRecord);
     return additionRecord;
   }
 
@@ -1498,6 +1564,7 @@ class StoreService {
     });
 
     this.notify();
+    firestoreSync.saveExpense(expense);
     return expense;
   }
 
@@ -1662,6 +1729,7 @@ class StoreService {
     this.clearHandoverDraft(params.shiftId);
 
     this.notify();
+    firestoreSync.saveShift(shift);
     return shift;
   }
 
@@ -1893,6 +1961,17 @@ class StoreService {
     });
 
     this.notify();
+  }
+
+  public uploadAllToFirestore() {
+    return firestoreSync.uploadAllLocalDataToFirestore({
+      businesses: this.getBusinesses(),
+      products: this.getProducts(),
+      inventoryMap: this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {}),
+      shiftsMap: this.get<Record<string, Shift[]>>(STORAGE_KEYS.SHIFTS_MAP, {}),
+      mpesaAccountsMap: this.get<Record<string, MpesaAccount[]>>(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, {}),
+      expenses: this.getExpenses(),
+    });
   }
 }
 

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from '../../types';
 import { store } from '../../services/store';
+import { firestoreSync, FirestoreSyncStatus } from '../../services/firestoreSync';
 import {
   Wine,
   LogOut,
@@ -15,6 +16,9 @@ import {
   Layers,
   Lock,
   Smartphone,
+  Cloud,
+  CloudOff,
+  RefreshCw,
 } from 'lucide-react';
 import { BusinessIdentityBadge } from './BusinessIdentityBadge';
 
@@ -33,6 +37,31 @@ export const TopBar: React.FC<TopBarProps> = ({
   setActiveTab,
 }) => {
   const [blockedToast, setBlockedToast] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<FirestoreSyncStatus>(firestoreSync.getStatus());
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
+  const [syncToast, setSyncToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    return firestoreSync.subscribeStatus((st) => setSyncStatus(st));
+  }, []);
+
+  const handleManualSync = async () => {
+    if (isManualSyncing) return;
+    setIsManualSyncing(true);
+    setSyncToast('Uploading local data to Firestore...');
+    try {
+      const res = await store.uploadAllToFirestore();
+      setSyncToast(res.message);
+      setTimeout(() => setSyncToast(null), 4000);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setSyncToast(`Sync failed: ${message}`);
+      setTimeout(() => setSyncToast(null), 4000);
+    } finally {
+      setIsManualSyncing(false);
+    }
+  };
+
   const isOnline = store.isOnline();
   const incomingTransfersCount = store.getPendingIncomingTransfers().length;
 
@@ -122,6 +151,14 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
       )}
 
+      {/* Cloud Sync Toast Alert */}
+      {syncToast && (
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl bg-slate-900/95 border border-emerald-500 text-emerald-200 text-xs font-semibold shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top duration-200 max-w-md text-center">
+          <Cloud className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{syncToast}</span>
+        </div>
+      )}
+
       {/* Top Header Bar */}
       <header className="sticky top-0 z-40 bg-[#0B0F17]/95 backdrop-blur-md border-b border-[#1E293B] px-3.5 md:px-6 py-2.5">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
@@ -165,6 +202,45 @@ export const TopBar: React.FC<TopBarProps> = ({
 
           {/* Right: Connectivity & Logout */}
           <div className="flex items-center gap-2">
+            {/* Cloud Sync Status */}
+            <button
+              onClick={currentUser?.role === 'OWNER' ? handleManualSync : undefined}
+              title={
+                currentUser?.role === 'OWNER'
+                  ? 'Click to sync all local data to Firestore Cloud'
+                  : 'Firestore Cloud Sync Active'
+              }
+              disabled={isManualSyncing}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] transition-all ${
+                currentUser?.role === 'OWNER' ? 'cursor-pointer hover:border-slate-700' : 'cursor-default'
+              } ${
+                syncStatus.isSyncing || isManualSyncing
+                  ? 'bg-amber-950/30 border-amber-600/50 text-amber-300'
+                  : syncStatus.error
+                  ? 'bg-red-950/30 border-red-600/50 text-red-300'
+                  : 'bg-[#0E1420] border-slate-800 text-slate-300'
+              }`}
+            >
+              {syncStatus.isSyncing || isManualSyncing ? (
+                <>
+                  <RefreshCw className="w-3 h-3 text-amber-400 animate-spin" />
+                  <span className="text-[10px] text-amber-300 font-medium">Syncing...</span>
+                </>
+              ) : syncStatus.error ? (
+                <>
+                  <CloudOff className="w-3 h-3 text-red-400" />
+                  <span className="text-[10px] text-red-300 font-medium">Sync Issue</span>
+                </>
+              ) : (
+                <>
+                  <Cloud className="w-3 h-3 text-emerald-400" />
+                  <span className="text-[10px] text-emerald-300 font-medium">
+                    {currentUser?.role === 'OWNER' ? 'Cloud Sync' : 'Live'}
+                  </span>
+                </>
+              )}
+            </button>
+
             {/* Simple Connection Dot */}
             <div
               title={isOnline ? 'Online' : 'Offline'}
