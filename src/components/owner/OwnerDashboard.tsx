@@ -15,7 +15,6 @@ import { StaffManager } from './StaffManager';
 import { CatalogManager } from './CatalogManager';
 import { MpesaConfigManager } from './MpesaConfigManager';
 import { RestockAuditManager } from './RestockAuditManager';
-import { EndOfShiftScreen } from '../worker/EndOfShiftScreen';
 import {
   TrendingUp,
   AlertTriangle,
@@ -1093,15 +1092,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
       {/* 8. STAFF & SECURITY ACCESS TAB */}
       {activeTab === 'staff' && (
         <StaffManager currentUser={currentUser} />
-      )}
-
-      {/* 9. END OF SHIFT HANDOVER / AUDIT TAB */}
-      {activeTab === 'end_shift' && (
-        <EndOfShiftScreen
-          currentUser={currentUser}
-          onGoToStartScreen={() => setActiveTab('overview')}
-          onGoToCounter={() => setActiveTab('shifts')}
-        />
       )}
 
       {/* Audit Detail Modal */}
