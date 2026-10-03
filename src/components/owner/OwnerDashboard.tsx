@@ -37,6 +37,13 @@ import {
   Wine,
   PackagePlus,
   Lock,
+  Users,
+  Building2,
+  SlidersHorizontal,
+  Plus,
+  Sparkles,
+  ChevronRight,
+  Store,
 } from 'lucide-react';
 
 interface OwnerDashboardProps {
@@ -53,6 +60,22 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const [selectedShiftForAudit, setSelectedShiftForAudit] = useState<Shift | null>(null);
   const [selectedDiscrepancy, setSelectedDiscrepancy] = useState<Discrepancy | null>(null);
   const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
+
+  // Settings Sub-tab State
+  const [settingsSubTab, setSettingsSubTab] = useState<'catalog' | 'mpesa' | 'staff' | 'partners'>(() => {
+    if (['catalog', 'mpesa', 'staff', 'partners'].includes(activeTab)) {
+      return activeTab as any;
+    }
+    return 'catalog';
+  });
+
+  useEffect(() => {
+    if (['catalog', 'mpesa', 'staff', 'partners'].includes(activeTab)) {
+      setSettingsSubTab(activeTab as any);
+    }
+  }, [activeTab]);
+
+  const currentBiz = store.getCurrentBusiness();
 
   // Filters
   const [discrepancyFilter, setDiscrepancyFilter] = useState<'ALL' | 'FLAGGED' | 'RESOLVED'>('ALL');
@@ -122,43 +145,61 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 pb-28 md:pb-16 w-full">
-      {/* Real-time Status Pulse Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-2xl bg-[#121824] border border-[#1E293B]">
-        <div className="flex items-center gap-3">
-          <div className="relative shrink-0">
-            <div className="w-3 h-3 rounded-full bg-emerald-400" />
-            <div className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-75" />
+      {/* Welcoming Boss Bar Header */}
+      <div className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-[#121824] via-[#151D2C] to-[#0E1522] border border-[#1E293B] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+            <Store className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2 flex-wrap">
-              <span>Real-Time Business Command</span>
-              <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                {activeShifts.length} Station(s) Online
-              </span>
+            <div className="text-[11px] font-mono uppercase tracking-wider text-emerald-400 font-bold flex items-center gap-1.5">
+              <span>{currentBiz.name}</span>
+              <span>·</span>
+              <span className="text-slate-400">Boss Admin</span>
             </div>
-            <div className="text-[11px] text-slate-400 mt-0.5">
-              Live automated status feeds, stock accountability, and financial calculations.
-            </div>
+            <h1 className="text-lg sm:text-xl font-black text-white tracking-tight mt-0.5">
+              Habari, {currentUser.name.split(' ')[0]} 👋
+            </h1>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-xs flex-wrap w-full sm:w-auto">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Active Counters Tag */}
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#0E1420] border border-slate-800 text-xs">
+            <span
+              className={`w-2.5 h-2.5 rounded-full ${
+                activeShifts.length > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+              }`}
+            />
+            <span className="text-slate-300 font-medium">
+              {activeShifts.length > 0 ? `${activeShifts.length} Counter Open` : 'Counter Closed'}
+            </span>
+          </div>
+
+          {/* Pending Discrepancies / Shortages */}
           {pendingDiscrepancies.length > 0 && (
             <button
               onClick={() => setActiveTab('discrepancies')}
-              className="flex-1 sm:flex-initial px-3 py-2 rounded-xl bg-red-950/60 border border-red-800 text-red-300 font-bold flex items-center justify-center gap-1.5 hover:bg-red-900/60 transition-colors cursor-pointer text-xs"
+              className="px-3 py-2 rounded-xl bg-red-950/60 border border-red-800 text-red-300 font-bold flex items-center gap-1.5 hover:bg-red-900/60 transition-colors cursor-pointer text-xs"
             >
               <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-              <span>{pendingDiscrepancies.length} Alerts</span>
+              <span>
+                {pendingDiscrepancies.length} Shortage Alert
+                {pendingDiscrepancies.length > 1 ? 's' : ''}
+              </span>
             </button>
           )}
-          <button
-            onClick={() => setActiveTab('events')}
-            className="flex-1 sm:flex-initial px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-slate-700 text-xs"
-          >
-            <Activity className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span>Event Stream</span>
-          </button>
+
+          {/* Pending Restock Deliveries */}
+          {pendingRestocksCount > 0 && (
+            <button
+              onClick={() => setActiveTab('stock')}
+              className="px-3 py-2 rounded-xl bg-amber-950/60 border border-amber-800 text-amber-300 font-bold flex items-center gap-1.5 hover:bg-amber-900/60 transition-colors cursor-pointer text-xs"
+            >
+              <PackagePlus className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>{pendingRestocksCount} Restock Pending</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -589,10 +630,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
             <div>
               <h3 className="text-sm sm:text-base font-bold text-white tracking-tight flex items-center gap-2">
                 <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 shrink-0" />
-                <span>Automated Real-Time Status Stream</span>
+                <span>Recent Bar Activity</span>
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Audit trail of every bottle sold, cash movement, M-Pesa receipt, and shift change
+                Timeline of drinks sold, shifts opened, restocks, and cash movements
               </p>
             </div>
 
@@ -665,10 +706,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
             <div>
               <h3 className="text-sm sm:text-base font-bold text-white tracking-tight flex items-center gap-2">
                 <ShieldAlert className="w-4 h-4 sm:w-5 sm:h-5 text-red-400 shrink-0" />
-                <span>Discrepancy Investigation Desk</span>
+                <span>Shortages & Missing Stock</span>
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Automatic differences flagged between expected physical reality & reported counts
+                Items flagged when shelf bottle counts or cash did not match drinks sold
               </p>
             </div>
 
@@ -685,7 +726,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                       : 'border-slate-800 text-slate-400 hover:text-white'
                   }`}
                 >
-                  {st}
+                  {st === 'ALL' ? 'All' : st === 'FLAGGED' ? 'Needs Review' : 'Resolved'}
                 </button>
               ))}
             </div>
@@ -694,9 +735,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
           {filteredDiscrepancies.length === 0 ? (
             <div className="p-8 sm:p-12 text-center">
               <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
-              <div className="text-base font-bold text-white">No Discrepancies Under This Filter</div>
+              <div className="text-base font-bold text-white">No Shortages Found</div>
               <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                Every shift physical count and M-Pesa balance has matched expected mathematical parameters.
+                All bottle counts and money balanced with expected numbers.
               </p>
             </div>
           ) : (
@@ -1074,24 +1115,90 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
       </div>
       )}
 
-      {/* 6. PRICING & CATALOG TAB */}
-      {activeTab === 'catalog' && (
-        <CatalogManager />
-      )}
+      {/* 6. UNIFIED BAR SETUP & SETTINGS TAB */}
+      {(activeTab === 'settings' ||
+        ['catalog', 'mpesa', 'partners', 'staff'].includes(activeTab)) && (
+        <div className="space-y-4 sm:space-y-5">
+          {/* Sub-navigation Segment Switcher */}
+          <div className="p-2 sm:p-3 rounded-2xl sm:rounded-3xl bg-[#121824] border border-[#1E293B] shadow-lg">
+            <div className="text-[11px] font-mono text-slate-400 uppercase tracking-wider px-2 pt-1 pb-2">
+              Bar Settings & Configuration
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setSettingsSubTab('catalog');
+                  setActiveTab('catalog');
+                }}
+                className={`py-3 px-3 rounded-xl sm:rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  settingsSubTab === 'catalog'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md font-black'
+                    : 'bg-[#0E1420] text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
+                }`}
+              >
+                <Wine className="w-4 h-4 shrink-0" />
+                <span className="truncate">Drinks & Prices</span>
+              </button>
 
-      {/* 7. M-PESA TILL & PAYBILL CONFIGURATION TAB */}
-      {activeTab === 'mpesa' && (
-        <MpesaConfigManager />
-      )}
+              <button
+                type="button"
+                onClick={() => {
+                  setSettingsSubTab('mpesa');
+                  setActiveTab('mpesa');
+                }}
+                className={`py-3 px-3 rounded-xl sm:rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  settingsSubTab === 'mpesa'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md font-black'
+                    : 'bg-[#0E1420] text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
+                }`}
+              >
+                <Smartphone className="w-4 h-4 shrink-0" />
+                <span className="truncate">M-Pesa Till</span>
+              </button>
 
-      {/* 8. PARTNER BARS & TRANSFERS TAB */}
-      {activeTab === 'partners' && (
-        <PartnerBarsManager />
-      )}
+              <button
+                type="button"
+                onClick={() => {
+                  setSettingsSubTab('staff');
+                  setActiveTab('staff');
+                }}
+                className={`py-3 px-3 rounded-xl sm:rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  settingsSubTab === 'staff'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md font-black'
+                    : 'bg-[#0E1420] text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
+                }`}
+              >
+                <Users className="w-4 h-4 shrink-0" />
+                <span className="truncate">Staff PINs</span>
+              </button>
 
-      {/* 8. STAFF & SECURITY ACCESS TAB */}
-      {activeTab === 'staff' && (
-        <StaffManager currentUser={currentUser} />
+              <button
+                type="button"
+                onClick={() => {
+                  setSettingsSubTab('partners');
+                  setActiveTab('partners');
+                }}
+                className={`py-3 px-3 rounded-xl sm:rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  settingsSubTab === 'partners'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md font-black'
+                    : 'bg-[#0E1420] text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
+                }`}
+              >
+                <Building2 className="w-4 h-4 shrink-0" />
+                <span className="truncate">Partner Bars</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Sub-component Container */}
+          <div className="animate-in fade-in duration-200">
+            {settingsSubTab === 'catalog' && <CatalogManager />}
+            {settingsSubTab === 'mpesa' && <MpesaConfigManager />}
+            {settingsSubTab === 'staff' && <StaffManager currentUser={currentUser} />}
+            {settingsSubTab === 'partners' && <PartnerBarsManager />}
+          </div>
+        </div>
       )}
 
       {/* Audit Detail Modal */}

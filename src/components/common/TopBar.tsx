@@ -19,6 +19,7 @@ import {
   Cloud,
   CloudOff,
   RefreshCw,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { BusinessIdentityBadge } from './BusinessIdentityBadge';
 
@@ -75,16 +76,13 @@ export const TopBar: React.FC<TopBarProps> = ({
   const ownerNavItems: NavItem[] = [
     { id: 'overview', label: 'Summary', icon: LayoutDashboard },
     { id: 'shifts', label: 'Shifts', icon: Clock },
-    { id: 'stock', label: 'Stock Levels', icon: Layers },
-    { id: 'catalog', label: 'Drinks & Pricing', icon: Wine },
-    { id: 'mpesa', label: 'M-Pesa Setup', icon: Smartphone },
+    { id: 'stock', label: 'Stock', icon: Layers },
     {
-      id: 'partners',
-      label: 'Partner Bars',
-      icon: Building2,
+      id: 'settings',
+      label: 'Bar Setup',
+      icon: SlidersHorizontal,
       badge: incomingTransfersCount > 0 ? incomingTransfersCount : undefined,
     },
-    { id: 'staff', label: 'Staff PINs', icon: Users },
   ];
 
   const workerNavItems: NavItem[] = [
@@ -171,7 +169,8 @@ export const TopBar: React.FC<TopBarProps> = ({
             {navItems.map((item) => {
               const Icon = item.icon;
               const { isLocked, reason } = checkTabLockStatus(item.id);
-              const isActive = activeTab === item.id;
+              const isSettingsCategory = ['settings', 'catalog', 'mpesa', 'partners', 'staff'].includes(activeTab);
+              const isActive = item.id === 'settings' ? isSettingsCategory : activeTab === item.id;
 
               return (
                 <button
@@ -287,7 +286,8 @@ export const TopBar: React.FC<TopBarProps> = ({
         {navItems.map((item) => {
           const Icon = item.icon;
           const { isLocked, reason } = checkTabLockStatus(item.id);
-          const isActive = activeTab === item.id;
+          const isSettingsCategory = ['settings', 'catalog', 'mpesa', 'partners', 'staff'].includes(activeTab);
+          const isActive = item.id === 'settings' ? isSettingsCategory : activeTab === item.id;
 
           return (
             <button
