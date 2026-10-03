@@ -173,6 +173,20 @@ class StoreService {
       if (changed) {
         this.set(STORAGE_KEYS.USERS, updatedUsers);
       }
+
+      // Migrate all products so default reorder safety level is 5
+      const products = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+      let prodChanged = false;
+      const updatedProducts = products.map((p) => {
+        if (!p.reorderLevel || p.reorderLevel !== 5) {
+          prodChanged = true;
+          return { ...p, reorderLevel: 5 };
+        }
+        return p;
+      });
+      if (prodChanged) {
+        this.set(STORAGE_KEYS.PRODUCTS, updatedProducts);
+      }
     }
   }
 
@@ -1841,7 +1855,7 @@ class StoreService {
       unit: params.unit,
       costPrice: Number(params.costPrice) || 0,
       sellingPrice: Number(params.sellingPrice) || 0,
-      reorderLevel: Number(params.reorderLevel) || 12,
+      reorderLevel: Number(params.reorderLevel) || 5,
       volumeMl: params.volumeMl ? Number(params.volumeMl) : undefined,
       isArchived: false,
     };

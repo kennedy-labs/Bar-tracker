@@ -145,7 +145,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'BOTTLE',
     costPrice: 190,
     sellingPrice: 260,
-    reorderLevel: 24,
+    reorderLevel: 5,
     volumeMl: 500,
   },
   {
@@ -155,7 +155,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'BOTTLE',
     costPrice: 210,
     sellingPrice: 280,
-    reorderLevel: 18,
+    reorderLevel: 5,
     volumeMl: 330,
   },
   {
@@ -165,7 +165,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'BOTTLE',
     costPrice: 210,
     sellingPrice: 280,
-    reorderLevel: 24,
+    reorderLevel: 5,
     volumeMl: 500,
   },
   {
@@ -175,7 +175,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'BOTTLE',
     costPrice: 200,
     sellingPrice: 270,
-    reorderLevel: 18,
+    reorderLevel: 5,
     volumeMl: 500,
   },
   {
@@ -185,7 +185,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'BOTTLE',
     costPrice: 220,
     sellingPrice: 300,
-    reorderLevel: 24,
+    reorderLevel: 5,
     volumeMl: 500,
   },
   {
@@ -195,7 +195,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'CAN',
     costPrice: 240,
     sellingPrice: 350,
-    reorderLevel: 12,
+    reorderLevel: 5,
     volumeMl: 500,
   },
   {
@@ -205,7 +205,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'BOTTLE',
     costPrice: 180,
     sellingPrice: 250,
-    reorderLevel: 18,
+    reorderLevel: 5,
     volumeMl: 500,
   },
   {
@@ -215,7 +215,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'BOTTLE',
     costPrice: 3400,
     sellingPrice: 4800,
-    reorderLevel: 4,
+    reorderLevel: 5,
     volumeMl: 750,
   },
   {
@@ -235,7 +235,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'BOTTLE',
     costPrice: 1350,
     sellingPrice: 2000,
-    reorderLevel: 6,
+    reorderLevel: 5,
     volumeMl: 750,
   },
   {
@@ -245,7 +245,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'BOTTLE',
     costPrice: 1250,
     sellingPrice: 1800,
-    reorderLevel: 6,
+    reorderLevel: 5,
     volumeMl: 750,
   },
   {
@@ -255,7 +255,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'BOTTLE',
     costPrice: 60,
     sellingPrice: 100,
-    reorderLevel: 24,
+    reorderLevel: 5,
     volumeMl: 300,
   },
   {
@@ -265,7 +265,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'BOTTLE',
     costPrice: 70,
     sellingPrice: 120,
-    reorderLevel: 24,
+    reorderLevel: 5,
     volumeMl: 300,
   },
   {
@@ -275,7 +275,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'CAN',
     costPrice: 200,
     sellingPrice: 300,
-    reorderLevel: 12,
+    reorderLevel: 5,
     volumeMl: 250,
   },
 ];

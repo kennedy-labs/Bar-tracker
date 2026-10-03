@@ -35,7 +35,7 @@ export const CatalogManager: React.FC = () => {
   const [unit, setUnit] = useState<ProductUnit>('BOTTLE');
   const [costPrice, setCostPrice] = useState('');
   const [sellingPrice, setSellingPrice] = useState('');
-  const [reorderLevel, setReorderLevel] = useState('');
+  const [reorderLevel, setReorderLevel] = useState('5');
   const [initialStock, setInitialStock] = useState('');
   const [volumeMl, setVolumeMl] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
@@ -92,7 +92,7 @@ export const CatalogManager: React.FC = () => {
     setUnit('BOTTLE');
     setCostPrice('');
     setSellingPrice('');
-    setReorderLevel('');
+    setReorderLevel('5');
     setInitialStock('');
     setVolumeMl('');
     setFormError(null);
@@ -108,7 +108,7 @@ export const CatalogManager: React.FC = () => {
     setUnit(p.unit);
     setCostPrice(String(p.costPrice));
     setSellingPrice(String(p.sellingPrice));
-    setReorderLevel(String(p.reorderLevel));
+    setReorderLevel(String(p.reorderLevel || 5));
     setInitialStock('0');
     setVolumeMl(p.volumeMl ? String(p.volumeMl) : '');
     setFormError(null);
@@ -122,7 +122,7 @@ export const CatalogManager: React.FC = () => {
 
     const cost = parseFloat(costPrice);
     const sell = parseFloat(sellingPrice);
-    const reorder = parseInt(reorderLevel, 10) || 12;
+    const reorder = parseInt(reorderLevel, 10) || 5;
     const stock = parseInt(initialStock, 10) || 0;
     const vol = volumeMl ? parseInt(volumeMl, 10) : undefined;
 
@@ -606,7 +606,7 @@ export const CatalogManager: React.FC = () => {
                     min="1"
                     value={reorderLevel}
                     onChange={(e) => setReorderLevel(e.target.value)}
-                    placeholder="e.g. 12"
+                    placeholder="e.g. 5 (Default)"
                     className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
                   />
                 </div>

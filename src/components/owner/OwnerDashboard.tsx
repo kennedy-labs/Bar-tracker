@@ -1002,7 +1002,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   <span>Real-Time Bar Inventory Balances</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Physical bottle counts vs. reorder safety thresholds
+                  Current bottles on shelf and real-time inventory status
                 </p>
               </div>
             </div>
@@ -1012,7 +1012,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               {[...products].sort((a, b) => a.name.localeCompare(b.name)).map((p) => {
                 const inv = inventory.find((i) => i.productId === p.id);
                 const stockOnHand = inv ? inv.quantityOnHand : 0;
-                const isLow = stockOnHand <= p.reorderLevel;
+                const reorderThreshold = p.reorderLevel ?? 5;
+                const isLow = stockOnHand <= reorderThreshold;
 
                 return (
                   <div
@@ -1023,7 +1024,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                       <div>
                         <div className="text-sm font-bold text-white">{p.name}</div>
                         <div className="text-[10px] text-slate-400 font-mono capitalize">
-                          {p.category.replace('_', ' ').toLowerCase()} · {p.unit.toLowerCase()}
+                          Unit: {p.unit.toLowerCase()}
                         </div>
                       </div>
                       <span
@@ -1045,15 +1046,15 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                         </div>
                       </div>
                       <div className="p-2 rounded-lg bg-[#151D2C]">
-                        <div className="text-[9px] text-slate-400 uppercase">Reorder At</div>
-                        <div className="text-slate-300 font-bold mt-0.5">
-                          {p.reorderLevel}
-                        </div>
-                      </div>
-                      <div className="p-2 rounded-lg bg-[#151D2C]">
                         <div className="text-[9px] text-slate-400 uppercase">Sell Price</div>
                         <div className="text-white font-bold mt-0.5">
                           KES {p.sellingPrice}
+                        </div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-[#151D2C]">
+                        <div className="text-[9px] text-slate-400 uppercase">Cost Price</div>
+                        <div className="text-slate-400 font-bold mt-0.5">
+                          KES {p.costPrice}
                         </div>
                       </div>
                     </div>
@@ -1068,11 +1069,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                 <thead className="bg-[#151D2C] text-slate-400 font-mono text-[10px] uppercase border-b border-slate-800">
                   <tr>
                     <th className="p-3">Product Name</th>
-                    <th className="p-3">Category</th>
                     <th className="p-3 text-center">Selling Price</th>
                     <th className="p-3 text-center">Cost Price</th>
                     <th className="p-3 text-center text-emerald-400">Stock On Hand</th>
-                    <th className="p-3 text-center text-slate-400">Reorder Safety Level</th>
                     <th className="p-3 text-center">Status</th>
                   </tr>
                 </thead>
@@ -1080,19 +1079,16 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   {[...products].sort((a, b) => a.name.localeCompare(b.name)).map((p) => {
                     const inv = inventory.find((i) => i.productId === p.id);
                     const stockOnHand = inv ? inv.quantityOnHand : 0;
-                    const isLow = stockOnHand <= p.reorderLevel;
+                    const reorderThreshold = p.reorderLevel ?? 5;
+                    const isLow = stockOnHand <= reorderThreshold;
 
                     return (
                       <tr key={p.id} className="hover:bg-slate-900/50">
                         <td className="p-3 font-sans font-medium text-white">{p.name}</td>
-                        <td className="p-3 font-sans text-slate-400 capitalize">{p.category.replace('_', ' ').toLowerCase()}</td>
                         <td className="p-3 text-center text-slate-200">KES {p.sellingPrice}</td>
                         <td className="p-3 text-center text-slate-400">KES {p.costPrice}</td>
                         <td className="p-3 text-center font-bold text-emerald-400">
                           {stockOnHand} {p.unit.toLowerCase()}s
-                        </td>
-                        <td className="p-3 text-center text-slate-400">
-                          {p.reorderLevel} {p.unit.toLowerCase()}s
                         </td>
                         <td className="p-3 text-center">
                           <span
