@@ -99,7 +99,7 @@ export default function App() {
       />
 
       {/* Main Workspace Body */}
-      <main className="flex-1 p-4 md:p-6 max-w-7xl mx-auto w-full">
+      <main className="flex-1 px-3 py-3 sm:p-4 md:p-6 max-w-7xl mx-auto w-full pb-28 md:pb-12">
         {currentUser.role === 'OWNER' ? (
           <OwnerDashboard
             currentUser={currentUser}
