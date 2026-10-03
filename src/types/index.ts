@@ -27,6 +27,7 @@ export interface Product {
   sellingPrice: number; // in KES
   reorderLevel: number;
   volumeMl?: number;
+  isArchived?: boolean;
 }
 
 export interface ProductCostHistory {
@@ -114,6 +115,17 @@ export interface Shift {
   // Audit notes
   openingInconsistencyNote?: string;
   closingNotes?: string;
+
+  // Progressive work routine tracking
+  counterFinished?: boolean;
+}
+
+export interface HandoverDraft {
+  step: 1 | 2 | 3;
+  closingPhysicalCounts: Record<string, number>;
+  closingCashActual: string;
+  closingMpesaBalance: string;
+  closingNotes: string;
 }
 
 export type StockMovementType =
@@ -135,6 +147,21 @@ export interface StockMovement {
   unitPrice: number;
   timestamp: string;
   note?: string;
+}
+
+export interface StockAdditionRecord {
+  id: string;
+  shiftId: string;
+  shiftNumber?: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  workerName: string;
+  timestamp: string;
+  status: 'PENDING_OWNER_CONFIRMATION' | 'SAVED_LOCKED';
+  savedAt?: string;
+  savedBy?: string;
+  isImmutable: boolean;
 }
 
 export type ExpenseCategory =

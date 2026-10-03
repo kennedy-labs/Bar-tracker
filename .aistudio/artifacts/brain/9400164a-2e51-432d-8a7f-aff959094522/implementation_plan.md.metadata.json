@@ -1,6 +1,0 @@
-{
-  "summary":  "Architecture and execution plan for simple inter-business bar connections and stock transfers. Features 6-digit bar connect codes, automated cost transfer between businesses, 1-tap incoming stock acceptance on active shift screens, and partner ledger reconciliation for non-technical users.",
-  "updatedAt":  "2026-10-01T22:53:01.455432959Z",
-  "requestFeedback":  true,
-  "userFacing":  true
-}

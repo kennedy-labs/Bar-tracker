@@ -15,6 +15,8 @@ import {
   BusinessProfile,
   BusinessPartner,
   InterBusinessTransfer,
+  StockAdditionRecord,
+  HandoverDraft,
 } from '../types';
 import {
   INITIAL_PRODUCTS,
@@ -39,6 +41,8 @@ const STORAGE_KEYS = {
   SHIFT_STOCK_ITEMS: 'bar_track_shift_stock_items',
   EXPENSES: 'bar_track_expenses',
   STOCK_MOVEMENTS: 'bar_track_stock_movements',
+  STOCK_ADDITIONS: 'bar_track_stock_additions',
+  HANDOVER_DRAFTS: 'bar_track_handover_drafts',
   DISCREPANCIES: 'bar_track_discrepancies',
   EVENTS_MAP: 'bar_track_events_map',
   MPESA_TXNS: 'bar_track_mpesa_txns',
@@ -902,8 +906,10 @@ class StoreService {
     this.notify();
   }
 
-  public getProducts(): Product[] {
-    return this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+  public getProducts(includeArchived = false): Product[] {
+    const list = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+    if (includeArchived) return list;
+    return list.filter((p) => !p.isArchived);
   }
 
   public getMpesaAccounts(): MpesaAccount[] {
@@ -1102,9 +1108,10 @@ class StoreService {
     shiftId: string;
     productId: string;
     quantity: number;
-    source: string;
+    workerName?: string;
+    source?: string;
     note?: string;
-  }) {
+  }): StockAdditionRecord {
     this.queueOfflineOperation('recordStockAddition', params);
 
     const shift = this.getShiftById(params.shiftId);
@@ -1113,7 +1120,7 @@ class StoreService {
     if (!product) throw new Error('Product not found.');
 
     const qty = Number(params.quantity);
-    if (qty <= 0) return;
+    if (qty <= 0) throw new Error('Quantity must be greater than 0.');
 
     // Update SSI additions
     const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
@@ -1145,26 +1152,117 @@ class StoreService {
       quantity: qty,
       unitPrice: product.costPrice,
       timestamp: new Date().toISOString(),
-      note: `Received ${qty} from ${params.source}. ${params.note || ''}`,
+      note: `Restocked ${qty} units.`,
     });
     this.set(STORAGE_KEYS.STOCK_MOVEMENTS, movements);
 
+    // Create persistent StockAdditionRecord
+    const workerName = params.workerName || shift.workerName;
+    const additionRecord: StockAdditionRecord = {
+      id: `add-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      shiftId: params.shiftId,
+      shiftNumber: shift.shiftNumber,
+      productId: params.productId,
+      productName: product.name,
+      quantity: qty,
+      workerName,
+      timestamp: new Date().toISOString(),
+      status: 'PENDING_OWNER_CONFIRMATION',
+      isImmutable: false,
+    };
+    const additions = this.get<StockAdditionRecord[]>(STORAGE_KEYS.STOCK_ADDITIONS, []);
+    additions.unshift(additionRecord);
+    this.set(STORAGE_KEYS.STOCK_ADDITIONS, additions);
+
+    // Report directly to owner in events audit
     this.addEvent({
       type: 'ADDITION_RECORDED',
-      title: `+${qty} ${product.name} Restocked`,
-      description: `Added to bar from ${params.source}`,
-      actorName: shift.workerName,
+      title: `Stock Restock: +${qty} ${product.name}`,
+      description: `${workerName} restocked ${qty}x ${product.name} on Shift #${shift.shiftNumber}. Awaiting owner verification & lock.`,
+      actorName: workerName,
+      severity: 'WARNING',
+    });
+
+    this.notify();
+    return additionRecord;
+  }
+
+  public getStockAdditions(shiftId?: string): StockAdditionRecord[] {
+    const list = this.get<StockAdditionRecord[]>(STORAGE_KEYS.STOCK_ADDITIONS, []);
+    if (shiftId) return list.filter((a) => a.shiftId === shiftId);
+    return list;
+  }
+
+  public saveAndLockStockAddition(additionId: string, ownerName: string): boolean {
+    const additions = this.get<StockAdditionRecord[]>(STORAGE_KEYS.STOCK_ADDITIONS, []);
+    const record = additions.find((a) => a.id === additionId);
+    if (!record) return false;
+
+    record.status = 'SAVED_LOCKED';
+    record.isImmutable = true;
+    record.savedAt = new Date().toISOString();
+    record.savedBy = ownerName;
+    this.set(STORAGE_KEYS.STOCK_ADDITIONS, additions);
+
+    this.addEvent({
+      type: 'INFO',
+      title: `Restock Verified & Saved: +${record.quantity} ${record.productName}`,
+      description: `Owner ${ownerName} confirmed and locked restock #${record.id}. Record is now permanently immutable to deletion.`,
+      actorName: ownerName,
       severity: 'SUCCESS',
     });
 
     this.notify();
+    return true;
+  }
+
+  public deleteStockAddition(additionId: string): boolean {
+    const additions = this.get<StockAdditionRecord[]>(STORAGE_KEYS.STOCK_ADDITIONS, []);
+    const record = additions.find((a) => a.id === additionId);
+    if (!record) return false;
+
+    // Check immutability!
+    if (record.isImmutable || record.status === 'SAVED_LOCKED') {
+      throw new Error('This restock record has been verified and saved by the owner. It is immutable to deletion.');
+    }
+
+    // Revert inventory and SSI
+    const currentInventory = this.getInventory();
+    const inv = currentInventory.find((i) => i.productId === record.productId);
+    if (inv) {
+      inv.quantityOnHand = Math.max(0, inv.quantityOnHand - record.quantity);
+      inv.updatedAt = new Date().toISOString();
+      this.saveCurrentInventory(currentInventory);
+    }
+
+    const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
+    const ssi = allSSIs.find((item) => item.shiftId === record.shiftId && item.productId === record.productId);
+    if (ssi) {
+      ssi.additions = Math.max(0, ssi.additions - record.quantity);
+      this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
+    }
+
+    // Remove from additions
+    const remaining = additions.filter((a) => a.id !== additionId);
+    this.set(STORAGE_KEYS.STOCK_ADDITIONS, remaining);
+
+    this.addEvent({
+      type: 'INFO',
+      title: `Pending Restock Deleted: -${record.quantity} ${record.productName}`,
+      description: `Pending restock addition was removed before owner verification.`,
+      actorName: 'System Ledger',
+      severity: 'INFO',
+    });
+
+    this.notify();
+    return true;
   }
 
   public recordExpense(params: {
     shiftId: string;
-    category: ExpenseCategory;
+    category?: ExpenseCategory;
     amount: number;
-    paymentMethod: 'CASH' | 'MPESA';
+    paymentMethod?: 'CASH' | 'MPESA';
     description: string;
     receiptRef?: string;
   }): Expense {
@@ -1173,12 +1271,15 @@ class StoreService {
     const shift = this.getShiftById(params.shiftId);
     if (!shift) throw new Error('Shift not found.');
 
+    const category = params.category || 'OTHER';
+    const paymentMethod = params.paymentMethod || 'CASH';
+
     const expense: Expense = {
       id: `exp-${Date.now()}`,
       shiftId: params.shiftId,
-      category: params.category,
+      category,
       amount: Number(params.amount) || 0,
-      paymentMethod: params.paymentMethod,
+      paymentMethod,
       description: params.description,
       receiptRef: params.receiptRef,
       timestamp: new Date().toISOString(),
@@ -1190,8 +1291,8 @@ class StoreService {
 
     this.addEvent({
       type: 'EXPENSE_LOGGED',
-      title: `Expense: KES ${expense.amount.toLocaleString()} (${params.category})`,
-      description: `${params.description} paid via ${params.paymentMethod}`,
+      title: `Expense: KES ${expense.amount.toLocaleString()} - ${params.description}`,
+      description: `${params.description} (KES ${expense.amount.toLocaleString()})`,
       actorName: shift.workerName,
       severity: 'INFO',
       amount: expense.amount,
@@ -1359,12 +1460,56 @@ class StoreService {
       this.set(STORAGE_KEYS.BUSINESSES, businesses);
     }
 
+    // Clear handover draft on successful close
+    this.clearHandoverDraft(params.shiftId);
+
     this.notify();
     return shift;
   }
 
+  public markCounterFinished(shiftId: string, finished: boolean = true) {
+    const shifts = this.getShifts();
+    const shift = shifts.find((s) => s.id === shiftId);
+    if (shift) {
+      shift.counterFinished = finished;
+      const bizId = this.getCurrentBusinessId();
+      const shiftsMap = this.get<Record<string, Shift[]>>(STORAGE_KEYS.SHIFTS_MAP, {});
+      shiftsMap[bizId] = shifts;
+      this.set(STORAGE_KEYS.SHIFTS_MAP, shiftsMap);
+      this.notify();
+    }
+  }
+
+  public getHandoverDraft(shiftId: string): HandoverDraft | null {
+    const drafts = this.get<Record<string, HandoverDraft>>(STORAGE_KEYS.HANDOVER_DRAFTS, {});
+    return drafts[shiftId] || null;
+  }
+
+  public saveHandoverDraft(shiftId: string, draft: HandoverDraft) {
+    const drafts = this.get<Record<string, HandoverDraft>>(STORAGE_KEYS.HANDOVER_DRAFTS, {});
+    drafts[shiftId] = draft;
+    this.set(STORAGE_KEYS.HANDOVER_DRAFTS, drafts);
+  }
+
+  public clearHandoverDraft(shiftId: string) {
+    const drafts = this.get<Record<string, HandoverDraft>>(STORAGE_KEYS.HANDOVER_DRAFTS, {});
+    delete drafts[shiftId];
+    this.set(STORAGE_KEYS.HANDOVER_DRAFTS, drafts);
+  }
+
+  public getWorkerMaxAllowedStep(): 'start' | 'counter' | 'end_shift' {
+    const activeShift = this.getActiveShift();
+    if (!activeShift) {
+      return 'start';
+    }
+    if (activeShift.counterFinished) {
+      return 'end_shift';
+    }
+    return 'counter';
+  }
+
   public updateProductPricing(productId: string, sellingPrice: number, costPrice: number) {
-    const products = this.getProducts();
+    const products = this.getProducts(true);
     const product = products.find((p) => p.id === productId);
     if (!product) return;
 
@@ -1381,6 +1526,147 @@ class StoreService {
     });
 
     this.notify();
+  }
+
+  public addProduct(params: {
+    name: string;
+    category: import('../types').ProductCategory;
+    unit: import('../types').ProductUnit;
+    costPrice: number;
+    sellingPrice: number;
+    reorderLevel?: number;
+    volumeMl?: number;
+    initialStock?: number;
+  }): Product {
+    const products = this.getProducts(true);
+    const newProduct: Product = {
+      id: `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name: params.name.trim(),
+      category: params.category,
+      unit: params.unit,
+      costPrice: Number(params.costPrice) || 0,
+      sellingPrice: Number(params.sellingPrice) || 0,
+      reorderLevel: Number(params.reorderLevel) || 12,
+      volumeMl: params.volumeMl ? Number(params.volumeMl) : undefined,
+      isArchived: false,
+    };
+
+    products.push(newProduct);
+    this.set(STORAGE_KEYS.PRODUCTS, products);
+
+    // Initialize inventory for current business
+    const inv = this.getInventory();
+    const initialQty = Number(params.initialStock) || 0;
+    const existingInv = inv.find((i) => i.productId === newProduct.id);
+    if (!existingInv) {
+      inv.push({
+        productId: newProduct.id,
+        quantityOnHand: initialQty,
+        updatedAt: new Date().toISOString(),
+      });
+      this.saveCurrentInventory(inv);
+    }
+
+    // If an active shift exists, add shift stock item so it's immediately available to the worker
+    const activeShift = this.getActiveShift();
+    if (activeShift) {
+      const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
+      const newSSI: ShiftStockItem = {
+        id: `ssi-${activeShift.id}-${newProduct.id}`,
+        shiftId: activeShift.id,
+        productId: newProduct.id,
+        productName: newProduct.name,
+        unit: newProduct.unit,
+        sellingPrice: newProduct.sellingPrice,
+        costPrice: newProduct.costPrice,
+        openingSystemCount: 0,
+        openingPhysicalCount: 0,
+        openingVerified: true,
+        additions: initialQty,
+        recordedSales: 0,
+        transfersIn: 0,
+        transfersOut: 0,
+        damages: 0,
+      };
+      allSSIs.push(newSSI);
+      this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
+    }
+
+    this.addEvent({
+      type: 'INFO',
+      title: `Drink Added to Catalog: ${newProduct.name}`,
+      description: `Category: ${newProduct.category} | Sell: KES ${newProduct.sellingPrice} | Stock: ${initialQty} ${newProduct.unit.toLowerCase()}s`,
+      actorName: 'Owner Audit Desk',
+      severity: 'INFO',
+    });
+
+    this.notify();
+    return newProduct;
+  }
+
+  public updateProduct(productId: string, updates: Partial<Product>): Product | null {
+    const products = this.getProducts(true);
+    const product = products.find((p) => p.id === productId);
+    if (!product) return null;
+
+    Object.assign(product, updates);
+    this.set(STORAGE_KEYS.PRODUCTS, products);
+
+    this.addEvent({
+      type: 'INFO',
+      title: `Catalog Updated: ${product.name}`,
+      description: `Selling Price: KES ${product.sellingPrice} | Cost Price: KES ${product.costPrice}`,
+      actorName: 'Owner Audit Desk',
+      severity: 'INFO',
+    });
+
+    this.notify();
+    return product;
+  }
+
+  public deleteProduct(productId: string, permanent = false): boolean {
+    const products = this.getProducts(true);
+    const product = products.find((p) => p.id === productId);
+    if (!product) return false;
+
+    if (permanent) {
+      const filtered = products.filter((p) => p.id !== productId);
+      this.set(STORAGE_KEYS.PRODUCTS, filtered);
+    } else {
+      product.isArchived = true;
+      this.set(STORAGE_KEYS.PRODUCTS, products);
+    }
+
+    this.addEvent({
+      type: 'INFO',
+      title: `${permanent ? 'Drink Deleted' : 'Drink Archived'}: ${product.name}`,
+      description: `${product.name} removed from active catalog shelves`,
+      actorName: 'Owner Audit Desk',
+      severity: 'WARNING',
+    });
+
+    this.notify();
+    return true;
+  }
+
+  public restoreProduct(productId: string): boolean {
+    const products = this.getProducts(true);
+    const product = products.find((p) => p.id === productId);
+    if (!product) return false;
+
+    product.isArchived = false;
+    this.set(STORAGE_KEYS.PRODUCTS, products);
+
+    this.addEvent({
+      type: 'INFO',
+      title: `Drink Restored: ${product.name}`,
+      description: `${product.name} restored to active catalog shelves`,
+      actorName: 'Owner Audit Desk',
+      severity: 'SUCCESS',
+    });
+
+    this.notify();
+    return true;
   }
 
   public resolveDiscrepancy(

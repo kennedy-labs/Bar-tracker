@@ -173,9 +173,19 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
                       className="flex items-center justify-between p-3 rounded-2xl bg-[#0E1420] border border-slate-800"
                     >
                       <div>
-                        <div className="text-sm font-bold text-white">{item.productName}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-white">{item.productName}</span>
+                          {item.additions > 0 && (
+                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800 shrink-0">
+                              +{item.additions} added
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
-                          <span>Start: {available}</span>
+                          <span>
+                            Start: {available}
+                            {item.additions > 0 && ` (+${item.additions} added)`}
+                          </span>
                           <span>·</span>
                           <span className={sold > 0 ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
                             Sold: {sold}
@@ -234,8 +244,65 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
           {step === 2 && (
             <div className="space-y-4">
               <p className="text-xs text-slate-400">
-                Count all money in the cash box and check the M-Pesa phone before closing.
+                Check the expected money below, then enter your physical drawer cash and ending M-Pesa balance.
               </p>
+
+              {/* EXPECTED MONEY SUMMARY CARD (BEFORE INPUTS) */}
+              <div className="bg-gradient-to-br from-emerald-950/50 via-[#151D2C] to-[#0E1420] border-2 border-emerald-500/40 rounded-2xl p-4 shadow-xl space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-emerald-500/20">
+                  <div className="flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-mono font-bold text-xs shadow-inner shrink-0">
+                      KES
+                    </span>
+                    <div>
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold block">
+                        Shift Sales Target
+                      </span>
+                      <h4 className="text-sm font-black text-white">
+                        Expected Money from Shift
+                      </h4>
+                    </div>
+                  </div>
+
+                  <div className="text-right font-mono">
+                    <span className="text-[10px] text-slate-400 uppercase font-sans block">
+                      Expected Sales
+                    </span>
+                    <span className="text-lg font-black text-emerald-400">
+                      KES {expectedSalesRevenue.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-xs font-mono">
+                  <div className="p-2.5 rounded-xl bg-[#0E1420] border border-slate-800">
+                    <div className="text-[10px] text-slate-400 uppercase font-sans">Sold ({totalBottlesSold})</div>
+                    <div className="font-bold text-white mt-0.5">KES {expectedSalesRevenue.toLocaleString()}</div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-[#0E1420] border border-slate-800">
+                    <div className="text-[10px] text-slate-400 uppercase font-sans">Expenses</div>
+                    <div className={`font-bold mt-0.5 ${totalExpenses > 0 ? 'text-amber-400' : 'text-slate-500'}`}>
+                      {totalExpenses > 0 ? `-KES ${totalExpenses.toLocaleString()}` : 'KES 0'}
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-[#0E1420] border border-slate-800">
+                    <div className="text-[10px] text-slate-400 uppercase font-sans">Starting Floats</div>
+                    <div className="font-bold text-slate-300 mt-0.5">
+                      KES {(openingCashFloat + openingMpesa).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between text-xs">
+                  <span className="text-slate-300 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Total target in Drawer + Phone:</span>
+                  </span>
+                  <span className="font-mono font-black text-emerald-300 text-sm">
+                    KES {((openingCashFloat + openingMpesa) + expectedSalesRevenue - totalExpenses).toLocaleString()}
+                  </span>
+                </div>
+              </div>
 
               {/* Cash in Drawer */}
               <div className="bg-[#0E1420] border border-slate-800 rounded-2xl p-4">

@@ -23,7 +23,21 @@ export default function App() {
     }
   });
 
-  const [activeTab, setActiveTab] = useState<string>('overview');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('bartracker_session_user');
+      if (saved) {
+        const u = JSON.parse(saved);
+        if (u.role === 'OWNER') return 'overview';
+        const active = store.getActiveShift();
+        if (!active) return 'start';
+        return active.counterFinished ? 'end_shift' : 'counter';
+      }
+    } catch {
+      // fallback
+    }
+    return 'start';
+  });
   // tick triggers re-render whenever store state mutates
   const [, setTick] = useState<number>(0);
 
@@ -45,7 +59,16 @@ export default function App() {
       console.error(err);
     }
     // Set appropriate initial tab
-    setActiveTab(user.role === 'OWNER' ? 'overview' : 'counter');
+    if (user.role === 'OWNER') {
+      setActiveTab('overview');
+    } else {
+      const active = store.getActiveShift();
+      if (!active) {
+        setActiveTab('start');
+      } else {
+        setActiveTab(active.counterFinished ? 'end_shift' : 'counter');
+      }
+    }
   };
 
   const handleLogout = () => {
@@ -84,7 +107,11 @@ export default function App() {
             setActiveTab={setActiveTab}
           />
         ) : (
-          <WorkerTerminal currentUser={currentUser} />
+          <WorkerTerminal
+            currentUser={currentUser}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+          />
         )}
       </main>
     </div>
