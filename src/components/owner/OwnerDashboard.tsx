@@ -33,6 +33,7 @@ import {
   Eye,
   Edit2,
   Check,
+  CheckCheck,
   RefreshCw,
   Wine,
   PackagePlus,
@@ -52,6 +53,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 }) => {
   const [selectedShiftForAudit, setSelectedShiftForAudit] = useState<Shift | null>(null);
   const [selectedDiscrepancy, setSelectedDiscrepancy] = useState<Discrepancy | null>(null);
+  const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
 
   // Filters
   const [discrepancyFilter, setDiscrepancyFilter] = useState<'ALL' | 'FLAGGED' | 'RESOLVED'>('ALL');
@@ -71,21 +73,23 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const activeShifts = shifts.filter((s) => s.status === 'ACTIVE');
   const closedShifts = shifts.filter((s) => s.status === 'CLOSED');
 
-  // Aggregated Financial Metrics across all shifts
-  const totalSalesRevenue = shifts.reduce(
-    (sum, s) => sum + (s.expectedSalesRevenue || 0),
-    0
-  );
-  const totalMpesaGenerated = shifts.reduce(
-    (sum, s) => sum + (s.calculatedMpesaIncome || 0),
-    0
-  );
-  const totalCashGenerated = shifts.reduce(
-    (sum, s) => sum + (s.calculatedCashIncome || 0),
-    0
-  );
-  const totalExpenses = shifts.reduce((sum, s) => sum + (s.totalExpenses || 0), 0);
-  const totalNetProfit = shifts.reduce((sum, s) => sum + (s.netProfit || 0), 0);
+  // Target ONE shift for the 4 banners: default to selected shift, or newest unreviewed shift, or most recent closed shift
+  const targetShift =
+    (selectedShiftId ? closedShifts.find((s) => s.id === selectedShiftId) : null) ||
+    closedShifts.find((s) => !s.isReviewedByOwner) ||
+    closedShifts[0] ||
+    null;
+
+  const isShiftRead = Boolean(targetShift?.isReviewedByOwner);
+  const shiftExpectedSales = targetShift?.expectedSalesRevenue || 0;
+  const shiftNetMpesa = targetShift?.calculatedMpesaIncome || 0;
+  const shiftNetCash = targetShift?.calculatedCashIncome || 0;
+  const shiftNetProfit = targetShift?.netProfit || 0;
+  const shiftExpenses = targetShift?.totalExpenses || 0;
+
+  const handleToggleShiftRead = (shiftId: string, currentReadState: boolean) => {
+    store.markShiftReviewed(shiftId, currentUser.name, !currentReadState);
+  };
 
   const pendingDiscrepancies = discrepancies.filter(
     (d) => d.status === 'FLAGGED' || d.status === 'INVESTIGATING'
@@ -188,78 +192,234 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
             </div>
           )}
 
-          {/* High-level KPI Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-            {/* Total Revenue */}
-            <div className="p-4 rounded-2xl bg-[#121824] border border-[#1E293B]">
-              <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                <span>Total Expected Sales</span>
-                <TrendingUp className="w-4 h-4 text-emerald-400" />
-              </div>
-              <div className="text-xl sm:text-2xl font-bold font-mono text-white tabular-nums">
-                KES {totalSalesRevenue.toLocaleString()}
-              </div>
-              <div className="text-[10px] text-slate-500 font-mono mt-1">
-                Across {shifts.length} total shifts
-              </div>
-            </div>
-
-            {/* M-Pesa Collections (User's M-Pesa Delta Formula) */}
+          {/* ONE-SHIFT SUMMARY HERO CONTAINER (WhatsApp-style Read/Unread) */}
+          {targetShift ? (
             <div
-              onClick={() => setActiveTab('mpesa')}
-              className="p-4 rounded-2xl bg-[#121824] border border-[#1E293B] hover:border-emerald-500/50 transition-all cursor-pointer group"
-              title="Click to view and configure M-Pesa Till and Paybill accounts"
+              className={`p-4 sm:p-5 rounded-3xl transition-all duration-300 ${
+                isShiftRead
+                  ? 'bg-[#0E131E] border border-slate-800/80 shadow-md'
+                  : 'bg-gradient-to-b from-[#111A29] via-[#0E1522] to-[#0A0E17] border-2 border-sky-500/70 shadow-xl shadow-sky-950/40 ring-1 ring-sky-500/25'
+              }`}
             >
-              <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                <span className="flex items-center gap-1 group-hover:text-emerald-300 transition-colors">
-                  <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Net M-Pesa Received</span>
-                </span>
-                <span className="text-[10px] font-mono text-emerald-400 group-hover:underline">Setup Tills →</span>
-              </div>
-              <div className="text-xl sm:text-2xl font-bold font-mono text-emerald-400 tabular-nums">
-                KES {totalMpesaGenerated.toLocaleString()}
-              </div>
-              <div className="text-[10px] text-slate-500 font-mono mt-1">
-                From closing - opening balances
-              </div>
-            </div>
+              {/* Header: Shift Identity + WhatsApp Read Status */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-4 border-b border-slate-800/80">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
+                      isShiftRead
+                        ? 'bg-slate-800/50 text-sky-400 border-slate-700/60'
+                        : 'bg-sky-500/15 text-sky-400 border-sky-500/30'
+                    }`}
+                  >
+                    {isShiftRead ? (
+                      <CheckCheck className="w-5 h-5 text-sky-400" />
+                    ) : (
+                      <Clock className="w-5 h-5 text-sky-400 animate-pulse" />
+                    )}
+                  </div>
 
-            {/* Cash Drawer Collections */}
-            <div className="p-4 rounded-2xl bg-[#121824] border border-[#1E293B]">
-              <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                <span className="flex items-center gap-1">
-                  <Banknote className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Net Cash Returned</span>
-                </span>
-                <span className="text-[10px] font-mono text-amber-400">Float Deducted</span>
-              </div>
-              <div className="text-xl sm:text-2xl font-bold font-mono text-amber-400 tabular-nums">
-                KES {totalCashGenerated.toLocaleString()}
-              </div>
-              <div className="text-[10px] text-slate-500 font-mono mt-1">
-                Physical drawer takings
-              </div>
-            </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-base font-bold text-white tracking-wide">
+                        Shift #{targetShift.shiftNumber}
+                      </span>
+                      <span className="text-xs text-slate-300 font-mono">
+                        Attendant: <strong className="text-white font-bold">{targetShift.workerName}</strong>
+                      </span>
+                      {targetShift.closedAt && (
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          • Submitted {new Date(targetShift.closedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })},{' '}
+                          {new Date(targetShift.closedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                        </span>
+                      )}
+                    </div>
 
-            {/* Net Business Profit */}
-            <div className="p-4 rounded-2xl bg-[#121824] border border-[#1E293B]">
-              <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                <span>Net Bar Profit</span>
-                <span className="text-[10px] font-mono text-emerald-400 font-bold">
-                  {totalSalesRevenue > 0
-                    ? `${Math.round((totalNetProfit / totalSalesRevenue) * 100)}% Margin`
-                    : 'N/A'}
-                </span>
+                    {/* WhatsApp Status Indicator */}
+                    <div className="flex items-center gap-2 mt-1">
+                      {isShiftRead ? (
+                        <div className="flex items-center gap-1.5 text-xs text-slate-300 font-medium bg-slate-900/90 px-3 py-1 rounded-full border border-slate-800">
+                          {/* WhatsApp iconic Double Blue Ticks */}
+                          <span className="inline-flex items-center -space-x-1.5 text-sky-400">
+                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                          </span>
+                          <span className="text-sky-300 font-bold">Marked as Read</span>
+                          {targetShift.reviewedAt && (
+                            <span className="text-[11px] text-slate-400 font-mono">
+                              • Reviewed by {targetShift.reviewedBy || 'Owner'} at{' '}
+                              {new Date(targetShift.reviewedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-sky-200 bg-sky-950/80 border border-sky-500/50 px-3 py-1 rounded-full animate-pulse shadow-sm">
+                          {/* WhatsApp Single Grey Tick */}
+                          <Check className="w-3.5 h-3.5 text-slate-400 stroke-[2]" />
+                          <span>New Shift Submitted • Unread</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions: Mark as Read / Unread / Inspect / Switch Shift */}
+                <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+                  {isShiftRead ? (
+                    <button
+                      onClick={() => handleToggleShiftRead(targetShift.id, true)}
+                      className="text-xs text-slate-400 hover:text-slate-200 px-3 py-1.5 rounded-xl border border-slate-800 hover:border-slate-700 bg-slate-900/60 transition-colors cursor-pointer"
+                      title="Mark this shift as unread"
+                    >
+                      Mark as Unread
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleToggleShiftRead(targetShift.id, false)}
+                      className="text-xs font-bold text-slate-950 bg-sky-400 hover:bg-sky-300 px-4 py-2 rounded-xl transition-all shadow-md shadow-sky-950 flex items-center gap-1.5 cursor-pointer"
+                      title="Mark shift as reviewed and read"
+                    >
+                      <span className="inline-flex items-center -space-x-1 text-slate-950">
+                        <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                        <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                      </span>
+                      <span>Mark as Read</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => setSelectedShiftForAudit(targetShift)}
+                    className="text-xs font-semibold text-slate-300 hover:text-white px-3 py-1.5 rounded-xl border border-slate-800 hover:bg-slate-800 bg-slate-900/60 flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Full Audit</span>
+                  </button>
+
+                  {/* If multiple closed shifts exist, mini selector */}
+                  {closedShifts.length > 1 && (
+                    <select
+                      value={targetShift.id}
+                      onChange={(e) => setSelectedShiftId(e.target.value)}
+                      className="text-xs bg-slate-900 border border-slate-800 text-slate-300 rounded-xl px-2.5 py-1.5 cursor-pointer font-mono"
+                    >
+                      {closedShifts.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          Shift #{s.shiftNumber} ({s.workerName}) {s.isReviewedByOwner ? '✓✓ Read' : '✓ New'}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
               </div>
-              <div className="text-xl sm:text-2xl font-bold font-mono text-emerald-300 tabular-nums">
-                KES {totalNetProfit.toLocaleString()}
-              </div>
-              <div className="text-[10px] text-slate-500 font-mono mt-1">
-                After COGS & KES {totalExpenses.toLocaleString()} expenses
+
+              {/* High-level KPI Cards (FOR THIS ONE SHIFT ONLY) */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+                {/* 1. Total Expected Sales */}
+                <div
+                  className={`p-4 rounded-2xl border transition-all ${
+                    isShiftRead
+                      ? 'bg-[#121824]/60 border-slate-800/80'
+                      : 'bg-[#121824] border-slate-700/80 ring-1 ring-sky-500/20'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+                    <span className="font-medium">Total Expected Sales</span>
+                    <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-bold font-mono text-white tabular-nums">
+                    KES {shiftExpectedSales.toLocaleString()}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono mt-1 truncate">
+                    Shift #{targetShift.shiftNumber} ({targetShift.workerName})
+                  </div>
+                </div>
+
+                {/* 2. Net M-Pesa Received (READ ONLY - NO SETUP TILLS ENDPOINT) */}
+                <div
+                  className={`p-4 rounded-2xl border transition-all cursor-default select-none ${
+                    isShiftRead
+                      ? 'bg-[#121824]/60 border-slate-800/80'
+                      : 'bg-[#121824] border-slate-700/80 ring-1 ring-sky-500/20'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+                    <span className="flex items-center gap-1 font-medium">
+                      <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Net M-Pesa Received</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400 bg-slate-900/80 px-1.5 py-0.5 rounded border border-slate-800">
+                      Read Only
+                    </span>
+                  </div>
+                  <div className="text-xl sm:text-2xl font-bold font-mono text-emerald-400 tabular-nums">
+                    KES {shiftNetMpesa.toLocaleString()}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono mt-1 truncate">
+                    Closing - Opening M-Pesa delta
+                  </div>
+                </div>
+
+                {/* 3. Net Cash Returned */}
+                <div
+                  className={`p-4 rounded-2xl border transition-all ${
+                    isShiftRead
+                      ? 'bg-[#121824]/60 border-slate-800/80'
+                      : 'bg-[#121824] border-slate-700/80 ring-1 ring-sky-500/20'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+                    <span className="flex items-center gap-1 font-medium">
+                      <Banknote className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Net Cash Returned</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-900/60">
+                      Float Deducted
+                    </span>
+                  </div>
+                  <div className="text-xl sm:text-2xl font-bold font-mono text-amber-400 tabular-nums">
+                    KES {shiftNetCash.toLocaleString()}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono mt-1 truncate">
+                    Drawer cash - KES {targetShift.openingCashFloat.toLocaleString()} float
+                  </div>
+                </div>
+
+                {/* 4. Net Bar Profit */}
+                <div
+                  className={`p-4 rounded-2xl border transition-all ${
+                    isShiftRead
+                      ? 'bg-[#121824]/60 border-slate-800/80'
+                      : 'bg-[#121824] border-slate-700/80 ring-1 ring-sky-500/20'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+                    <span className="font-medium">Net Bar Profit</span>
+                    <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                      {shiftExpectedSales > 0
+                        ? `${Math.round((shiftNetProfit / shiftExpectedSales) * 100)}% Margin`
+                        : 'N/A'}
+                    </span>
+                  </div>
+                  <div className="text-xl sm:text-2xl font-bold font-mono text-emerald-300 tabular-nums">
+                    KES {shiftNetProfit.toLocaleString()}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono mt-1 truncate">
+                    After COGS & KES {shiftExpenses.toLocaleString()} expenses
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            /* Empty state when no shift is submitted yet */
+            <div className="p-8 rounded-3xl bg-[#121824] border border-[#1E293B] text-center">
+              <div className="w-12 h-12 rounded-2xl bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center mx-auto mb-3">
+                <Clock className="w-6 h-6 animate-pulse" />
+              </div>
+              <div className="text-base font-bold text-white">Awaiting Shift Submission</div>
+              <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
+                When a counter attendant finishes and submits their shift handover, the 4 shift financial banners (Sales, M-Pesa, Cash, Profit) will appear here for review with WhatsApp-style read verification.
+              </p>
+            </div>
+          )}
 
           {/* Configured M-Pesa Payment Channels Banner */}
           {(() => {

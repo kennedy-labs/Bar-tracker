@@ -126,6 +126,11 @@ export interface Shift {
 
   // Progressive work routine tracking
   counterFinished?: boolean;
+
+  // WhatsApp-style owner review tracking
+  isReviewedByOwner?: boolean;
+  reviewedAt?: string;
+  reviewedBy?: string;
 }
 
 export interface HandoverDraft {

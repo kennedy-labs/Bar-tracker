@@ -1746,6 +1746,35 @@ class StoreService {
     }
   }
 
+  public markShiftReviewed(shiftId: string, reviewedBy: string, isReviewed: boolean = true): boolean {
+    const shifts = this.getShifts();
+    const shift = shifts.find((s) => s.id === shiftId);
+    if (!shift) return false;
+
+    shift.isReviewedByOwner = isReviewed;
+    shift.reviewedAt = isReviewed ? new Date().toISOString() : undefined;
+    shift.reviewedBy = isReviewed ? reviewedBy : undefined;
+
+    const bizId = this.getCurrentBusinessId();
+    const shiftsMap = this.get<Record<string, Shift[]>>(STORAGE_KEYS.SHIFTS_MAP, {});
+    shiftsMap[bizId] = shifts;
+    this.set(STORAGE_KEYS.SHIFTS_MAP, shiftsMap);
+
+    this.addEvent({
+      type: 'INFO',
+      title: isReviewed ? `Shift Reviewed: ${shift.shiftNumber}` : `Shift Marked Unread: ${shift.shiftNumber}`,
+      description: isReviewed
+        ? `Owner ${reviewedBy} reviewed and verified Shift #${shift.shiftNumber} submitted by ${shift.workerName}.`
+        : `Shift #${shift.shiftNumber} marked as unread.`,
+      actorName: reviewedBy,
+      severity: isReviewed ? 'SUCCESS' : 'INFO',
+    });
+
+    this.notify();
+    firestoreSync.saveShift(shift);
+    return true;
+  }
+
   public getHandoverDraft(shiftId: string): HandoverDraft | null {
     const drafts = this.get<Record<string, HandoverDraft>>(STORAGE_KEYS.HANDOVER_DRAFTS, {});
     return drafts[shiftId] || null;
