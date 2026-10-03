@@ -20,6 +20,7 @@ export type ProductUnit = 'BOTTLE' | 'CAN' | 'SHOT_TOT' | 'CRATE' | 'PACK';
 
 export interface Product {
   id: string;
+  businessId?: string;
   name: string;
   category: ProductCategory;
   unit: ProductUnit;

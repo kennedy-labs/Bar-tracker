@@ -390,6 +390,166 @@ class StoreService {
     this.notify();
   }
 
+  /**
+   * Register a brand new business establishment and its executive proprietor (Owner).
+   * Attendants can subsequently be registered inside the Admin Desk.
+   */
+  public registerNewBusiness(params: {
+    businessName: string;
+    phone: string;
+    address?: string;
+    ownerName: string;
+    ownerUsername: string;
+    ownerPassword: string;
+    ownerPinCode: string;
+    seedCatalogTemplate?: boolean;
+    initialDrinksText?: string;
+  }): { business: BusinessProfile; user: User } {
+    const cleanBizName = params.businessName.trim();
+    const cleanPhone = params.phone.trim();
+    const cleanOwnerName = params.ownerName.trim();
+    const cleanUsername = params.ownerUsername.trim().toLowerCase();
+    const cleanPassword = params.ownerPassword.trim();
+    const cleanPin = params.ownerPinCode.trim();
+
+    if (cleanBizName.length < 2) {
+      throw new Error('Establishment name must be at least 2 characters.');
+    }
+    if (!cleanPhone) {
+      throw new Error('Please provide a valid contact phone number.');
+    }
+    if (cleanOwnerName.length < 2) {
+      throw new Error('Proprietor full name must be at least 2 characters.');
+    }
+    if (!/^[a-z0-9_]{3,24}$/.test(cleanUsername)) {
+      throw new Error('Owner username must be 3 to 24 characters (lowercase letters, numbers, underscore).');
+    }
+    if (cleanPassword.length < 6) {
+      throw new Error('Password must be at least 6 characters long.');
+    }
+    if (!/^\d{4,6}$/.test(cleanPin)) {
+      throw new Error('Security PIN must be 4 to 6 numeric digits.');
+    }
+
+    const allUsers = this.getUsers();
+    if (allUsers.some((u) => u.username.toLowerCase() === cleanUsername)) {
+      throw new Error(`Username "${cleanUsername}" is already taken. Please choose another username.`);
+    }
+
+    const newBizId = `biz-${Date.now()}`;
+    const connectCode = String(Math.floor(100000 + Math.random() * 900000));
+
+    const newBusiness: BusinessProfile = {
+      id: newBizId,
+      name: cleanBizName,
+      phone: cleanPhone,
+      ownerName: cleanOwnerName,
+      address: params.address?.trim() || '',
+      connectCode,
+      activeShiftTransferCode: String(Math.floor(100000 + Math.random() * 900000)),
+    };
+
+    const businesses = this.getBusinesses();
+    businesses.push(newBusiness);
+    this.set(STORAGE_KEYS.BUSINESSES, businesses);
+
+    // Create Owner user (Attendants will be registered by owner in Admin Staff page)
+    const newUser: User = {
+      id: `user-${Date.now()}`,
+      businessId: newBizId,
+      name: `${cleanOwnerName} (Proprietor)`,
+      username: cleanUsername,
+      role: 'OWNER',
+      pinCode: cleanPin,
+      password: cleanPassword,
+      createdAt: new Date().toISOString(),
+    };
+
+    allUsers.push(newUser);
+    this.set(STORAGE_KEYS.USERS, allUsers);
+
+    // Switch current business to newly created establishment
+    this.set(STORAGE_KEYS.CURRENT_BIZ_ID, newBizId);
+
+    // Handle catalog setup
+    const allProducts = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+    const inventoryMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
+
+    if (params.seedCatalogTemplate) {
+      const clonedProducts: Product[] = INITIAL_PRODUCTS.map((p, idx) => ({
+        ...p,
+        id: `prod-${newBizId}-${idx}`,
+        businessId: newBizId,
+      }));
+      allProducts.push(...clonedProducts);
+      this.set(STORAGE_KEYS.PRODUCTS, allProducts);
+
+      inventoryMap[newBizId] = clonedProducts.map((p) => ({
+        productId: p.id,
+        quantityOnHand: 0,
+        updatedAt: new Date().toISOString(),
+      }));
+      this.set(STORAGE_KEYS.INVENTORY_MAP, inventoryMap);
+    } else if (params.initialDrinksText && params.initialDrinksText.trim()) {
+      // 100% clean slate with immediate real drinks imported
+      this.set(STORAGE_KEYS.PRODUCTS, allProducts);
+      inventoryMap[newBizId] = [];
+      this.set(STORAGE_KEYS.INVENTORY_MAP, inventoryMap);
+
+      const parsed = this.parseBulkDrinksText(params.initialDrinksText);
+      const valid = parsed.filter((d) => d.name.trim().length > 0 && d.sellingPrice > 0);
+      if (valid.length > 0) {
+        this.bulkAddProducts(valid);
+      }
+    } else {
+      // 100% blank clean slate - ready for real user drinks
+      inventoryMap[newBizId] = [];
+      this.set(STORAGE_KEYS.INVENTORY_MAP, inventoryMap);
+    }
+
+    // Seed default M-Pesa accounts
+    const mpesaMap = this.get<Record<string, MpesaAccount[]>>(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, {});
+    mpesaMap[newBizId] = [
+      {
+        id: `mpesa-${newBizId}-till-1`,
+        businessId: newBizId,
+        accountName: `${cleanBizName} Counter Till`,
+        accountType: 'BUY_GOODS_TILL',
+        identifier: '5421980',
+        currentBalance: 0,
+        isPrimary: true,
+        createdAt: new Date().toISOString(),
+        notes: 'Main front counter customer till',
+      },
+      {
+        id: `mpesa-${newBizId}-paybill-1`,
+        businessId: newBizId,
+        accountName: `${cleanBizName} Paybill`,
+        accountType: 'PAYBILL',
+        identifier: '889900',
+        accountNumber: 'BAR',
+        currentBalance: 0,
+        isPrimary: false,
+        createdAt: new Date().toISOString(),
+        notes: 'Business paybill for customer payments',
+      },
+    ];
+    this.set(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, mpesaMap);
+
+    this.addEvent({
+      type: 'INFO',
+      title: `New Business Registered: ${newBusiness.name}`,
+      description: `Proprietor ${cleanOwnerName} registered ${newBusiness.name}. Ready for real operations.`,
+      actorName: cleanOwnerName,
+      severity: 'SUCCESS',
+    });
+
+    this.setupFirestoreSync();
+    this.notify();
+
+    return { business: newBusiness, user: newUser };
+  }
+
   // --- Shift-Scoped One-Time Transfer Code Management ---
   public getShiftTransferCode(): { code: string; shiftId: string | null; isShiftActive: boolean } {
     const activeShift = this.getActiveShift();
@@ -1019,10 +1179,19 @@ class StoreService {
     this.notify();
   }
 
-  public getProducts(includeArchived = false): Product[] {
+  public getProducts(includeArchived = false, specificBizId?: string): Product[] {
     const list = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
-    if (includeArchived) return list;
-    return list.filter((p) => !p.isArchived);
+    const bizId = specificBizId || this.getCurrentBusinessId();
+
+    const filtered = list.filter((p) => {
+      if (p.businessId) {
+        return p.businessId === bizId;
+      }
+      return ['biz-1', 'biz-2', 'biz-3'].includes(bizId);
+    });
+
+    if (includeArchived) return filtered;
+    return filtered.filter((p) => !p.isArchived);
   }
 
   public getMpesaAccounts(includeArchived = false): MpesaAccount[] {
@@ -1233,7 +1402,11 @@ class StoreService {
     const bizId = this.getCurrentBusinessId();
     const inventoryMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
     if (!inventoryMap[bizId]) {
-      inventoryMap[bizId] = JSON.parse(JSON.stringify(INITIAL_INVENTORY));
+      if (['biz-1', 'biz-2', 'biz-3'].includes(bizId)) {
+        inventoryMap[bizId] = JSON.parse(JSON.stringify(INITIAL_INVENTORY));
+      } else {
+        inventoryMap[bizId] = [];
+      }
       this.set(STORAGE_KEYS.INVENTORY_MAP, inventoryMap);
     }
     return inventoryMap[bizId];
@@ -1944,10 +2117,13 @@ class StoreService {
     reorderLevel?: number;
     volumeMl?: number;
     initialStock?: number;
+    businessId?: string;
   }): Product {
-    const products = this.getProducts(true);
+    const currentBizId = params.businessId || this.getCurrentBusinessId();
+    const products = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
     const newProduct: Product = {
       id: `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      businessId: currentBizId,
       name: params.name.trim(),
       category: params.category,
       unit: params.unit,
@@ -2009,6 +2185,262 @@ class StoreService {
 
     this.notify();
     return newProduct;
+  }
+
+  /**
+   * Universal smart parser for bulk real drinks text (supports CSV, TSV, hyphens, colons)
+   */
+  public parseBulkDrinksText(
+    text: string,
+    defaultStock = 0
+  ): Array<{
+    name: string;
+    sellingPrice: number;
+    costPrice?: number;
+    category: import('../types').ProductCategory;
+    unit: import('../types').ProductUnit;
+    initialStock?: number;
+    reorderLevel?: number;
+  }> {
+    if (!text || !text.trim()) return [];
+    const lines = text.split('\n').filter((l) => l.trim().length > 0);
+    return lines.map((line, idx) => {
+      const parts = line.includes(',')
+        ? line.split(',').map((p) => p.trim())
+        : line.includes('\t')
+        ? line.split('\t').map((p) => p.trim())
+        : line.includes(' - ')
+        ? line.split(' - ').map((p) => p.trim())
+        : line.includes(':')
+        ? line.split(':').map((p) => p.trim())
+        : [line.trim()];
+
+      const rawName = parts[0] || `Drink ${idx + 1}`;
+      const rawSell = parts[1] ? parseFloat(parts[1].replace(/[^0-9.]/g, '')) : 0;
+      const rawCost = parts[2] ? parseFloat(parts[2].replace(/[^0-9.]/g, '')) : undefined;
+      const rawCat = parts[3]?.toUpperCase();
+      const rawStock = parts[4] ? parseInt(parts[4].replace(/[^0-9]/g, ''), 10) : undefined;
+
+      // Smart category detection from drink keywords
+      let guessedCat: import('../types').ProductCategory = 'BEER';
+      const lower = rawName.toLowerCase();
+      if (
+        lower.includes('whisky') ||
+        lower.includes('whiskey') ||
+        lower.includes('gin') ||
+        lower.includes('vodka') ||
+        lower.includes('rum') ||
+        lower.includes('brandy') ||
+        lower.includes('cognac') ||
+        lower.includes('tequila') ||
+        lower.includes('liqueur') ||
+        lower.includes('spirit') ||
+        lower.includes('jameson') ||
+        lower.includes('gilbeys') ||
+        lower.includes('johnnie') ||
+        lower.includes('black label') ||
+        lower.includes('red label') ||
+        lower.includes('flagon') ||
+        lower.includes('richot') ||
+        lower.includes('viceroy') ||
+        lower.includes('captain morgan') ||
+        lower.includes('jack daniel') ||
+        lower.includes('gordon') ||
+        lower.includes('tanqueray') ||
+        lower.includes('chrome') ||
+        lower.includes('kibao') ||
+        lower.includes('best') ||
+        lower.includes('county') ||
+        lower.includes('hunters choice')
+      ) {
+        guessedCat = 'SPIRIT';
+      } else if (
+        lower.includes('cider') ||
+        lower.includes('savanna') ||
+        lower.includes('hunters cider') ||
+        lower.includes('snapp') ||
+        lower.includes('tusker cider')
+      ) {
+        guessedCat = 'CIDER';
+      } else if (
+        lower.includes('wine') ||
+        lower.includes('sauvignon') ||
+        lower.includes('merlot') ||
+        lower.includes('chardonnay') ||
+        lower.includes('cabernet') ||
+        lower.includes('cellar cask') ||
+        lower.includes('4th street') ||
+        lower.includes('drostdy') ||
+        lower.includes('four cousins') ||
+        lower.includes('robertson') ||
+        lower.includes('rosso')
+      ) {
+        guessedCat = 'WINE';
+      } else if (
+        lower.includes('soda') ||
+        lower.includes('coca') ||
+        lower.includes('coke') ||
+        lower.includes('fanta') ||
+        lower.includes('sprite') ||
+        lower.includes('water') ||
+        lower.includes('juice') ||
+        lower.includes('red bull') ||
+        lower.includes('energy') ||
+        lower.includes('tonic') ||
+        lower.includes('ginger ale') ||
+        lower.includes('krest') ||
+        lower.includes('stoney') ||
+        lower.includes('del monte') ||
+        lower.includes('minute maid')
+      ) {
+        guessedCat = 'SOFT_DRINK';
+      } else if (
+        lower.includes('smoke') ||
+        lower.includes('cigarette') ||
+        lower.includes('dunhill') ||
+        lower.includes('sportsman') ||
+        lower.includes('embassy') ||
+        lower.includes('rothmans') ||
+        lower.includes('vape')
+      ) {
+        guessedCat = 'CIGARETTE';
+      }
+
+      const validCats: import('../types').ProductCategory[] = ['BEER', 'CIDER', 'SPIRIT', 'WINE', 'SOFT_DRINK', 'CIGARETTE'];
+      const category: import('../types').ProductCategory = validCats.includes(rawCat as any) ? (rawCat as any) : guessedCat;
+
+      const sellingPrice = isNaN(rawSell) ? 0 : rawSell;
+      const costPrice = rawCost !== undefined && !isNaN(rawCost) ? rawCost : Math.round(sellingPrice * 0.75);
+      const stock = rawStock !== undefined && !isNaN(rawStock) ? rawStock : defaultStock;
+
+      return {
+        name: rawName,
+        sellingPrice,
+        costPrice,
+        category,
+        unit: 'BOTTLE' as import('../types').ProductUnit,
+        initialStock: stock,
+        reorderLevel: 5,
+      };
+    });
+  }
+
+  /**
+   * Fast Bulk Import of products and prices
+   */
+  public bulkAddProducts(
+    items: Array<{
+      name: string;
+      sellingPrice: number;
+      costPrice?: number;
+      category?: import('../types').ProductCategory;
+      unit?: import('../types').ProductUnit;
+      initialStock?: number;
+      reorderLevel?: number;
+    }>
+  ): Product[] {
+    const currentBizId = this.getCurrentBusinessId();
+    const products = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+    const inv = this.getInventory();
+    const added: Product[] = [];
+
+    items.forEach((item) => {
+      const cleanName = item.name.trim();
+      if (!cleanName) return;
+
+      const sellPrice = Number(item.sellingPrice) || 0;
+      const costPrice =
+        item.costPrice !== undefined && !isNaN(Number(item.costPrice))
+          ? Number(item.costPrice)
+          : Math.round(sellPrice * 0.75); // Realistic 25% bar margin default
+
+      const newProduct: Product = {
+        id: `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        businessId: currentBizId,
+        name: cleanName,
+        category: item.category || 'BEER',
+        unit: item.unit || 'BOTTLE',
+        costPrice,
+        sellingPrice: sellPrice,
+        reorderLevel: Number(item.reorderLevel) || 5,
+        isArchived: false,
+      };
+
+      products.push(newProduct);
+      added.push(newProduct);
+
+      const initialQty = Number(item.initialStock) || 0;
+      const existingInv = inv.find((i) => i.productId === newProduct.id);
+      if (existingInv) {
+        existingInv.quantityOnHand = initialQty;
+      } else {
+        inv.push({
+          productId: newProduct.id,
+          quantityOnHand: initialQty,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    });
+
+    this.set(STORAGE_KEYS.PRODUCTS, products);
+    this.saveCurrentInventory(inv);
+
+    this.addEvent({
+      type: 'INFO',
+      title: `Bulk Catalog Import (${added.length} drinks)`,
+      description: `Imported ${added.length} real drinks into active menu.`,
+      actorName: 'Owner Audit Desk',
+      severity: 'SUCCESS',
+    });
+
+    this.notify();
+    return added;
+  }
+
+  /**
+   * Wipe all sample or test drinks to start with a 100% clean slate
+   */
+  public clearAllProducts(): void {
+    const currentBizId = this.getCurrentBusinessId();
+    const allProducts = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+
+    // Filter out products belonging to current business
+    // If on sample businesses (biz-1, biz-2, biz-3), remove untagged legacy products too
+    let remaining: Product[] = [];
+    if (['biz-1', 'biz-2', 'biz-3'].includes(currentBizId)) {
+      remaining = allProducts.filter((p) => p.businessId && p.businessId !== currentBizId);
+    } else {
+      remaining = allProducts.filter((p) => p.businessId !== currentBizId);
+    }
+
+    this.set(STORAGE_KEYS.PRODUCTS, remaining);
+    this.saveCurrentInventory([]);
+
+    this.addEvent({
+      type: 'INFO',
+      title: 'Catalog Reset to Blank Slate',
+      description: 'All sample/test drinks cleared. Ready for real inventory entry.',
+      actorName: 'Owner Audit Desk',
+      severity: 'WARNING',
+    });
+
+    this.notify();
+  }
+
+  /**
+   * Restore Kenyan Bar Staples catalog template
+   */
+  public restoreDefaultCatalog(): void {
+    const cloned = INITIAL_PRODUCTS.map((p) => ({
+      name: p.name,
+      category: p.category,
+      unit: p.unit,
+      costPrice: p.costPrice,
+      sellingPrice: p.sellingPrice,
+      reorderLevel: p.reorderLevel,
+      initialStock: 24,
+    }));
+    this.bulkAddProducts(cloned);
   }
 
   public updateProduct(productId: string, updates: Partial<Product>): Product | null {

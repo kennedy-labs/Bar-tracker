@@ -44,6 +44,7 @@ import {
   Sparkles,
   ChevronRight,
   Store,
+  FileText,
 } from 'lucide-react';
 
 interface OwnerDashboardProps {
@@ -91,6 +92,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const discrepancies = store.getDiscrepancies();
   const additions = store.getStockAdditions();
   const pendingRestocksCount = additions.filter((a) => a.status === 'PENDING_OWNER_CONFIRMATION').length;
+  const registeredWorkers = store
+    .getUsers()
+    .filter((u) => (!u.businessId || u.businessId === currentBiz.id) && u.role !== 'OWNER' && !u.isArchived);
 
   const activeShifts = shifts.filter((s) => s.status === 'ACTIVE');
   const closedShifts = shifts.filter((s) => s.status === 'CLOSED');
@@ -229,6 +233,109 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                 <Lock className="w-3.5 h-3.5" />
                 <span>Review & Lock Restock ({pendingRestocksCount})</span>
               </button>
+            </div>
+          )}
+
+          {/* Quick Onboarding / Real Data Setup Card */}
+          {(products.length === 0 || registeredWorkers.length === 0) && (
+            <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-[#121824] via-[#151D2C] to-[#0E1522] border-2 border-emerald-500/40 shadow-2xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-white">
+                      Welcome to {currentBiz.name}! Setup Checklist
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Complete these 2 simple steps to get your bar ready for real shift trading:
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {/* Step 1: Real Drinks */}
+                <div
+                  className={`p-4 rounded-2xl border transition-all ${
+                    products.length > 0
+                      ? 'bg-emerald-950/20 border-emerald-500/30'
+                      : 'bg-[#0E1420] border-slate-800 ring-1 ring-emerald-500/20'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                      <Wine className="w-4 h-4 text-emerald-400" />
+                      <span>1. Real Drinks & Prices</span>
+                    </span>
+                    {products.length > 0 ? (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        <span>{products.length} Drinks Active</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-950 text-amber-400 border border-amber-800">
+                        Needs Real Products
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 mb-3">
+                    {products.length > 0
+                      ? `Your catalog has ${products.length} drink(s) configured with wholesale costs and retail prices.`
+                      : 'You chose a clean slate with zero test data. Add your real drinks and selling prices so attendants can record sales.'}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setActiveTab('catalog')}
+                      className="py-2 px-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-md"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>{products.length > 0 ? 'Manage Drinks & Prices' : 'Bulk Paste Real Drinks'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Step 2: Attendants */}
+                <div
+                  className={`p-4 rounded-2xl border transition-all ${
+                    registeredWorkers.length > 0
+                      ? 'bg-emerald-950/20 border-emerald-500/30'
+                      : 'bg-[#0E1420] border-slate-800 ring-1 ring-sky-500/20'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                      <Users className="w-4 h-4 text-sky-400" />
+                      <span>2. Counter Attendants</span>
+                    </span>
+                    {registeredWorkers.length > 0 ? (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        <span>{registeredWorkers.length} Staff Registered</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-950 text-amber-400 border border-amber-800">
+                        No Attendants Yet
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 mb-3">
+                    {registeredWorkers.length > 0
+                      ? `${registeredWorkers.length} counter attendant(s) registered with active 4-digit PINs for terminal access.`
+                      : 'Only you (the Owner) register staff. Add your counter attendants and bartenders and assign their 4-digit PINs.'}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setActiveTab('staff')}
+                      className="py-2 px-3.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-md"
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      <span>{registeredWorkers.length > 0 ? 'Manage Attendants' : 'Register Attendants & PINs'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
