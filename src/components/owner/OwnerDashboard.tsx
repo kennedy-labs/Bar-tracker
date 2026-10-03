@@ -782,21 +782,51 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
                     <div className="p-2 rounded-xl bg-[#0E1420] border border-slate-800">
                       <div className="text-[10px] text-slate-400">Variance</div>
-                      <div className="font-bold text-red-400 mt-0.5">
-                        {d.variance} (KES {d.monetaryValue.toLocaleString()})
+                      <div
+                        className={`font-bold mt-0.5 ${
+                          d.variance > 0 ? 'text-emerald-400' : 'text-red-400'
+                        }`}
+                      >
+                        {d.variance > 0 ? `+${d.variance}` : d.variance} (KES{' '}
+                        {d.monetaryValue.toLocaleString()})
                       </div>
                     </div>
                   </div>
 
                   <div className="text-xs text-slate-400 mb-3 space-y-1">
-                    <div>Attendant reporting: <span className="text-slate-200 font-medium">{d.workerName}</span></div>
+                    <div>
+                      Attendant reporting:{' '}
+                      <span className="text-slate-200 font-medium">{d.workerName}</span>
+                    </div>
                     {d.responsibleWorkerName && (
-                      <div className="p-2 rounded-xl bg-red-950/60 border border-red-800 text-red-200 text-[11px] font-sans">
-                        <strong className="text-red-300">⚠️ Liable for Missing Handover:</strong>{' '}
-                        <span className="text-white font-bold">{d.responsibleWorkerName}</span>
-                        <div className="text-[10px] text-red-400 mt-0.5">
-                          Missing items identified during counter shift verification by incoming worker.
-                        </div>
+                      <div
+                        className={`p-2.5 rounded-xl border text-[11px] font-sans ${
+                          d.variance > 0
+                            ? 'bg-emerald-950/40 border-emerald-800 text-emerald-200'
+                            : 'bg-red-950/60 border-red-800 text-red-200'
+                        }`}
+                      >
+                        {d.variance > 0 ? (
+                          <>
+                            <strong className="text-emerald-300">
+                              ⚖️ Handover Surplus Credited:
+                            </strong>{' '}
+                            <span className="text-white font-bold">{d.responsibleWorkerName}</span>
+                            <div className="text-[10px] text-emerald-400 mt-0.5">
+                              Extra bottles counted during opening handover credited to balance previous attendant's record.
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <strong className="text-red-300">
+                              ⚠️ Handover Shortage Flagged:
+                            </strong>{' '}
+                            <span className="text-white font-bold">{d.responsibleWorkerName}</span>
+                            <div className="text-[10px] text-red-400 mt-0.5">
+                              Missing items identified during counter shift verification by incoming worker.
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
                     {d.ownerNotes && (

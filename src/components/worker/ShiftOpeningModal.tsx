@@ -11,6 +11,8 @@ import {
   Minus,
   Sparkles,
   AlertCircle,
+  Scale,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface ShiftOpeningModalProps {
@@ -75,27 +77,53 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
     setPhysicalCounts(initial);
   };
 
-  // Check differences
+  // Check differences: calculate both missing shortages AND surplus extra bottles
   let totalMissing = 0;
+  let totalSurplus = 0;
+  let missingValue = 0;
+  let surplusValue = 0;
+
   products.forEach((p) => {
     const inv = inventory.find((i) => i.productId === p.id);
     const expected = inv ? inv.quantityOnHand : 0;
     const actual = physicalCounts[p.id] !== undefined ? physicalCounts[p.id] : expected;
-    if (actual < expected) {
-      totalMissing += expected - actual;
+    const diff = actual - expected;
+
+    if (diff < 0) {
+      const qtyShort = Math.abs(diff);
+      totalMissing += qtyShort;
+      missingValue += qtyShort * p.sellingPrice;
+    } else if (diff > 0) {
+      totalSurplus += diff;
+      surplusValue += diff * p.sellingPrice;
     }
   });
 
+  const prevAttendantName = lastClosedShift ? lastClosedShift.workerName : 'the previous attendant';
+
   const handleFinalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    let autoSummary = '';
+    if (totalMissing > 0 && totalSurplus > 0) {
+      autoSummary = `Handover balance: ${totalMissing} bottle(s) short (KES ${missingValue.toLocaleString()}) & +${totalSurplus} bottle(s) surplus (KES ${surplusValue.toLocaleString()}) credited to ${prevAttendantName}.`;
+    } else if (totalMissing > 0) {
+      autoSummary = `${totalMissing} bottle(s) fewer than expected (KES ${missingValue.toLocaleString()}) left by ${prevAttendantName}.`;
+    } else if (totalSurplus > 0) {
+      autoSummary = `+${totalSurplus} surplus bottle(s) counted on shelf (+KES ${surplusValue.toLocaleString()}) credited to ${prevAttendantName}.`;
+    }
+
+    const finalNote = autoSummary
+      ? inconsistencyNote.trim()
+        ? `${autoSummary} Note: ${inconsistencyNote.trim()}`
+        : autoSummary
+      : inconsistencyNote.trim() || undefined;
+
     onConfirmOpen({
       openingCashFloat: parseFloat(openingCashFloat) || 0,
       openingMpesaBalance: parseFloat(openingMpesaBalance) || 0,
       physicalCounts,
-      inconsistencyNote:
-        totalMissing > 0
-          ? `${totalMissing} bottle(s) fewer than expected on handover. ${inconsistencyNote}`.trim()
-          : inconsistencyNote.trim() || undefined,
+      inconsistencyNote: finalNote,
     });
   };
 
@@ -247,8 +275,14 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
                       <span>·</span>
                       <span>Expected: {expected}</span>
                       {diff !== 0 && (
-                        <span className={`font-bold ${diff < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                          ({diff > 0 ? `+${diff}` : diff})
+                        <span
+                          className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                            diff < 0
+                              ? 'bg-red-950/80 text-red-400 border border-red-800/80'
+                              : 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80'
+                          }`}
+                        >
+                          {diff > 0 ? `+${diff} surplus` : `${diff} short`}
                         </span>
                       )}
                     </div>
@@ -279,16 +313,52 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
             })}
           </div>
 
-          {/* Missing warning if any */}
-          {totalMissing > 0 && (
-            <div className="p-3 rounded-2xl bg-amber-950/40 border border-amber-800 text-xs text-amber-200 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-bold">{totalMissing} bottle(s) missing from shelf.</span>
-                <p className="text-[11px] text-amber-300/80 mt-0.5">
-                  This will be recorded so the previous attendant remains accountable, not you.
-                </p>
+          {/* Balanced Handover Fairness Banner */}
+          {(totalMissing > 0 || totalSurplus > 0) && (
+            <div
+              className={`p-3.5 rounded-2xl border text-xs space-y-1.5 ${
+                totalMissing > 0 && totalSurplus > 0
+                  ? 'bg-slate-900/90 border-slate-700 text-slate-200'
+                  : totalMissing > 0
+                  ? 'bg-amber-950/40 border-amber-800 text-amber-200'
+                  : 'bg-emerald-950/40 border-emerald-800 text-emerald-200'
+              }`}
+            >
+              <div className="flex items-center gap-2 font-bold">
+                {totalMissing > 0 && totalSurplus > 0 ? (
+                  <>
+                    <Scale className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Balanced Scale Handover</span>
+                  </>
+                ) : totalMissing > 0 ? (
+                  <>
+                    <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>{totalMissing} bottle(s) fewer than expected</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>+{totalSurplus} surplus bottle(s) found on shelf!</span>
+                  </>
+                )}
               </div>
+
+              {totalSurplus > 0 && (
+                <div className="text-[11px] text-emerald-300">
+                  🎉 <strong>+{totalSurplus} extra bottle(s)</strong> (+KES{' '}
+                  {surplusValue.toLocaleString()}) left by{' '}
+                  <strong>{prevAttendantName}</strong> will be{' '}
+                  <strong>credited to their record</strong> to balance their scale fairly.
+                </div>
+              )}
+
+              {totalMissing > 0 && (
+                <div className="text-[11px] text-amber-300/90">
+                  ⚠️ <strong>-{totalMissing} missing bottle(s)</strong> (KES{' '}
+                  {missingValue.toLocaleString()}) logged so{' '}
+                  <strong>{prevAttendantName}</strong> remains accountable, not you.
+                </div>
+              )}
             </div>
           )}
 

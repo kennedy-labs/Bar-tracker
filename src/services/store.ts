@@ -1276,6 +1276,9 @@ class StoreService {
     let hasOpeningInconsistency = false;
     const shiftStockItems: ShiftStockItem[] = [];
     const stockMovements: StockMovement[] = [];
+    const lastClosedShift = this.getLastClosedShift();
+    const prevAttendant = lastClosedShift ? lastClosedShift.workerName : 'Previous Attendant';
+    const discrepancies = this.get<Discrepancy[]>(STORAGE_KEYS.DISCREPANCIES, []);
 
     products.forEach((product) => {
       const inv = currentInventory.find((i) => i.productId === product.id);
@@ -1285,8 +1288,57 @@ class StoreService {
           ? params.physicalCounts[product.id]
           : systemCount;
 
-      if (physicalCount !== systemCount) {
+      const diff = physicalCount - systemCount;
+      if (diff !== 0) {
         hasOpeningInconsistency = true;
+
+        if (diff < 0) {
+          // Shortage: previous attendant held accountable
+          const shortageQty = Math.abs(diff);
+          const moneyVal = shortageQty * product.sellingPrice;
+          discrepancies.unshift({
+            id: `disc-${Date.now()}-${product.id}`,
+            shiftId,
+            shiftNumber,
+            workerName: params.workerName,
+            responsibleWorkerName: prevAttendant,
+            previousShiftId: lastClosedShift?.id,
+            type: 'STOCK_SHORTAGE',
+            itemId: product.id,
+            itemName: product.name,
+            expected: systemCount,
+            actual: physicalCount,
+            variance: diff, // negative e.g. -2
+            monetaryValue: moneyVal,
+            severity: shortageQty >= 3 ? 'HIGH' : 'MEDIUM',
+            status: 'FLAGGED',
+            ownerNotes: `Opening handover shortage: ${shortageQty} bottle(s) fewer than expected left by ${prevAttendant}. Reported by incoming attendant ${params.workerName}.`,
+            timestamp: new Date().toISOString(),
+          });
+        } else {
+          // Surplus: previous attendant credited to balance the scale!
+          const surplusQty = diff;
+          const moneyVal = surplusQty * product.sellingPrice;
+          discrepancies.unshift({
+            id: `disc-${Date.now()}-${product.id}`,
+            shiftId,
+            shiftNumber,
+            workerName: params.workerName,
+            responsibleWorkerName: prevAttendant,
+            previousShiftId: lastClosedShift?.id,
+            type: 'STOCK_OVERAGE',
+            itemId: product.id,
+            itemName: product.name,
+            expected: systemCount,
+            actual: physicalCount,
+            variance: diff, // positive e.g. +3
+            monetaryValue: moneyVal,
+            severity: 'LOW',
+            status: 'RESOLVED',
+            ownerNotes: `Opening handover surplus: +${surplusQty} extra bottle(s) found on shelf left by ${prevAttendant}. Credited to previous attendant to balance their scale fairly.`,
+            timestamp: new Date().toISOString(),
+          });
+        }
       }
 
       const item: ShiftStockItem = {
@@ -1338,6 +1390,10 @@ class StoreService {
     });
     this.saveCurrentInventory(currentInventory);
 
+    if (hasOpeningInconsistency) {
+      this.set(STORAGE_KEYS.DISCREPANCIES, discrepancies);
+    }
+
     // Save shift stock items
     const existingSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
     this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, [...shiftStockItems, ...existingSSIs]);
@@ -1368,8 +1424,10 @@ class StoreService {
 
     this.addEvent({
       type: 'SHIFT_OPENED',
-      title: `Shift Opened`,
-      description: `${params.workerName} opened shift ${shiftNumber}. Cash Float: KES ${params.openingCashFloat.toLocaleString()}, M-Pesa Entry: KES ${params.openingMpesaBalance.toLocaleString()}`,
+      title: hasOpeningInconsistency ? 'Shift Opened (Handover Discrepancy/Surplus)' : 'Shift Opened',
+      description: `${params.workerName} opened shift ${shiftNumber}. Cash Float: KES ${params.openingCashFloat.toLocaleString()}, M-Pesa Entry: KES ${params.openingMpesaBalance.toLocaleString()}${
+        params.inconsistencyNote ? ` · Handover Note: ${params.inconsistencyNote}` : ''
+      }`,
       actorName: params.workerName,
       severity: hasOpeningInconsistency ? 'WARNING' : 'SUCCESS',
       amount: params.openingMpesaBalance,
