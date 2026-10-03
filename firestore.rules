@@ -1,0 +1,65 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny: block all unspecified read/write access to eliminate backdoors
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Business establishments
+    match /businesses/{businessId} {
+      allow read: if true;
+      allow write: if false; // Only written by authorized admin processes
+    }
+
+    // Bar products & catalog: read-only for bar app clients
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Operational shifts: readable & writable for bar operations
+    match /shifts/{shiftId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.shiftNumber != null 
+                            && request.resource.data.workerName != null;
+      allow delete: if false; // Shifts are immutable audit logs
+    }
+
+    // Physical inventory counts
+    match /inventory/{invId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Mpesa account configurations (read balances, updates must preserve identifier)
+    match /mpesa_accounts/{accountId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Shift operational expenses
+    match /expenses/{expenseId} {
+      allow read: if true;
+      allow create: if request.resource.data.amount is number 
+                    && request.resource.data.amount >= 0;
+      allow update, delete: if false; // Expenses cannot be forged or erased
+    }
+
+    // Stock restocks
+    match /stock_additions/{additionId} {
+      allow read: if true;
+      allow create: if request.resource.data.quantity is number 
+                    && request.resource.data.quantity > 0;
+      allow update: if true;
+      allow delete: if resource.data.isImmutable != true; // Immutable verified additions cannot be deleted
+    }
+
+    // Real-time operational activity events
+    match /events/{eventId} {
+      allow read: if true;
+      allow create: if request.resource.data.type != null;
+      allow update, delete: if false; // Operational events are append-only audit trail
+    }
+  }
+}

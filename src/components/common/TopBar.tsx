@@ -127,6 +127,13 @@ export const TopBar: React.FC<TopBarProps> = ({
   };
 
   const handleNavClick = (tabId: string) => {
+    const ownerTabs = ['overview', 'shifts', 'stock', 'settings', 'catalog', 'mpesa', 'partners', 'staff'];
+    if (currentUser?.role !== 'OWNER' && ownerTabs.includes(tabId)) {
+      setBlockedToast('Access Denied: Owner credentials required for this section.');
+      setTimeout(() => setBlockedToast(null), 4000);
+      return;
+    }
+
     const { isLocked, reason } = checkTabLockStatus(tabId);
     if (isLocked) {
       setBlockedToast(reason || 'This step is locked. Follow the work routine progressively.');

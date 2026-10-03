@@ -6,19 +6,40 @@ import { TopBar } from './components/common/TopBar';
 import { WorkerTerminal } from './components/worker/WorkerTerminal';
 import { OwnerDashboard } from './components/owner/OwnerDashboard';
 
+// Helper to sanitize session user and prevent credential leakage into LocalStorage
+const sanitizeSessionUser = (user: User): Partial<User> => {
+  return {
+    id: user.id,
+    businessId: user.businessId,
+    name: user.name,
+    username: user.username,
+    role: user.role,
+    createdAt: user.createdAt,
+  };
+};
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('bartracker_session_user');
       if (saved) {
         const u = JSON.parse(saved);
-        if (u.businessId) {
-          store.setCurrentBusiness(u.businessId);
+        if (u && u.id && u.username) {
+          // Cryptographically/authoritatively validate against persistent store
+          const authenticUser = store.validateSessionUser(u.id, u.username);
+          if (authenticUser) {
+            if (authenticUser.businessId) {
+              store.setCurrentBusiness(authenticUser.businessId);
+            }
+            return authenticUser;
+          }
         }
-        return u;
+        // Invalidate fake or tampered session
+        localStorage.removeItem('bartracker_session_user');
       }
       return null;
     } catch {
+      localStorage.removeItem('bartracker_session_user');
       return null;
     }
   });
@@ -28,16 +49,35 @@ export default function App() {
       const saved = localStorage.getItem('bartracker_session_user');
       if (saved) {
         const u = JSON.parse(saved);
-        if (u.role === 'OWNER') return 'overview';
-        const active = store.getActiveShift();
-        if (!active) return 'start';
-        return active.counterFinished ? 'end_shift' : 'counter';
+        if (u && u.id && u.username) {
+          const authenticUser = store.validateSessionUser(u.id, u.username);
+          if (authenticUser) {
+            if (authenticUser.role === 'OWNER') return 'overview';
+            const active = store.getActiveShift();
+            if (!active) return 'start';
+            return active.counterFinished ? 'end_shift' : 'counter';
+          }
+        }
       }
     } catch {
       // fallback
     }
     return 'start';
   });
+
+  // Strict route/tab authorization guard: prevent cross-role tab penetration
+  useEffect(() => {
+    if (!currentUser) return;
+    const ownerTabs = ['overview', 'shifts', 'stock', 'settings', 'catalog', 'mpesa', 'partners', 'staff'];
+    const workerTabs = ['start', 'counter', 'end_shift', 'history'];
+
+    if (currentUser.role === 'WORKER' && ownerTabs.includes(activeTab)) {
+      setActiveTab('start');
+    } else if (currentUser.role === 'OWNER' && workerTabs.includes(activeTab)) {
+      setActiveTab('overview');
+    }
+  }, [currentUser, activeTab]);
+
   // tick triggers re-render whenever store state mutates
   const [, setTick] = useState<number>(0);
 
@@ -49,17 +89,20 @@ export default function App() {
   }, []);
 
   const handleLogin = (user: User) => {
-    setCurrentUser(user);
-    if (user.businessId) {
-      store.setCurrentBusiness(user.businessId);
+    // Re-verify authoritative user
+    const authentic = store.validateSessionUser(user.id, user.username) || user;
+    setCurrentUser(authentic);
+    if (authentic.businessId) {
+      store.setCurrentBusiness(authentic.businessId);
     }
     try {
-      localStorage.setItem('bartracker_session_user', JSON.stringify(user));
+      // Never store password or raw pinCode in LocalStorage
+      localStorage.setItem('bartracker_session_user', JSON.stringify(sanitizeSessionUser(authentic)));
     } catch (err) {
       console.error(err);
     }
     // Set appropriate initial tab
-    if (user.role === 'OWNER') {
+    if (authentic.role === 'OWNER') {
       setActiveTab('overview');
     } else {
       const active = store.getActiveShift();
@@ -78,6 +121,7 @@ export default function App() {
     } catch (err) {
       console.error(err);
     }
+    setActiveTab('start');
   };
 
   const discrepancies = store.getDiscrepancies({ status: 'FLAGGED' });

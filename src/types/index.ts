@@ -270,6 +270,7 @@ export interface User {
   pinCode: string;
   password?: string;
   createdAt?: string;
+  isArchived?: boolean;
 }
 
 // --- Inter-Business Connection & Stock Transfer Types ---

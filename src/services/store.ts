@@ -866,6 +866,20 @@ class StoreService {
     return this.get<User[]>(STORAGE_KEYS.USERS, []);
   }
 
+  public validateSessionUser(userId: string, username: string): User | null {
+    if (!userId || !username) return null;
+    const cleanUsername = username.trim().toLowerCase();
+    const users = this.getUsers();
+    const user = users.find(
+      (u) =>
+        u.id === userId &&
+        u.username.toLowerCase() === cleanUsername &&
+        !u.isArchived
+    );
+    if (!user) return null;
+    return user;
+  }
+
   public authenticateUser(usernameInput: string, credentialInput: string): User | null {
     const cleanUsername = usernameInput.trim().toLowerCase();
     const cleanCredential = credentialInput.trim();
@@ -873,10 +887,7 @@ class StoreService {
 
     const users = this.getUsers();
     const user = users.find(
-      (u) =>
-        u.username.toLowerCase() === cleanUsername ||
-        u.name.toLowerCase() === cleanUsername ||
-        u.id.toLowerCase() === cleanUsername
+      (u) => u.username.toLowerCase() === cleanUsername && !u.isArchived
     );
 
     if (!user) return null;
@@ -899,7 +910,21 @@ class StoreService {
   }): User {
     const users = this.getUsers();
     const cleanUsername = params.username.trim().toLowerCase();
+    const cleanPin = params.pinCode.trim();
+    const cleanPassword = params.password?.trim();
     const bizId = params.businessId || this.getCurrentBusinessId();
+
+    if (!/^[a-z0-9_]{3,24}$/.test(cleanUsername)) {
+      throw new Error('Username must be 3 to 24 characters (lowercase letters, digits, underscore).');
+    }
+
+    if (!/^\d{4,6}$/.test(cleanPin)) {
+      throw new Error('Security PIN must be between 4 and 6 numeric digits.');
+    }
+
+    if (params.role === 'OWNER' && (!cleanPassword || cleanPassword.length < 6)) {
+      throw new Error('Owner accounts require a secure web password of at least 6 characters.');
+    }
 
     if (users.some((u) => u.username.toLowerCase() === cleanUsername)) {
       throw new Error(`Username "${params.username}" is already taken.`);
@@ -911,8 +936,8 @@ class StoreService {
       name: params.name.trim(),
       username: cleanUsername,
       role: params.role,
-      pinCode: params.pinCode.trim(),
-      password: params.password?.trim() || undefined,
+      pinCode: cleanPin,
+      password: cleanPassword || undefined,
       createdAt: new Date().toISOString(),
     };
 
@@ -938,6 +963,9 @@ class StoreService {
 
     if (updates.username) {
       const cleanUsername = updates.username.trim().toLowerCase();
+      if (!/^[a-z0-9_]{3,24}$/.test(cleanUsername)) {
+        throw new Error('Username must be 3 to 24 characters (lowercase letters, digits, underscore).');
+      }
       if (users.some((u) => u.id !== userId && u.username.toLowerCase() === cleanUsername)) {
         throw new Error(`Username "${updates.username}" is already taken.`);
       }
@@ -946,8 +974,20 @@ class StoreService {
 
     if (updates.name) user.name = updates.name.trim();
     if (updates.role) user.role = updates.role;
-    if (updates.pinCode) user.pinCode = updates.pinCode.trim();
-    if (updates.password !== undefined) user.password = updates.password.trim();
+    if (updates.pinCode !== undefined) {
+      const cleanPin = updates.pinCode.trim();
+      if (!/^\d{4,6}$/.test(cleanPin)) {
+        throw new Error('Security PIN must be between 4 and 6 numeric digits.');
+      }
+      user.pinCode = cleanPin;
+    }
+    if (updates.password !== undefined) {
+      const cleanPassword = updates.password.trim();
+      if (cleanPassword && cleanPassword.length < 6) {
+        throw new Error('Password must be at least 6 characters.');
+      }
+      user.password = cleanPassword || undefined;
+    }
 
     this.set(STORAGE_KEYS.USERS, users);
     this.notify();
