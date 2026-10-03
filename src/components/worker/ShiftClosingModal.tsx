@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Shift, ShiftStockItem, Expense } from '../../types';
+import { store } from '../../services/store';
 import {
   X,
   Coins,
@@ -34,6 +35,7 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
   onConfirmClose,
 }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const primaryMpesa = store.getPrimaryMpesaAccount();
 
   // 1. Stock left on counter
   const [closingPhysicalCounts, setClosingPhysicalCounts] = useState<Record<string, number>>(() => {
@@ -336,9 +338,18 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
 
               {/* M-Pesa Balance */}
               <div className="bg-[#0E1420] border border-slate-800 rounded-2xl p-4">
-                <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">
-                  <Smartphone className="w-4 h-4" />
-                  <span>Final M-Pesa Till Balance</span>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                    <Smartphone className="w-4 h-4" />
+                    <span>Final M-Pesa Till Balance</span>
+                  </div>
+                  {primaryMpesa && (
+                    <span className="text-[11px] font-mono text-emerald-300 font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/60">
+                      {primaryMpesa.accountType === 'BUY_GOODS_TILL' ? 'Till: ' : primaryMpesa.accountType === 'PAYBILL' ? 'Paybill: ' : ''}
+                      {primaryMpesa.identifier}
+                      {primaryMpesa.accountNumber ? ` (${primaryMpesa.accountNumber})` : ''}
+                    </span>
+                  )}
                 </div>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-slate-400">

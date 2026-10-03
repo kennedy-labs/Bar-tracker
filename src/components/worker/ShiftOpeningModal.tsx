@@ -33,8 +33,9 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
 }) => {
   const [step, setStep] = useState<1 | 2>(1);
 
-  // Retrieve previous shift info if any
+  // Retrieve previous shift info and configured M-Pesa account
   const lastClosedShift = store.getLastClosedShift();
+  const primaryMpesa = store.getPrimaryMpesaAccount();
 
   // Step 1: Money (Empty initially with helpful placeholder)
   const [openingMpesaBalance, setOpeningMpesaBalance] = useState<string>('');
@@ -159,12 +160,25 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
 
           {/* M-Pesa Balance */}
           <div className="bg-[#0E1420] border border-slate-800 rounded-2xl p-4">
-            <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">
-              <Smartphone className="w-4 h-4" />
-              <span>2. Current M-Pesa Till Balance</span>
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                <Smartphone className="w-4 h-4" />
+                <span>2. Current M-Pesa Till Balance</span>
+              </div>
+              {primaryMpesa && (
+                <span className="text-[11px] font-mono text-emerald-300 font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/60">
+                  {primaryMpesa.accountType === 'BUY_GOODS_TILL' ? 'Till: ' : primaryMpesa.accountType === 'PAYBILL' ? 'Paybill: ' : ''}
+                  {primaryMpesa.identifier}
+                  {primaryMpesa.accountNumber ? ` (${primaryMpesa.accountNumber})` : ''}
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400 mb-2">
-              Check the SMS balance on the bar's M-Pesa phone right now.
+              {primaryMpesa ? (
+                <>Check the current balance on <strong>{primaryMpesa.accountName}</strong> via SMS or till app.</>
+              ) : (
+                <>Check the SMS balance on the bar's M-Pesa phone right now.</>
+              )}
             </p>
             <div className="relative">
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-slate-400">

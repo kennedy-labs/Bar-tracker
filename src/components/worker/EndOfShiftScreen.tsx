@@ -40,6 +40,7 @@ export const EndOfShiftScreen: React.FC<EndOfShiftScreenProps> = ({
   const activeShift = store.getActiveShift();
   const lastShift = store.getLastClosedShift();
   const currentBiz = store.getCurrentBusiness();
+  const primaryMpesa = store.getPrimaryMpesaAccount();
 
   // If active shift exists, get its stock items and expenses
   const shiftStockItems: ShiftStockItem[] = activeShift
@@ -507,9 +508,17 @@ Generated via Bar Track System`;
                     Ending M-Pesa Balance
                   </label>
                 </div>
-                <span className="text-[10px] text-slate-400 font-mono">
-                  Opening was: KES {openingMpesa.toLocaleString()}
-                </span>
+                <div className="flex items-center gap-2">
+                  {primaryMpesa && (
+                    <span className="text-[10px] font-mono text-emerald-300 font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/60">
+                      {primaryMpesa.identifier}
+                      {primaryMpesa.accountNumber ? ` (${primaryMpesa.accountNumber})` : ''}
+                    </span>
+                  )}
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    Opening was: KES {openingMpesa.toLocaleString()}
+                  </span>
+                </div>
               </div>
 
               <div className="relative">

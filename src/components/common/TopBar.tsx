@@ -14,6 +14,7 @@ import {
   ClipboardCheck,
   Layers,
   Lock,
+  Smartphone,
 } from 'lucide-react';
 import { BusinessIdentityBadge } from './BusinessIdentityBadge';
 
@@ -48,6 +49,7 @@ export const TopBar: React.FC<TopBarProps> = ({
     { id: 'end_shift', label: 'End of Shift', icon: ClipboardCheck },
     { id: 'stock', label: 'Stock Levels', icon: Layers },
     { id: 'catalog', label: 'Drinks & Pricing', icon: Wine },
+    { id: 'mpesa', label: 'M-Pesa Setup', icon: Smartphone },
     {
       id: 'partners',
       label: 'Partner Bars',

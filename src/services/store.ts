@@ -1,6 +1,7 @@
 import {
   Product,
   MpesaAccount,
+  MpesaAccountType,
   User,
   Role,
   InventoryItem,
@@ -35,6 +36,7 @@ const STORAGE_KEYS = {
   INTER_TRANSFERS: 'bar_track_inter_transfers',
   PRODUCTS: 'bar_track_products',
   MPESA_ACCOUNTS: 'bar_track_mpesa_accounts',
+  MPESA_ACCOUNTS_MAP: 'bar_track_mpesa_accounts_map',
   USERS: 'bar_track_users',
   INVENTORY_MAP: 'bar_track_inventory_map',
   SHIFTS_MAP: 'bar_track_shifts_map',
@@ -912,8 +914,204 @@ class StoreService {
     return list.filter((p) => !p.isArchived);
   }
 
-  public getMpesaAccounts(): MpesaAccount[] {
-    return this.get<MpesaAccount[]>(STORAGE_KEYS.MPESA_ACCOUNTS, []);
+  public getMpesaAccounts(includeArchived = false): MpesaAccount[] {
+    const bizId = this.getCurrentBusinessId();
+    const map = this.get<Record<string, MpesaAccount[]>>(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, {});
+
+    // Seed initial accounts if not yet set for this business
+    if (!map[bizId]) {
+      const biz = this.getCurrentBusiness();
+      const defaultAccounts: MpesaAccount[] = [
+        {
+          id: `mpesa-${bizId}-till-1`,
+          businessId: bizId,
+          accountName: `${biz?.name || 'Bar'} Counter Till`,
+          accountType: 'BUY_GOODS_TILL',
+          identifier: '5421980',
+          currentBalance: 0,
+          isPrimary: true,
+          createdAt: new Date().toISOString(),
+          notes: 'Main bar front counter customer till',
+        },
+        {
+          id: `mpesa-${bizId}-paybill-1`,
+          businessId: bizId,
+          accountName: `${biz?.name || 'Bar'} Paybill`,
+          accountType: 'PAYBILL',
+          identifier: '889900',
+          accountNumber: 'BAR',
+          currentBalance: 0,
+          isPrimary: false,
+          createdAt: new Date().toISOString(),
+          notes: 'Business paybill for direct customer settlements',
+        },
+        {
+          id: `mpesa-${bizId}-pochi-1`,
+          businessId: bizId,
+          accountName: 'Manager Pochi la Biashara',
+          accountType: 'POCHI_LA_BIASHARA',
+          identifier: '0722 841 902',
+          currentBalance: 0,
+          isPrimary: false,
+          createdAt: new Date().toISOString(),
+          notes: 'Dedicated mobile number for direct bar payments',
+        },
+      ];
+      map[bizId] = defaultAccounts;
+      this.set(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, map);
+    }
+
+    const accounts = map[bizId] || [];
+    if (includeArchived) return accounts;
+    return accounts.filter((a) => !a.isArchived);
+  }
+
+  public getPrimaryMpesaAccount(): MpesaAccount | undefined {
+    const accounts = this.getMpesaAccounts(false);
+    return accounts.find((a) => a.isPrimary) || accounts[0];
+  }
+
+  public addMpesaAccount(params: {
+    accountName: string;
+    accountType: MpesaAccountType;
+    identifier: string;
+    accountNumber?: string;
+    currentBalance?: number;
+    isPrimary?: boolean;
+    notes?: string;
+  }): MpesaAccount {
+    const bizId = this.getCurrentBusinessId();
+    const map = this.get<Record<string, MpesaAccount[]>>(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, {});
+    const accounts = this.getMpesaAccounts(true);
+
+    const isFirst = accounts.filter((a) => !a.isArchived).length === 0;
+    const shouldBePrimary = Boolean(params.isPrimary) || isFirst;
+
+    if (shouldBePrimary) {
+      accounts.forEach((a) => {
+        a.isPrimary = false;
+      });
+    }
+
+    const newAccount: MpesaAccount = {
+      id: `mpesa-${Date.now()}`,
+      businessId: bizId,
+      accountName: params.accountName.trim(),
+      accountType: params.accountType,
+      identifier: params.identifier.trim(),
+      accountNumber: params.accountNumber ? params.accountNumber.trim() : undefined,
+      currentBalance: 0,
+      isPrimary: shouldBePrimary,
+      isArchived: false,
+      notes: params.notes ? params.notes.trim() : undefined,
+      createdAt: new Date().toISOString(),
+    };
+
+    accounts.unshift(newAccount);
+    map[bizId] = accounts;
+    this.set(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, map);
+
+    this.addEvent({
+      type: 'INFO',
+      title: `M-Pesa Account Configured`,
+      description: `Configured ${newAccount.accountType.replace(/_/g, ' ')}: "${newAccount.accountName}" (${newAccount.identifier})`,
+      actorName: 'Owner Management',
+      severity: 'INFO',
+    });
+
+    this.notify();
+    return newAccount;
+  }
+
+  public updateMpesaAccount(
+    accountId: string,
+    updates: Partial<Omit<MpesaAccount, 'id' | 'businessId'>>
+  ): MpesaAccount {
+    const bizId = this.getCurrentBusinessId();
+    const map = this.get<Record<string, MpesaAccount[]>>(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, {});
+    const accounts = this.getMpesaAccounts(true);
+
+    const account = accounts.find((a) => a.id === accountId);
+    if (!account) throw new Error('M-Pesa account not found.');
+
+    if (updates.isPrimary) {
+      accounts.forEach((a) => {
+        a.isPrimary = false;
+      });
+    }
+
+    if (updates.accountName !== undefined) account.accountName = updates.accountName.trim();
+    if (updates.accountType !== undefined) account.accountType = updates.accountType;
+    if (updates.identifier !== undefined) account.identifier = updates.identifier.trim();
+    if (updates.accountNumber !== undefined) account.accountNumber = updates.accountNumber ? updates.accountNumber.trim() : undefined;
+    if (updates.isPrimary !== undefined) account.isPrimary = updates.isPrimary;
+    if (updates.isArchived !== undefined) account.isArchived = updates.isArchived;
+    if (updates.notes !== undefined) account.notes = updates.notes ? updates.notes.trim() : undefined;
+
+    map[bizId] = accounts;
+    this.set(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, map);
+
+    this.addEvent({
+      type: 'INFO',
+      title: `M-Pesa Account Updated`,
+      description: `Updated account "${account.accountName}" (${account.identifier})`,
+      actorName: 'Owner Management',
+      severity: 'INFO',
+    });
+
+    this.notify();
+    return account;
+  }
+
+  public toggleMpesaAccountActive(accountId: string): MpesaAccount {
+    const accounts = this.getMpesaAccounts(true);
+    const account = accounts.find((a) => a.id === accountId);
+    if (!account) throw new Error('M-Pesa account not found.');
+    const newStatus = account.isActive === false ? true : false;
+    return this.updateMpesaAccount(accountId, { isActive: newStatus });
+  }
+
+  public setPrimaryMpesaAccount(accountId: string): void {
+    const bizId = this.getCurrentBusinessId();
+    const map = this.get<Record<string, MpesaAccount[]>>(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, {});
+    const accounts = this.getMpesaAccounts(true);
+
+    accounts.forEach((a) => {
+      a.isPrimary = a.id === accountId;
+    });
+
+    map[bizId] = accounts;
+    this.set(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, map);
+    this.notify();
+  }
+
+  public deleteMpesaAccount(accountId: string): boolean {
+    const bizId = this.getCurrentBusinessId();
+    const map = this.get<Record<string, MpesaAccount[]>>(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, {});
+    const accounts = this.getMpesaAccounts(true);
+
+    const index = accounts.findIndex((a) => a.id === accountId);
+    if (index === -1) return false;
+
+    const removed = accounts.splice(index, 1)[0];
+    if (removed.isPrimary) {
+      const remainingActive = accounts.find((a) => !a.isArchived);
+      if (remainingActive) remainingActive.isPrimary = true;
+    }
+
+    map[bizId] = accounts;
+    this.set(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, map);
+
+    this.addEvent({
+      type: 'DISCREPANCY_FLAGGED',
+      title: `M-Pesa Account Removed`,
+      description: `Removed ${removed.accountName} (${removed.identifier})`,
+      actorName: 'Owner Management',
+      severity: 'WARNING',
+    });
+
+    this.notify();
+    return true;
   }
 
   public getInventory(): InventoryItem[] {

@@ -53,10 +53,18 @@ export type MpesaAccountType =
 
 export interface MpesaAccount {
   id: string;
+  businessId?: string;
   accountName: string;
   accountType: MpesaAccountType;
   identifier: string; // Till number, Paybill shortcode, phone
-  currentBalance: number;
+  accountNumber?: string; // For Paybill shortcodes: specific account identifier (e.g. BAR)
+  currentBalance?: number;
+  isPrimary?: boolean;
+  isActive?: boolean;
+  isArchived?: boolean;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ShiftStockItem {
