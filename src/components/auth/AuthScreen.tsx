@@ -28,9 +28,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const currentBiz = store.getCurrentBusiness();
   const [viewMode, setViewMode] = useState<'SIGN_IN' | 'REGISTER'>(() => {
     if (typeof window !== 'undefined') {
+      const path = window.location.pathname.toLowerCase();
       const hash = window.location.hash.toLowerCase();
       const search = window.location.search.toLowerCase();
       if (
+        path.includes('signup') ||
+        path.includes('register') ||
         hash.includes('signup') ||
         hash.includes('register') ||
         search.includes('signup') ||

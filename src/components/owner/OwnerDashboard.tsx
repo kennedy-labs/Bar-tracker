@@ -204,6 +204,19 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               <span>{pendingRestocksCount} Restock Pending</span>
             </button>
           )}
+
+          {/* Quick Register Another Bar Button */}
+          <button
+            onClick={() => {
+              window.location.hash = 'signup';
+              window.location.reload();
+            }}
+            className="px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold flex items-center gap-1.5 transition-colors cursor-pointer text-xs"
+            title="Register another bar establishment as Owner"
+          >
+            <Store className="w-3.5 h-3.5 text-emerald-400" />
+            <span>+ Register New Bar</span>
+          </button>
         </div>
       </div>
 

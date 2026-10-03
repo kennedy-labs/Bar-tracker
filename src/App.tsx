@@ -21,6 +21,21 @@ const sanitizeSessionUser = (user: User): Partial<User> => {
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
+      if (typeof window !== 'undefined') {
+        const path = window.location.pathname.toLowerCase();
+        const hash = window.location.hash.toLowerCase();
+        const search = window.location.search.toLowerCase();
+        if (
+          path.includes('signup') ||
+          path.includes('register') ||
+          hash.includes('signup') ||
+          hash.includes('register') ||
+          search.includes('signup') ||
+          search.includes('register')
+        ) {
+          return null;
+        }
+      }
       const saved = localStorage.getItem('bartracker_session_user');
       if (saved) {
         const u = JSON.parse(saved);
@@ -86,6 +101,17 @@ export default function App() {
       setTick((t) => t + 1);
     });
     return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    const handleHash = () => {
+      const hash = window.location.hash.toLowerCase();
+      if (hash.includes('signup') || hash.includes('register')) {
+        setCurrentUser(null);
+      }
+    };
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
   }, []);
 
   const handleLogin = (user: User) => {
