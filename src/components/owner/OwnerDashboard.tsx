@@ -421,56 +421,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
             </div>
           )}
 
-          {/* Configured M-Pesa Payment Channels Banner */}
-          {(() => {
-            const mpesaAccounts = store.getMpesaAccounts(false);
-            const primaryTill = store.getPrimaryMpesaAccount();
-
-            return (
-              <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-[#121824] via-[#141C2B] to-[#121824] border border-[#1E293B] shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                    <Smartphone className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-white uppercase tracking-wider">
-                        Configured M-Pesa Channels
-                      </span>
-                      <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-800/60 px-2 py-0.5 rounded-full">
-                        {mpesaAccounts.length} Active
-                      </span>
-                    </div>
-                    <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
-                      {primaryTill ? (
-                        <>
-                          <span>Default Till:</span>
-                          <span className="font-mono font-bold text-white bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                            {primaryTill.identifier}
-                          </span>
-                          <span className="text-slate-300">({primaryTill.accountName})</span>
-                        </>
-                      ) : (
-                        <span>No default till configured. Add your Buy Goods Till or Paybill.</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setActiveTab('mpesa')}
-                    className="py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-950/60 cursor-pointer"
-                  >
-                    <Smartphone className="w-3.5 h-3.5" />
-                    <span>Manage Tills & Paybills</span>
-                    <ArrowUpRight className="w-3.5 h-3.5 ml-0.5" />
-                  </button>
-                </div>
-              </div>
-            );
-          })()}
-
           {/* Active Counters Grid */}
           <div>
             <div className="flex items-center justify-between mb-3">
