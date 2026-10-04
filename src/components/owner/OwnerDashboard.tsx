@@ -703,43 +703,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               </div>
             </div>
           )}
-
-          {/* Live Recent Event Ticker */}
-          <div className="p-5 rounded-3xl bg-[#121824] border border-[#1E293B]">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                  Live Operations Stream
-                </h3>
-              </div>
-              <button
-                onClick={() => setActiveTab('events')}
-                className="text-xs text-emerald-400 hover:underline font-mono"
-              >
-                Inspect All Events →
-              </button>
-            </div>
-
-            <div className="space-y-2 max-h-72 overflow-y-auto">
-              {events.slice(0, 6).map((evt) => (
-                <div
-                  key={evt.id}
-                  className="p-3 rounded-xl bg-[#0E1420] border border-slate-800/80 flex items-center justify-between gap-3 text-xs"
-                >
-                  <div className="min-w-0">
-                    <div className="font-semibold text-white truncate">{evt.title}</div>
-                    <div className="text-[11px] text-slate-400 truncate">
-                      {evt.description} · <span className="font-mono text-slate-500">By {evt.actorName}</span>
-                    </div>
-                  </div>
-                  <div className="text-[10px] text-slate-500 font-mono shrink-0">
-                    {new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       )}
 
