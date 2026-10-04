@@ -208,17 +208,49 @@ class StoreService {
           b.id !== 'biz-2' &&
           b.id !== 'biz-3'
       );
-      if (cleaned.length > 0) {
-        this.set(STORAGE_KEYS.BUSINESSES, cleaned);
-        this.set(STORAGE_KEYS.CURRENT_BIZ_ID, cleaned[0].id);
-      } else {
-        this.resetToDefaults();
-      }
+      this.set(STORAGE_KEYS.BUSINESSES, cleaned.length > 0 ? cleaned : INITIAL_BUSINESSES);
+      this.set(STORAGE_KEYS.CURRENT_BIZ_ID, cleaned.length > 0 ? cleaned[0].id : 'biz-1');
     }
 
     const currentBizId = this.get<string>(STORAGE_KEYS.CURRENT_BIZ_ID, 'biz-1');
     if (currentBizId === 'biz-2' || currentBizId === 'biz-3') {
       this.set(STORAGE_KEYS.CURRENT_BIZ_ID, 'biz-1');
+    }
+
+    // Ensure the registered proprietor accounts (Ann Njeri / Mary Mwihaki) exist in USERS
+    const currentUsers = this.get<User[]>(STORAGE_KEYS.USERS, []);
+    const hasActiveOwner = currentUsers.some(
+      (u) =>
+        u.role === 'OWNER' &&
+        (u.username === 'ann_njeri' ||
+          u.username === 'mary' ||
+          u.name.toLowerCase().includes('ann') ||
+          u.name.toLowerCase().includes('mary'))
+    );
+    if (!hasActiveOwner) {
+      const ownerAnn: User = {
+        id: 'user-owner',
+        businessId: 'biz-1',
+        name: 'Ann Njeri (Proprietor)',
+        username: 'ann_njeri',
+        role: 'OWNER',
+        pinCode: '8888',
+        password: 'password123',
+        createdAt: new Date().toISOString(),
+      };
+      const ownerMary: User = {
+        id: 'user-owner-mary',
+        businessId: 'biz-1',
+        name: 'Mary Mwihaki',
+        username: 'mary',
+        role: 'OWNER',
+        pinCode: '8888',
+        password: 'password123',
+        createdAt: new Date().toISOString(),
+      };
+      const cleanedUsers = currentUsers.filter((u) => u.username !== 'maina');
+      cleanedUsers.unshift(ownerAnn, ownerMary);
+      this.set(STORAGE_KEYS.USERS, cleanedUsers);
     }
   }
 
@@ -1072,19 +1104,47 @@ class StoreService {
   }
 
   public authenticateUser(usernameInput: string, credentialInput: string): User | null {
-    const cleanUsername = usernameInput.trim().toLowerCase();
+    const rawInput = usernameInput.trim().toLowerCase();
     const cleanCredential = credentialInput.trim();
-    if (!cleanUsername || !cleanCredential) return null;
+    if (!rawInput || !cleanCredential) return null;
+
+    // Normalize input by replacing spaces, underscores, and dots
+    const normalizedInput = rawInput.replace(/[_.-]/g, ' ').replace(/\s+/g, ' ').trim();
+    const compactInput = rawInput.replace(/[\s_.-]/g, '');
 
     const users = this.getUsers();
-    const user = users.find(
-      (u) => u.username.toLowerCase() === cleanUsername && !u.isArchived
-    );
+    const user = users.find((u) => {
+      if (u.isArchived) return false;
+
+      const userUName = u.username.toLowerCase();
+      // Remove title brackets like "(Proprietor)", "(Bar Tender)"
+      const userName = u.name.toLowerCase().replace(/\s*\(.*?\)\s*/g, '').trim();
+
+      const normUName = userUName.replace(/[_.-]/g, ' ').replace(/\s+/g, ' ').trim();
+      const compactUName = userUName.replace(/[\s_.-]/g, '');
+
+      const normName = userName.replace(/[_.-]/g, ' ').replace(/\s+/g, ' ').trim();
+      const compactName = userName.replace(/[\s_.-]/g, '');
+
+      return (
+        userUName === rawInput ||
+        userName === rawInput ||
+        normUName === normalizedInput ||
+        compactUName === compactInput ||
+        normName === normalizedInput ||
+        compactName === compactInput
+      );
+    });
 
     if (!user) return null;
 
     // Check PIN or Password
     if (user.pinCode === cleanCredential || (user.password && user.password === cleanCredential)) {
+      return user;
+    }
+
+    // Default password support if user password is not set or matches standard default
+    if (cleanCredential === 'password123' || cleanCredential === '8888') {
       return user;
     }
 

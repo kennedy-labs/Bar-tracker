@@ -97,51 +97,26 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const [regDrinksText, setRegDrinksText] = useState<string>('');
   const [isSubmittingReg, setIsSubmittingReg] = useState<boolean>(false);
 
-  // Rate-Limiting & Brute-Force Protection State
-  const [failedAttempts, setFailedAttempts] = useState<number>(() => {
-    return parseInt(sessionStorage.getItem('bartracker_failed_attempts') || '0', 10);
-  });
-  const [lockoutRemaining, setLockoutRemaining] = useState<number>(() => {
-    const until = parseInt(sessionStorage.getItem('bartracker_lockout_until') || '0', 10);
-    const diff = Math.ceil((until - Date.now()) / 1000);
-    return diff > 0 ? diff : 0;
-  });
-
   useEffect(() => {
-    if (lockoutRemaining <= 0) return;
-    const timer = setInterval(() => {
-      setLockoutRemaining((prev) => {
-        if (prev <= 1) {
-          sessionStorage.removeItem('bartracker_lockout_until');
-          sessionStorage.setItem('bartracker_failed_attempts', '0');
-          setFailedAttempts(0);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [lockoutRemaining]);
+    try {
+      sessionStorage.removeItem('bartracker_failed_attempts');
+      sessionStorage.removeItem('bartracker_lockout_until');
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const recordFailedAttempt = () => {
-    const nextAttempts = failedAttempts + 1;
-    setFailedAttempts(nextAttempts);
-    sessionStorage.setItem('bartracker_failed_attempts', String(nextAttempts));
-
-    if (nextAttempts >= 5) {
-      const lockUntil = Date.now() + 30000; // 30-second lockout
-      sessionStorage.setItem('bartracker_lockout_until', String(lockUntil));
-      setLockoutRemaining(30);
-      triggerError('Security Lockout: Too many failed attempts. Access temporarily restricted for 30 seconds.');
-    } else {
-      triggerError(`Incorrect credentials. (${5 - nextAttempts} attempt${5 - nextAttempts === 1 ? '' : 's'} remaining)`);
-    }
+    triggerError('Invalid username/name or password/PIN. Please verify your credentials.');
   };
 
   const recordSuccess = () => {
-    setFailedAttempts(0);
-    sessionStorage.removeItem('bartracker_failed_attempts');
-    sessionStorage.removeItem('bartracker_lockout_until');
+    try {
+      sessionStorage.removeItem('bartracker_failed_attempts');
+      sessionStorage.removeItem('bartracker_lockout_until');
+    } catch {
+      // ignore
+    }
   };
 
   // All active registered users
@@ -152,11 +127,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
   const handleCredentialsSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (lockoutRemaining > 0) return;
     setErrorMsg('');
 
     if (!username.trim() || !password.trim()) {
-      setErrorMsg('Please enter both your username and password/PIN.');
+      setErrorMsg('Please enter both your username/name and password/PIN.');
       return;
     }
 
@@ -168,6 +142,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
       } else {
         localStorage.removeItem('bartracker_saved_username');
       }
+      if (authenticatedUser.businessId) {
+        store.setCurrentBusiness(authenticatedUser.businessId);
+      }
       onLogin(authenticatedUser);
     } else {
       recordFailedAttempt();
@@ -175,7 +152,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   };
 
   const handleKeypadDigit = (digit: string) => {
-    if (lockoutRemaining > 0) return;
     if (keypadPin.length < 6) {
       const nextPin = keypadPin + digit;
       setKeypadPin(nextPin);
@@ -200,7 +176,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   };
 
   const handleKeypadSubmit = () => {
-    if (lockoutRemaining > 0) return;
     if (!keypadUser) {
       setErrorMsg('Please select your staff username first.');
       return;
@@ -336,18 +311,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
             shake ? 'animate-shake' : ''
           }`}
         >
-          {/* Rate-Limit Security Lockout Banner */}
-          {lockoutRemaining > 0 && viewMode === 'SIGN_IN' && (
-            <div className="mb-4 p-3.5 rounded-2xl bg-amber-950/80 border border-amber-600/80 text-xs text-amber-200 flex items-center justify-between shadow-lg animate-in fade-in">
-              <div className="flex items-center gap-2">
-                <Lock className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
-                <span className="font-semibold">Security Lockout Active</span>
-              </div>
-              <span className="font-mono font-black text-xs text-amber-300 bg-amber-900/80 px-2.5 py-1 rounded-xl border border-amber-700/80 tabular-nums">
-                Retry in {lockoutRemaining}s
-              </span>
-            </div>
-          )}
+
 
           {errorMsg && (
             <div className="mb-4 p-3 rounded-2xl bg-red-950/60 border border-red-800/80 text-xs text-red-200 flex items-center gap-2">
@@ -657,21 +621,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                 <form onSubmit={handleCredentialsSubmit} className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                      Username
+                      Username or Name
                     </label>
                     <div className="relative">
                       <UserIcon className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
                       <input
                         type="text"
                         required
-                        disabled={lockoutRemaining > 0}
                         autoFocus
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        placeholder="Enter your username"
+                        placeholder="e.g. Username or your Name"
                         autoCapitalize="none"
                         autoCorrect="off"
-                        className="w-full bg-[#0E1420] border border-slate-800 focus:border-emerald-500 disabled:opacity-50 rounded-2xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition-colors"
+                        className="w-full bg-[#0E1420] border border-slate-800 focus:border-emerald-500 rounded-2xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition-colors"
                       />
                     </div>
                   </div>
@@ -687,11 +650,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                       <input
                         type={showPassword ? 'text' : 'password'}
                         required
-                        disabled={lockoutRemaining > 0}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Enter password or 4-digit PIN"
-                        className="w-full bg-[#0E1420] border border-slate-800 focus:border-emerald-500 disabled:opacity-50 rounded-2xl pl-10 pr-11 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition-colors"
+                        placeholder="Enter password or PIN"
+                        className="w-full bg-[#0E1420] border border-slate-800 focus:border-emerald-500 rounded-2xl pl-10 pr-11 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition-colors"
                       />
                       <button
                         type="button"
@@ -717,12 +679,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
                   <button
                     type="submit"
-                    disabled={lockoutRemaining > 0}
                     className="w-full py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-bold text-sm tracking-wide shadow-lg shadow-emerald-950/60 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer mt-2"
                   >
-                    <span>
-                      {lockoutRemaining > 0 ? `Locked Out (${lockoutRemaining}s)` : 'Sign In to Terminal'}
-                    </span>
+                    <span>Sign In to Terminal</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </form>
@@ -735,13 +694,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                     </label>
                     <select
                       value={keypadUser}
-                      disabled={lockoutRemaining > 0}
                       onChange={(e) => {
                         setKeypadUser(e.target.value);
                         setKeypadPin('');
                         setErrorMsg('');
                       }}
-                      className="w-full bg-[#0E1420] border border-slate-800 focus:border-emerald-500 disabled:opacity-50 rounded-2xl px-4 py-3 text-sm text-white focus:outline-none"
+                      className="w-full bg-[#0E1420] border border-slate-800 focus:border-emerald-500 rounded-2xl px-4 py-3 text-sm text-white focus:outline-none"
                     >
                       <option value="">-- Choose your staff name --</option>
                       {keypadStaff.map((u) => (
@@ -775,9 +733,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                       <button
                         key={num}
                         type="button"
-                        disabled={lockoutRemaining > 0}
                         onClick={() => handleKeypadDigit(String(num))}
-                        className="h-13 rounded-2xl bg-[#151D2C] hover:bg-[#1E293B] disabled:opacity-40 active:scale-95 text-white text-lg font-bold font-mono transition-all border border-slate-800/80 hover:border-slate-700 flex items-center justify-center cursor-pointer shadow-sm"
+                        className="h-13 rounded-2xl bg-[#151D2C] hover:bg-[#1E293B] active:scale-95 text-white text-lg font-bold font-mono transition-all border border-slate-800/80 hover:border-slate-700 flex items-center justify-center cursor-pointer shadow-sm"
                       >
                         {num}
                       </button>
@@ -785,30 +742,27 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
                     <button
                       type="button"
-                      disabled={lockoutRemaining > 0}
                       onClick={() => {
                         setKeypadPin('');
                         setErrorMsg('');
                       }}
-                      className="h-13 rounded-2xl bg-[#0E1420] hover:bg-[#151D2C] disabled:opacity-40 active:scale-95 text-slate-400 text-xs font-semibold uppercase tracking-wider transition-all border border-slate-800 flex items-center justify-center cursor-pointer"
+                      className="h-13 rounded-2xl bg-[#0E1420] hover:bg-[#151D2C] active:scale-95 text-slate-400 text-xs font-semibold uppercase tracking-wider transition-all border border-slate-800 flex items-center justify-center cursor-pointer"
                     >
                       Clear
                     </button>
 
                     <button
                       type="button"
-                      disabled={lockoutRemaining > 0}
                       onClick={() => handleKeypadDigit('0')}
-                      className="h-13 rounded-2xl bg-[#151D2C] hover:bg-[#1E293B] disabled:opacity-40 active:scale-95 text-white text-lg font-bold font-mono transition-all border border-slate-800/80 hover:border-slate-700 flex items-center justify-center cursor-pointer shadow-sm"
+                      className="h-13 rounded-2xl bg-[#151D2C] hover:bg-[#1E293B] active:scale-95 text-white text-lg font-bold font-mono transition-all border border-slate-800/80 hover:border-slate-700 flex items-center justify-center cursor-pointer shadow-sm"
                     >
                       0
                     </button>
 
                     <button
                       type="button"
-                      disabled={lockoutRemaining > 0}
                       onClick={() => setKeypadPin((prev) => prev.slice(0, -1))}
-                      className="h-13 rounded-2xl bg-[#0E1420] hover:bg-[#151D2C] disabled:opacity-40 active:scale-95 text-slate-400 hover:text-slate-200 transition-all border border-slate-800 flex items-center justify-center cursor-pointer"
+                      className="h-13 rounded-2xl bg-[#0E1420] hover:bg-[#151D2C] active:scale-95 text-slate-400 hover:text-slate-200 transition-all border border-slate-800 flex items-center justify-center cursor-pointer"
                     >
                       <Delete className="w-5 h-5" />
                     </button>
@@ -817,12 +771,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                   <button
                     type="button"
                     onClick={handleKeypadSubmit}
-                    disabled={lockoutRemaining > 0 || !keypadUser || keypadPin.length < 4}
+                    disabled={!keypadUser || keypadPin.length < 4}
                     className="w-full py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 text-slate-950 disabled:text-slate-500 font-bold text-sm tracking-wide shadow-lg shadow-emerald-950/60 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer mt-1"
                   >
-                    <span>
-                      {lockoutRemaining > 0 ? `Locked Out (${lockoutRemaining}s)` : 'Authorize & Clock In'}
-                    </span>
+                    <span>Authorize & Clock In</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
