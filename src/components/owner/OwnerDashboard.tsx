@@ -581,67 +581,86 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
             </div>
           )}
 
-          {/* Active Counters Grid */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <span>Currently Active Shifts</span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800">
-                  {activeShifts.length} Online
-                </span>
-              </h3>
+          {/* Active Shift Attendant Section */}
+          <div className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[#121824] border border-[#1E293B] space-y-3.5 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Active Shift Attendant
+                </h3>
+              </div>
+              <span
+                className={`text-[10px] font-mono px-2.5 py-0.5 rounded-full font-bold uppercase ${
+                  activeShifts.length > 0
+                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                    : 'bg-slate-800 text-slate-400 border border-slate-700'
+                }`}
+              >
+                {activeShifts.length > 0 ? `${activeShifts.length} Attendant Online` : 'Counter Closed'}
+              </span>
             </div>
 
             {activeShifts.length === 0 ? (
-              <div className="p-6 sm:p-8 rounded-2xl sm:rounded-3xl bg-[#121824] border border-slate-800 text-center">
-                <Clock className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                <div className="text-sm font-bold text-slate-300">No Counter Currently Active</div>
-                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                  Workers have not yet verified opening counts for this cycle.
-                </p>
+              <div className="p-5 sm:p-6 rounded-2xl bg-[#0E1420] border border-slate-800/80 flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-slate-800/80 flex items-center justify-center text-slate-500 shrink-0">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-slate-300">No Attendant Currently on Shift</div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Counters are closed. Waiting for attendant to log in with their PIN and open a shift.
+                  </p>
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
                 {activeShifts.map((shift) => (
                   <div
                     key={shift.id}
-                    className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[#121824] border border-[#1E293B] shadow-lg relative overflow-hidden"
+                    className="p-4 rounded-2xl bg-gradient-to-br from-[#0E1420] via-[#121A28] to-[#0E1420] border-2 border-emerald-500/40 shadow-lg relative overflow-hidden"
                   >
                     <div className="flex items-center justify-between pb-3 border-b border-slate-800 gap-2">
-                      <div>
-                        <div className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                          <span>Shift #{shift.shiftNumber}</span>
-                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-sm shrink-0">
+                          {shift.workerName ? shift.workerName.charAt(0).toUpperCase() : '🍸'}
                         </div>
-                        <div className="text-xs text-slate-400 font-mono mt-0.5">
-                          Attendant: <span className="text-slate-200 font-medium">{shift.workerName}</span>
+                        <div>
+                          <div className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                            <span>{shift.workerName}</span>
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                          </div>
+                          <div className="text-xs text-slate-400 font-mono mt-0.5">
+                            Shift #{shift.shiftNumber} · Opened{' '}
+                            {new Date(shift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
                         </div>
                       </div>
                       <button
                         onClick={() => setSelectedShiftForAudit(shift)}
-                        className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer border border-slate-700 shrink-0"
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer border border-slate-700 shrink-0 transition-colors"
                       >
                         <Eye className="w-3.5 h-3.5" />
                         <span>Inspect Shift</span>
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-1.5 sm:gap-2 mt-3 sm:mt-4 text-xs">
-                      <div className="p-2 sm:p-3 rounded-xl bg-[#0E1420] border border-slate-800">
+                    <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
+                      <div className="p-2 sm:p-2.5 rounded-xl bg-[#0A0F18] border border-slate-800">
                         <div className="text-[10px] text-slate-400 truncate">Entry M-Pesa</div>
                         <div className="font-mono font-bold text-emerald-400 text-xs sm:text-sm mt-0.5 truncate">
                           KES {shift.openingMpesaBalance.toLocaleString()}
                         </div>
                       </div>
 
-                      <div className="p-2 sm:p-3 rounded-xl bg-[#0E1420] border border-slate-800">
+                      <div className="p-2 sm:p-2.5 rounded-xl bg-[#0A0F18] border border-slate-800">
                         <div className="text-[10px] text-slate-400 truncate">Cash Float</div>
                         <div className="font-mono font-bold text-amber-400 text-xs sm:text-sm mt-0.5 truncate">
                           KES {shift.openingCashFloat.toLocaleString()}
                         </div>
                       </div>
 
-                      <div className="p-2 sm:p-3 rounded-xl bg-[#0E1420] border border-slate-800">
+                      <div className="p-2 sm:p-2.5 rounded-xl bg-[#0A0F18] border border-slate-800">
                         <div className="text-[10px] text-slate-400 truncate">Drinks Sold</div>
                         <div className="font-mono font-bold text-white text-xs sm:text-sm mt-0.5 truncate">
                           {shift.recordedSalesCount || 0} units
@@ -933,176 +952,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
         </div>
       )}
 
-      {/* 4. SHIFTS TAB (HISTORICAL ACCOUNTABILITY) */}
-      {activeTab === 'shifts' && (
-        <div className="p-4 sm:p-6 rounded-3xl bg-[#121824] border border-[#1E293B] space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-            <div>
-              <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
-                <Layers className="w-5 h-5 text-emerald-400" />
-                <span>Shift Records & Handover Receipts</span>
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Detailed record of every shift worked, money collected, and stock balances
-              </p>
-            </div>
-          </div>
-
-          {/* Mobile Shift Cards (for Phones) */}
-          <div className="md:hidden space-y-3">
-            {shifts.map((s) => {
-              const netMpesa =
-                s.calculatedMpesaIncome !== undefined
-                  ? s.calculatedMpesaIncome
-                  : (s.closingMpesaBalance || 0) - s.openingMpesaBalance;
-              const netCash =
-                s.calculatedCashIncome !== undefined
-                  ? s.calculatedCashIncome
-                  : (s.closingCashActual || 0) - s.openingCashFloat;
-              const totalInc = s.totalIncomeReturned || netCash + netMpesa;
-              const variance = s.financialVariance || 0;
-
-              return (
-                <div
-                  key={s.id}
-                  className="p-4 rounded-2xl bg-[#0E1420] border border-slate-800 space-y-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-bold text-white">{s.workerName}</div>
-                      <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                        Shift #{s.shiftNumber} · {new Date(s.openedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                      </div>
-                    </div>
-                    <span
-                      className={`text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded ${
-                        s.status === 'ACTIVE'
-                          ? 'bg-blue-950 text-blue-400 border border-blue-800'
-                          : Math.abs(variance) <= 10
-                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                          : 'bg-red-950 text-red-400 border border-red-800'
-                      }`}
-                    >
-                      {s.status === 'ACTIVE'
-                        ? '🟢 Live'
-                        : Math.abs(variance) <= 10
-                        ? '✅ Balanced'
-                        : `⚠️ Short KES ${Math.abs(variance).toLocaleString()}`}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-800/80">
-                    <div className="p-2 rounded-xl bg-[#151D2C]">
-                      <div className="text-[10px] text-slate-400 uppercase">Money Collected</div>
-                      <div className="font-mono font-bold text-white mt-0.5">
-                        KES {totalInc.toLocaleString()}
-                      </div>
-                    </div>
-                    <div className="p-2 rounded-xl bg-[#151D2C]">
-                      <div className="text-[10px] text-slate-400 uppercase">Net Profit</div>
-                      <div className="font-mono font-bold text-emerald-400 mt-0.5">
-                        {s.netProfit !== undefined ? `KES ${s.netProfit.toLocaleString()}` : '-'}
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => setSelectedShiftForAudit(s)}
-                    className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>View Receipt & Audit</span>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Desktop Shift Table (for Larger Screens) */}
-          <div className="hidden md:block overflow-x-auto border border-slate-800 rounded-2xl bg-[#0E1420]">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-[#151D2C] text-slate-400 font-mono text-[10px] uppercase border-b border-slate-800">
-                <tr>
-                  <th className="p-3">Shift #</th>
-                  <th className="p-3">Attendant</th>
-                  <th className="p-3 text-right">Entry M-Pesa</th>
-                  <th className="p-3 text-right">Closing M-Pesa</th>
-                  <th className="p-3 text-right text-emerald-400">Net M-Pesa</th>
-                  <th className="p-3 text-right text-amber-400">Net Cash</th>
-                  <th className="p-3 text-right font-bold text-white">Total Income</th>
-                  <th className="p-3 text-right">Net Profit</th>
-                  <th className="p-3 text-center">Status</th>
-                  <th className="p-3 text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800 font-mono">
-                {shifts.map((s) => {
-                  const netMpesa =
-                    s.calculatedMpesaIncome !== undefined
-                      ? s.calculatedMpesaIncome
-                      : (s.closingMpesaBalance || 0) - s.openingMpesaBalance;
-                  const netCash =
-                    s.calculatedCashIncome !== undefined
-                      ? s.calculatedCashIncome
-                      : (s.closingCashActual || 0) - s.openingCashFloat;
-                  const totalInc = s.totalIncomeReturned || netCash + netMpesa;
-
-                  return (
-                    <tr key={s.id} className="hover:bg-slate-900/50">
-                      <td className="p-3 font-bold text-white">{s.shiftNumber}</td>
-                      <td className="p-3 font-sans">
-                        <div className="font-semibold text-slate-200">{s.workerName}</div>
-                        <div className="text-[10px] text-slate-500 font-mono">
-                          {new Date(s.openedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })} · {new Date(s.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </td>
-                      <td className="p-3 text-right text-slate-400">
-                        {s.openingMpesaBalance.toLocaleString()}
-                      </td>
-                      <td className="p-3 text-right text-slate-300">
-                        {s.closingMpesaBalance ? s.closingMpesaBalance.toLocaleString() : '-'}
-                      </td>
-                      <td className="p-3 text-right font-bold text-emerald-400">
-                        {s.closingMpesaBalance ? netMpesa.toLocaleString() : '-'}
-                      </td>
-                      <td className="p-3 text-right font-bold text-amber-400">
-                        {s.closingCashActual ? netCash.toLocaleString() : '-'}
-                      </td>
-                      <td className="p-3 text-right font-bold text-white">
-                        {s.status === 'CLOSED' ? `KES ${totalInc.toLocaleString()}` : 'In Progress'}
-                      </td>
-                      <td className="p-3 text-right font-bold text-emerald-300">
-                        {s.netProfit !== undefined ? `KES ${s.netProfit.toLocaleString()}` : '-'}
-                      </td>
-                      <td className="p-3 text-center">
-                        <span
-                          className={`text-[10px] uppercase px-2 py-0.5 rounded font-bold ${
-                            s.status === 'CLOSED'
-                              ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                              : 'bg-blue-950 text-blue-400 border border-blue-800'
-                          }`}
-                        >
-                          {s.status}
-                        </span>
-                      </td>
-                      <td className="p-3 text-center">
-                        <button
-                          onClick={() => setSelectedShiftForAudit(s)}
-                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-sans text-xs transition-colors cursor-pointer border border-slate-700"
-                        >
-                          Audit
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* 5. STOCK AUDIT TAB */}
+      {/* STOCK AUDIT TAB */}
       {activeTab === 'stock' && (
         <div className="space-y-6">
           <RestockAuditManager currentUser={currentUser} />

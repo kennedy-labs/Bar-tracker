@@ -75,7 +75,6 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   const ownerNavItems: NavItem[] = [
     { id: 'overview', label: 'Summary', icon: LayoutDashboard },
-    { id: 'shifts', label: 'Shifts', icon: Clock },
     { id: 'stock', label: 'Stock', icon: Layers },
     {
       id: 'settings',
