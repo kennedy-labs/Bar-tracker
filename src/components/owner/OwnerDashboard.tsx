@@ -137,6 +137,30 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     setEditingProductId(null);
   };
 
+  // Direct Stock Input Handlers (Owner can type any number)
+  const [stockInputs, setStockInputs] = useState<Record<string, string>>({});
+  const [savedStockNotice, setSavedStockNotice] = useState<string | null>(null);
+
+  const handleStockChange = (productId: string, val: string) => {
+    setStockInputs((prev) => ({ ...prev, [productId]: val }));
+  };
+
+  const handleStockCommit = (productId: string, currentVal: number) => {
+    const rawVal = stockInputs[productId];
+    if (rawVal === undefined || rawVal.trim() === '') return;
+    const num = parseInt(rawVal, 10);
+    if (isNaN(num) || num < 0) {
+      setStockInputs((prev) => ({ ...prev, [productId]: String(currentVal) }));
+      return;
+    }
+    if (num !== currentVal) {
+      store.adjustProductStock(productId, num);
+      const prod = products.find((p) => p.id === productId);
+      setSavedStockNotice(`Updated ${prod?.name || 'drink'} stock to ${num}`);
+      setTimeout(() => setSavedStockNotice(null), 3500);
+    }
+  };
+
   const filteredDiscrepancies = discrepancies.filter((d) => {
     if (discrepancyFilter === 'ALL') return true;
     return d.status === discrepancyFilter;
@@ -965,10 +989,17 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   <span>Real-Time Bar Inventory Balances</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Current bottles on shelf and real-time inventory status
+                  Current bottles on shelf. Type any number in the On Hand box to adjust stock directly.
                 </p>
               </div>
             </div>
+
+            {savedStockNotice && (
+              <div className="p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-700 text-emerald-300 text-xs font-medium flex items-center gap-2">
+                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{savedStockNotice}</span>
+              </div>
+            )}
 
             {/* Mobile Inventory Cards (for Phones) */}
             <div className="md:hidden space-y-2.5">
@@ -1004,19 +1035,36 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                     <div className="grid grid-cols-3 gap-1.5 text-xs font-mono">
                       <div className="p-2 rounded-lg bg-[#151D2C]">
                         <div className="text-[9px] text-slate-400 uppercase">On Hand</div>
-                        <div className={`font-bold mt-0.5 ${isLow ? 'text-amber-400' : 'text-emerald-400'}`}>
-                          {stockOnHand}
+                        <div className="mt-1 flex items-center">
+                          <input
+                            type="number"
+                            min="0"
+                            value={stockInputs[p.id] !== undefined ? stockInputs[p.id] : stockOnHand}
+                            onChange={(e) => handleStockChange(p.id, e.target.value)}
+                            onBlur={() => handleStockCommit(p.id, stockOnHand)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                (e.target as HTMLInputElement).blur();
+                              }
+                            }}
+                            className={`w-16 px-1.5 py-0.5 bg-[#0E1420] text-center font-mono font-bold text-xs rounded-md border outline-none ${
+                              isLow
+                                ? 'text-amber-400 border-amber-800/80 focus:border-amber-500'
+                                : 'text-emerald-300 border-slate-700 focus:border-emerald-500'
+                            }`}
+                            title="Type new stock number and tap outside to save"
+                          />
                         </div>
                       </div>
                       <div className="p-2 rounded-lg bg-[#151D2C]">
                         <div className="text-[9px] text-slate-400 uppercase">Sell Price</div>
-                        <div className="text-white font-bold mt-0.5">
+                        <div className="text-white font-bold mt-1">
                           KES {p.sellingPrice}
                         </div>
                       </div>
                       <div className="p-2 rounded-lg bg-[#151D2C]">
                         <div className="text-[9px] text-slate-400 uppercase">Cost Price</div>
-                        <div className="text-slate-400 font-bold mt-0.5">
+                        <div className="text-slate-400 font-bold mt-1">
                           KES {p.costPrice}
                         </div>
                       </div>
@@ -1034,7 +1082,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                     <th className="p-3">Product Name</th>
                     <th className="p-3 text-center">Selling Price</th>
                     <th className="p-3 text-center">Cost Price</th>
-                    <th className="p-3 text-center text-emerald-400">Stock On Hand</th>
+                    <th className="p-3 text-center text-emerald-400">Stock On Hand (Editable)</th>
                     <th className="p-3 text-center">Status</th>
                   </tr>
                 </thead>
@@ -1050,8 +1098,30 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                         <td className="p-3 font-sans font-medium text-white">{p.name}</td>
                         <td className="p-3 text-center text-slate-200">KES {p.sellingPrice}</td>
                         <td className="p-3 text-center text-slate-400">KES {p.costPrice}</td>
-                        <td className="p-3 text-center font-bold text-emerald-400">
-                          {stockOnHand} {p.unit.toLowerCase()}s
+                        <td className="p-3 text-center">
+                          <div className="inline-flex items-center justify-center gap-1.5">
+                            <input
+                              type="number"
+                              min="0"
+                              value={stockInputs[p.id] !== undefined ? stockInputs[p.id] : stockOnHand}
+                              onChange={(e) => handleStockChange(p.id, e.target.value)}
+                              onBlur={() => handleStockCommit(p.id, stockOnHand)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  (e.target as HTMLInputElement).blur();
+                                }
+                              }}
+                              className={`w-20 px-2.5 py-1 bg-[#151D2C] hover:bg-[#1A2436] focus:bg-[#0E1420] text-center font-mono font-bold text-sm border rounded-lg outline-none transition-colors ${
+                                isLow
+                                  ? 'text-amber-400 border-amber-800/80 focus:border-amber-500'
+                                  : 'text-emerald-300 border-slate-700 focus:border-emerald-500'
+                              }`}
+                              title="Type a number and press Enter or click outside to save"
+                            />
+                            <span className="text-[11px] text-slate-500 font-mono">
+                              {p.unit.toLowerCase()}s
+                            </span>
+                          </div>
                         </td>
                         <td className="p-3 text-center">
                           <span

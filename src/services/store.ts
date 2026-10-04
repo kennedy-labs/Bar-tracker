@@ -2108,6 +2108,64 @@ class StoreService {
     this.notify();
   }
 
+  public adjustProductStock(productId: string, newQuantity: number): boolean {
+    const cleanQty = Math.max(0, Math.floor(Number(newQuantity) || 0));
+    const inv = this.getInventory();
+    const item = inv.find((i) => i.productId === productId);
+    const prevQty = item ? item.quantityOnHand : 0;
+    const delta = cleanQty - prevQty;
+
+    if (item) {
+      item.quantityOnHand = cleanQty;
+      item.updatedAt = new Date().toISOString();
+    } else {
+      inv.push({
+        productId,
+        quantityOnHand: cleanQty,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    this.saveCurrentInventory(inv);
+
+    // If an active shift exists and stock changed, keep active shift in balance
+    const activeShift = this.getActiveShift();
+    if (activeShift && delta !== 0) {
+      const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
+      const ssi = allSSIs.find(
+        (s) => s.shiftId === activeShift.id && s.productId === productId
+      );
+      if (ssi) {
+        if (delta > 0) {
+          ssi.additions = (ssi.additions || 0) + delta;
+        } else {
+          const absDelta = Math.abs(delta);
+          if ((ssi.additions || 0) >= absDelta) {
+            ssi.additions = (ssi.additions || 0) - absDelta;
+          } else {
+            const remaining = absDelta - (ssi.additions || 0);
+            ssi.additions = 0;
+            ssi.openingPhysicalCount = Math.max(0, (ssi.openingPhysicalCount || 0) - remaining);
+          }
+        }
+        this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
+      }
+    }
+
+    const products = this.getProducts(true);
+    const product = products.find((p) => p.id === productId);
+    const productName = product ? product.name : 'Drink';
+    this.addEvent({
+      type: 'INFO',
+      title: `Stock Count Adjusted: ${productName}`,
+      description: `Stock adjusted from ${prevQty} to ${cleanQty} (${delta >= 0 ? `+${delta}` : delta}) by Owner`,
+      actorName: 'Owner Audit Desk',
+      severity: 'INFO',
+    });
+
+    this.notify();
+    return true;
+  }
+
   public addProduct(params: {
     name: string;
     category: import('../types').ProductCategory;
