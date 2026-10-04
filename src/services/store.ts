@@ -199,17 +199,9 @@ class StoreService {
     this.set(STORAGE_KEYS.MPESA_ACCOUNTS, INITIAL_MPESA_ACCOUNTS);
     this.set(STORAGE_KEYS.USERS, INITIAL_USERS);
 
-    // Seed inventory for biz-1 and biz-2
+    // Seed inventory for active business only
     const inventoryMap: Record<string, InventoryItem[]> = {
       'biz-1': JSON.parse(JSON.stringify(INITIAL_INVENTORY)),
-      'biz-2': INITIAL_INVENTORY.map((item) => ({
-        ...item,
-        quantityOnHand: Math.floor(item.quantityOnHand * 0.75), // slightly different stock
-      })),
-      'biz-3': INITIAL_INVENTORY.map((item) => ({
-        ...item,
-        quantityOnHand: Math.floor(item.quantityOnHand * 0.9),
-      })),
     };
     this.set(STORAGE_KEYS.INVENTORY_MAP, inventoryMap);
 
@@ -240,20 +232,6 @@ class StoreService {
 
     const shiftsMap: Record<string, Shift[]> = {
       'biz-1': [sampleClosedShift],
-      'biz-2': [
-        {
-          id: 'shift-biz2-active',
-          shiftNumber: 'SH-260930-201',
-          workerId: 'user-2',
-          workerName: 'Peter Mwiti (Bar Tender)',
-          status: 'ACTIVE',
-          openedAt: new Date(Date.now() - 3600000 * 4).toISOString(),
-          openingCashFloat: 2500,
-          openingMpesaBalance: 8000,
-          recordedSalesCount: 14,
-        },
-      ],
-      'biz-3': [],
     };
     this.set(STORAGE_KEYS.SHIFTS_MAP, shiftsMap);
 
@@ -292,17 +270,6 @@ class StoreService {
           currency: 'KES',
         },
       ],
-      'biz-2': [
-        {
-          id: 'evt-biz2-1',
-          type: 'SHIFT_OPENED',
-          title: 'Shift SH-260930-201 Opened',
-          description: 'Cash Float: KES 2,500, M-Pesa Entry: KES 8,000.',
-          timestamp: new Date(Date.now() - 3600000 * 4).toISOString(),
-          actorName: 'Peter Mwiti',
-          severity: 'INFO',
-        },
-      ],
     };
     this.set(STORAGE_KEYS.EVENTS_MAP, eventsMap);
 
@@ -338,34 +305,66 @@ class StoreService {
     }
   }
 
-  // --- Multi-Business / Current Establishment Profile ---
+  // --- Session User Helper ---
+  public getSessionUser(): User | null {
+    try {
+      const saved = localStorage.getItem('bartracker_session_user');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
+  // --- Independent Business Profile ---
   public getCurrentBusinessId(): string {
+    const user = this.getSessionUser();
+    if (user && user.businessId) {
+      return user.businessId;
+    }
     return this.get<string>(STORAGE_KEYS.CURRENT_BIZ_ID, 'biz-1');
   }
 
   public getCurrentBusiness(): BusinessProfile {
     const id = this.getCurrentBusinessId();
-    const businesses = this.getBusinesses();
-    return (
-      businesses.find((b) => b.id === id) ||
-      businesses[0] || {
-        id: 'biz-1',
-        name: 'The Alchemist Bar',
-        connectCode: '849201',
-        phone: '0722 841 902',
-        ownerName: 'Maina Mwangi',
-      }
-    );
+    const businesses = this.get<BusinessProfile[]>(STORAGE_KEYS.BUSINESSES, INITIAL_BUSINESSES);
+    const found = businesses.find((b) => b.id === id);
+    if (found) return found;
+
+    if (businesses.length > 0) return businesses[0];
+
+    const user = this.getSessionUser();
+    return {
+      id: id || 'biz-1',
+      name: user?.role === 'OWNER' && user.name ? `${user.name.replace(/\s*\(Proprietor\)/i, '')}'s Bar` : 'Bar Tracker Lounge',
+      connectCode: '849201',
+      phone: '',
+      ownerName: user?.name || 'Proprietor',
+    };
   }
 
   public setCurrentBusiness(bizId: string) {
+    const user = this.getSessionUser();
+    if (user && user.businessId && user.businessId !== bizId) {
+      bizId = user.businessId; // strictly locked to user's registered business
+    }
     this.set(STORAGE_KEYS.CURRENT_BIZ_ID, bizId);
     this.setupFirestoreSync();
     this.notify();
   }
 
   public getBusinesses(): BusinessProfile[] {
-    return this.get<BusinessProfile[]>(STORAGE_KEYS.BUSINESSES, INITIAL_BUSINESSES);
+    const all = this.get<BusinessProfile[]>(STORAGE_KEYS.BUSINESSES, INITIAL_BUSINESSES);
+    const user = this.getSessionUser();
+    if (user && user.businessId) {
+      const userBiz = all.filter((b) => b.id === user.businessId);
+      if (userBiz.length > 0) return userBiz;
+      const current = this.getCurrentBusiness();
+      return [current];
+    }
+    return all.slice(0, 1);
   }
 
   public updateCurrentBusiness(updates: Partial<BusinessProfile>) {
@@ -1187,7 +1186,7 @@ class StoreService {
       if (p.businessId) {
         return p.businessId === bizId;
       }
-      return ['biz-1', 'biz-2', 'biz-3'].includes(bizId);
+      return bizId === 'biz-1';
     });
 
     if (includeArchived) return filtered;
@@ -1402,7 +1401,7 @@ class StoreService {
     const bizId = this.getCurrentBusinessId();
     const inventoryMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
     if (!inventoryMap[bizId]) {
-      if (['biz-1', 'biz-2', 'biz-3'].includes(bizId)) {
+      if (bizId === 'biz-1') {
         inventoryMap[bizId] = JSON.parse(JSON.stringify(INITIAL_INVENTORY));
       } else {
         inventoryMap[bizId] = [];
@@ -2465,7 +2464,7 @@ class StoreService {
     // Filter out products belonging to current business
     // If on sample businesses (biz-1, biz-2, biz-3), remove untagged legacy products too
     let remaining: Product[] = [];
-    if (['biz-1', 'biz-2', 'biz-3'].includes(currentBizId)) {
+    if (currentBizId === 'biz-1') {
       remaining = allProducts.filter((p) => p.businessId && p.businessId !== currentBizId);
     } else {
       remaining = allProducts.filter((p) => p.businessId !== currentBizId);
