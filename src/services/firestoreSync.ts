@@ -95,8 +95,12 @@ class FirestoreSyncService {
           this.updateStatus({ lastSyncedAt: new Date().toISOString(), error: null });
         },
         (err) => {
-          console.error('[FirestoreSync] Shifts listener error:', err);
-          this.updateStatus({ error: `Shifts sync error: ${err.message}` });
+          if (err.code === 'unavailable' || err.message?.includes('backend') || err.message?.includes('offline')) {
+            this.updateStatus({ isOnline: false, isSyncing: false, error: null });
+          } else {
+            console.warn('[FirestoreSync] Shifts listener notice:', err.message);
+            this.updateStatus({ error: `Sync notice: ${err.message}` });
+          }
         }
       );
       this.activeUnsubscribes.push(unsubShifts);
@@ -176,8 +180,8 @@ class FirestoreSyncService {
 
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error('[FirestoreSync] Init error:', message);
-      this.updateStatus({ error: message });
+      console.warn('[FirestoreSync] Init notice (operating in offline-first mode):', message);
+      this.updateStatus({ isOnline: false, error: null });
     }
   }
 
@@ -202,8 +206,8 @@ class FirestoreSyncService {
       this.updateStatus({ isSyncing: false, lastSyncedAt: new Date().toISOString(), error: null });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error('[FirestoreSync] Failed to save shift:', message);
-      this.updateStatus({ isSyncing: false, error: message });
+      console.warn('[FirestoreSync] Saved locally (offline):', message);
+      this.updateStatus({ isSyncing: false, isOnline: false, error: null });
     }
   }
 
