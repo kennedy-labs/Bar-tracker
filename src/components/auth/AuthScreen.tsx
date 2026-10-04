@@ -25,7 +25,6 @@ interface AuthScreenProps {
 }
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
-  const currentBiz = store.getCurrentBusiness();
   const [viewMode, setViewMode] = useState<'SIGN_IN' | 'REGISTER'>(() => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname.toLowerCase();
@@ -145,8 +144,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
     sessionStorage.removeItem('bartracker_lockout_until');
   };
 
-  // Filter users: all active users for current business
-  const users = store.getUsers().filter((u) => (!u.businessId || u.businessId === currentBiz.id) && !u.isArchived);
+  // All active registered users
+  const users = store.getUsers().filter((u) => !u.isArchived);
 
   // Keypad is strictly for counter workers/bartenders to prevent PIN guessing against proprietor accounts
   const keypadStaff = users.filter((u) => u.role !== 'OWNER');
@@ -291,10 +290,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                 <span>Proprietor (Owner) Sign Up · Direct Stock & Cash Control</span>
               </span>
             ) : (
-              <>
-                <Building2 className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Operating as: <strong className="text-slate-200">{currentBiz.name}</strong></span>
-              </>
+              <span className="text-slate-400">Inventory, Handover & Cash Control System</span>
             )}
           </p>
         </div>

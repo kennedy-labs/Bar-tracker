@@ -188,6 +188,38 @@ class StoreService {
         this.set(STORAGE_KEYS.PRODUCTS, updatedProducts);
       }
     }
+
+    // Cleanse any legacy cached demo bars (The Copper Kettle Lounge, The Alchemist Bar, Brew Bistro) from browser localStorage
+    const storedBusinesses = this.get<BusinessProfile[]>(STORAGE_KEYS.BUSINESSES, []);
+    const hasLegacyDemoBars = storedBusinesses.some(
+      (b) =>
+        b.name === 'The Copper Kettle Lounge' ||
+        b.name === 'The Alchemist Bar' ||
+        b.name === 'Brew Bistro & Taproom' ||
+        b.id === 'biz-2' ||
+        b.id === 'biz-3'
+    );
+    if (hasLegacyDemoBars) {
+      const cleaned = storedBusinesses.filter(
+        (b) =>
+          b.name !== 'The Copper Kettle Lounge' &&
+          b.name !== 'The Alchemist Bar' &&
+          b.name !== 'Brew Bistro & Taproom' &&
+          b.id !== 'biz-2' &&
+          b.id !== 'biz-3'
+      );
+      if (cleaned.length > 0) {
+        this.set(STORAGE_KEYS.BUSINESSES, cleaned);
+        this.set(STORAGE_KEYS.CURRENT_BIZ_ID, cleaned[0].id);
+      } else {
+        this.resetToDefaults();
+      }
+    }
+
+    const currentBizId = this.get<string>(STORAGE_KEYS.CURRENT_BIZ_ID, 'biz-1');
+    if (currentBizId === 'biz-2' || currentBizId === 'biz-3') {
+      this.set(STORAGE_KEYS.CURRENT_BIZ_ID, 'biz-1');
+    }
   }
 
   public resetToDefaults() {
