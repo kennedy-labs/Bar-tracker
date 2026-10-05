@@ -2555,6 +2555,10 @@ class StoreService {
       expenses: this.getExpenses(),
       mpesaAccounts: this.getMpesaAccounts(true),
       events: this.getEvents(),
+      stockAdditions: this.getStockAdditions(),
+      discrepancies: this.getDiscrepancies(),
+      interTransfers: this.getInterBusinessTransfers(),
+      partners: this.getPartners(),
     });
   }
 }

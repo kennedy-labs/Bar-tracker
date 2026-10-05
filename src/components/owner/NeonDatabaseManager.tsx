@@ -240,8 +240,20 @@ export const NeonDatabaseManager: React.FC = () => {
         </p>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono">
-          {['businesses', 'users', 'products', 'inventory', 'shifts', 'expenses', 'mpesa_accounts', 'operational_events'].map(
-            (tbl) => (
+          {[
+            'businesses',
+            'users',
+            'products',
+            'inventory',
+            'shifts',
+            'expenses',
+            'mpesa_accounts',
+            'operational_events',
+            'stock_additions',
+            'discrepancies',
+            'inter_business_transfers',
+            'business_partners',
+          ].map((tbl) => (
               <div
                 key={tbl}
                 className="p-2.5 rounded-xl bg-[#0A0D14] border border-slate-800 text-slate-300 flex items-center gap-1.5"
