@@ -80,8 +80,13 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
 
   let totalBottlesSold = 0;
   let expectedSalesRevenue = 0;
+  const products = store.getProducts();
 
   shiftStockItems.forEach((item) => {
+    const prod = products.find((p) => p.id === item.productId);
+    const isMeasured = prod?.isMeasured || item.unit === 'VALUE_KES';
+    const isValue = isMeasured && (prod?.measurementType === 'VALUE' || prod?.unit === 'VALUE_KES' || item.unit === 'VALUE_KES');
+
     const availableStock =
       item.openingPhysicalCount +
       item.additions +
@@ -95,8 +100,12 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
         : availableStock;
 
     const sold = Math.max(0, availableStock - leftOnCounter);
-    totalBottlesSold += sold;
-    expectedSalesRevenue += sold * item.sellingPrice;
+    if (!isValue) {
+      totalBottlesSold += sold;
+      expectedSalesRevenue += sold * item.sellingPrice;
+    } else {
+      expectedSalesRevenue += sold; // sold is already in KES!
+    }
   });
 
   // Shortage or surplus
@@ -169,14 +178,27 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
                       : available;
                   const sold = Math.max(0, available - count);
 
+                  const prod = products.find((p) => p.id === item.productId);
+                  const isMeasured = prod?.isMeasured || item.unit === 'VALUE_KES';
+                  const isValue = isMeasured && (prod?.measurementType === 'VALUE' || prod?.unit === 'VALUE_KES' || item.unit === 'VALUE_KES');
+                  const stepDelta = isValue ? 100 : 1;
+                  const unitLabel = isValue ? 'worth' : (prod?.measureUnitLabel || item.unit.toLowerCase());
+
                   return (
                     <div
                       key={item.id}
-                      className="flex items-center justify-between p-3 rounded-2xl bg-[#0E1420] border border-slate-800"
+                      className={`flex items-center justify-between p-3 rounded-2xl bg-[#0E1420] border transition-colors ${
+                        isMeasured ? 'border-cyan-900/60 bg-gradient-to-r from-[#0E1420] to-cyan-950/20' : 'border-slate-800'
+                      }`}
                     >
-                      <div>
+                      <div className="min-w-0 flex-1 mr-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-white">{item.productName}</span>
+                          <span className="text-sm font-bold text-white truncate">{item.productName}</span>
+                          {isMeasured && (
+                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-cyan-950 text-cyan-400 border border-cyan-700/60 shrink-0">
+                              Measured
+                            </span>
+                          )}
                           {item.additions > 0 && (
                             <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800 shrink-0">
                               +{item.additions} added
@@ -185,34 +207,50 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
                         </div>
                         <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
                           <span>
-                            Start: {available}
+                            Start: {isValue ? `KES ${available.toLocaleString()}` : `${available} ${unitLabel}`}
                             {item.additions > 0 && ` (+${item.additions} added)`}
                           </span>
                           <span>·</span>
                           <span className={sold > 0 ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
-                            Sold: {sold}
+                            Sold: {isValue ? `KES ${sold.toLocaleString()}` : sold}
                           </span>
                         </div>
                       </div>
 
-                      {/* Stepper Buttons */}
-                      <div className="flex items-center gap-2">
+                      {/* Stepper Buttons / Direct Input */}
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           type="button"
-                          onClick={() => adjustCount(item.productId, -1)}
-                          className="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
+                          onClick={() => adjustCount(item.productId, -stepDelta)}
+                          className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
+                          title={isValue ? '-100 KES' : '-1'}
                         >
-                          <Minus className="w-4 h-4" />
+                          <Minus className="w-3.5 h-3.5" />
                         </button>
-                        <span className="w-10 text-center font-mono font-bold text-base text-white">
-                          {count}
-                        </span>
+                        {isValue ? (
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            value={count}
+                            onChange={(e) => {
+                              const val = Math.max(0, parseFloat(e.target.value) || 0);
+                              setClosingPhysicalCounts((prev) => ({ ...prev, [item.productId]: val }));
+                            }}
+                            className="w-16 h-9 text-center font-mono font-bold text-xs bg-slate-900 border border-cyan-800/80 rounded-xl text-cyan-300 focus:outline-none"
+                          />
+                        ) : (
+                          <span className="w-9 text-center font-mono font-bold text-base text-white">
+                            {count}
+                          </span>
+                        )}
                         <button
                           type="button"
-                          onClick={() => adjustCount(item.productId, 1)}
-                          className="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
+                          onClick={() => adjustCount(item.productId, stepDelta)}
+                          className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
+                          title={isValue ? '+100 KES' : '+1'}
                         >
-                          <Plus className="w-4 h-4" />
+                          <Plus className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>

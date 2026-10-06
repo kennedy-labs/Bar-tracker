@@ -89,13 +89,14 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
     const actual = physicalCounts[p.id] !== undefined ? physicalCounts[p.id] : expected;
     const diff = actual - expected;
 
+    const isVal = p.isMeasured && (p.measurementType === 'VALUE' || p.unit === 'VALUE_KES');
     if (diff < 0) {
       const qtyShort = Math.abs(diff);
-      totalMissing += qtyShort;
-      missingValue += qtyShort * p.sellingPrice;
+      totalMissing += isVal ? 1 : qtyShort;
+      missingValue += isVal ? qtyShort : qtyShort * p.sellingPrice;
     } else if (diff > 0) {
-      totalSurplus += diff;
-      surplusValue += diff * p.sellingPrice;
+      totalSurplus += isVal ? 1 : diff;
+      surplusValue += isVal ? diff : diff * p.sellingPrice;
     }
   });
 
@@ -263,17 +264,31 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
               const count = physicalCounts[p.id] !== undefined ? physicalCounts[p.id] : expected;
               const diff = count - expected;
 
+              const isMeasured = p.isMeasured;
+              const isValue = isMeasured && (p.measurementType === 'VALUE' || p.unit === 'VALUE_KES');
+              const stepDelta = isValue ? 100 : 1;
+              const unitLabel = isValue ? 'worth' : (p.measureUnitLabel || p.unit.toLowerCase());
+
               return (
                 <div
                   key={p.id}
-                  className="flex items-center justify-between p-3 rounded-2xl bg-[#0E1420] border border-slate-800"
+                  className={`flex items-center justify-between p-3 rounded-2xl bg-[#0E1420] border transition-colors ${
+                    isMeasured ? 'border-cyan-900/60 bg-gradient-to-r from-[#0E1420] to-cyan-950/20' : 'border-slate-800'
+                  }`}
                 >
-                  <div>
-                    <div className="text-sm font-bold text-white">{p.name}</div>
+                  <div className="min-w-0 flex-1 mr-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-white truncate">{p.name}</span>
+                      {isMeasured && (
+                        <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-cyan-950 text-cyan-400 border border-cyan-700/60 shrink-0">
+                          Measured
+                        </span>
+                      )}
+                    </div>
                     <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
                       <span>KES {p.sellingPrice}</span>
                       <span>·</span>
-                      <span>Expected: {expected}</span>
+                      <span>Expected: {isValue ? `KES ${expected.toLocaleString()}` : `${expected} ${unitLabel}`}</span>
                       {diff !== 0 && (
                         <span
                           className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
@@ -282,30 +297,48 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
                               : 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80'
                           }`}
                         >
-                          {diff > 0 ? `+${diff} surplus` : `${diff} short`}
+                          {diff > 0
+                            ? `+${isValue ? `KES ${diff}` : diff} surplus`
+                            : `${isValue ? `KES ${Math.abs(diff)}` : Math.abs(diff)} short`}
                         </span>
                       )}
                     </div>
                   </div>
 
-                  {/* Big Touch Stepper */}
-                  <div className="flex items-center gap-2">
+                  {/* Touch Stepper or Direct Value Input */}
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       type="button"
-                      onClick={() => adjustCount(p.id, -1)}
-                      className="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
+                      onClick={() => adjustCount(p.id, -stepDelta)}
+                      className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
+                      title={isValue ? '-100 KES' : '-1'}
                     >
-                      <Minus className="w-4 h-4" />
+                      <Minus className="w-3.5 h-3.5" />
                     </button>
-                    <span className="w-10 text-center font-mono font-bold text-base text-white">
-                      {count}
-                    </span>
+                    {isValue ? (
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={count}
+                        onChange={(e) => {
+                          const val = Math.max(0, parseFloat(e.target.value) || 0);
+                          setPhysicalCounts((prev) => ({ ...prev, [p.id]: val }));
+                        }}
+                        className="w-16 h-9 text-center font-mono font-bold text-xs bg-slate-900 border border-cyan-800/80 rounded-xl text-cyan-300 focus:outline-none"
+                      />
+                    ) : (
+                      <span className="w-9 text-center font-mono font-bold text-base text-white">
+                        {count}
+                      </span>
+                    )}
                     <button
                       type="button"
-                      onClick={() => adjustCount(p.id, 1)}
-                      className="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
+                      onClick={() => adjustCount(p.id, stepDelta)}
+                      className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
+                      title={isValue ? '+100 KES' : '+1'}
                     >
-                      <Plus className="w-4 h-4" />
+                      <Plus className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>

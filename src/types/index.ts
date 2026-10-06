@@ -14,9 +14,24 @@ export type ProductCategory =
   | 'SPIRIT'
   | 'WINE'
   | 'SOFT_DRINK'
-  | 'CIGARETTE';
+  | 'CIGARETTE'
+  | 'TRADITIONAL_BREW';
 
-export type ProductUnit = 'BOTTLE' | 'CAN' | 'SHOT_TOT' | 'CRATE' | 'PACK';
+export type ProductUnit =
+  | 'BOTTLE'
+  | 'CAN'
+  | 'SHOT_TOT'
+  | 'CRATE'
+  | 'PACK'
+  | 'LITRE'
+  | 'JUG'
+  | 'CUP'
+  | 'KEG'
+  | 'PORTION'
+  | 'VALUE_KES'
+  | 'CUSTOM';
+
+export type MeasurementType = 'COUNT' | 'VALUE' | 'VOLUME' | 'BOTH';
 
 export interface Product {
   id: string;
@@ -29,6 +44,10 @@ export interface Product {
   reorderLevel: number;
   volumeMl?: number;
   isArchived?: boolean;
+  isMeasured?: boolean;
+  measurementType?: MeasurementType;
+  measureUnitLabel?: string;
+  totalMeasuredValueKes?: number;
 }
 
 export interface ProductCostHistory {
@@ -88,6 +107,10 @@ export interface ShiftStockItem {
   expectedClosingCount?: number;
   discrepancyCount?: number; // actual - expected
   discrepancyValue?: number; // in KES
+  isMeasured?: boolean;
+  measurementType?: MeasurementType;
+  measureUnitLabel?: string;
+  totalMeasuredValueKes?: number;
 }
 
 export interface Shift {

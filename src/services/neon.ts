@@ -350,6 +350,9 @@ class NeonService {
       await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS reorder_level INT DEFAULT 5;`;
       await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS cost_price NUMERIC(12,2) DEFAULT 0;`;
       await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS selling_price NUMERIC(12,2) DEFAULT 0;`;
+      await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_measured BOOLEAN DEFAULT FALSE;`;
+      await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS measurement_type TEXT DEFAULT 'COUNT';`;
+      await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS measure_unit_label TEXT;`;
       await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();`;
       await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();`;
 
@@ -730,6 +733,7 @@ class NeonService {
           INSERT INTO products (
             id, business_id, name, category, unit,
             cost_price, selling_price, reorder_level, volume_ml, is_archived,
+            is_measured, measurement_type, measure_unit_label,
             updated_at
           )
           VALUES (
@@ -743,6 +747,9 @@ class NeonService {
             ${p.reorderLevel || 5},
             ${p.volumeMl || null},
             ${p.isArchived || false},
+            ${p.isMeasured || false},
+            ${p.measurementType || 'COUNT'},
+            ${p.measureUnitLabel || null},
             NOW()
           )
           ON CONFLICT (id) DO UPDATE SET
@@ -754,6 +761,9 @@ class NeonService {
             reorder_level = EXCLUDED.reorder_level,
             volume_ml = EXCLUDED.volume_ml,
             is_archived = EXCLUDED.is_archived,
+            is_measured = EXCLUDED.is_measured,
+            measurement_type = EXCLUDED.measurement_type,
+            measure_unit_label = EXCLUDED.measure_unit_label,
             updated_at = NOW();
         `;
       }
@@ -1132,6 +1142,9 @@ class NeonService {
         reorderLevel: Number(p.reorder_level || 5),
         volumeMl: p.volume_ml ? Number(p.volume_ml) : undefined,
         isArchived: p.is_archived,
+        isMeasured: Boolean(p.is_measured),
+        measurementType: p.measurement_type || 'COUNT',
+        measureUnitLabel: p.measure_unit_label || undefined,
       }));
 
       const invRows = await sql`SELECT * FROM inventory WHERE business_id = ${businessId};`;

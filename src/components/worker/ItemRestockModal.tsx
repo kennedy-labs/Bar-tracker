@@ -15,14 +15,18 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
   onClose,
   onConfirmRestock,
 }) => {
-  const [quantity, setQuantity] = useState<string>('');
+  const isMeasured = product.isMeasured;
+  const isValue = isMeasured && (product.measurementType === 'VALUE' || product.unit === 'VALUE_KES');
+  const unitLabel = isValue ? 'KES' : product.measureUnitLabel || product.unit.toLowerCase();
 
-  const parsedQty = parseInt(quantity, 10) || 0;
+  const [quantity, setQuantity] = useState<string>(isValue ? '500' : (isMeasured ? '5' : '12'));
+  const parsedQty = parseFloat(quantity) || 0;
   const newTotal = currentCount + Math.max(0, parsedQty);
 
   const handleAdjust = (delta: number) => {
-    const current = parseInt(quantity, 10) || 0;
-    const next = Math.max(1, current + delta);
+    const step = isValue ? 100 : (isMeasured ? 1 : 1);
+    const current = parseFloat(quantity) || 0;
+    const next = Math.max(step, current + delta * step);
     setQuantity(String(next));
   };
 
@@ -36,17 +40,19 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
     onConfirmRestock(parsedQty);
   };
 
+  const presets = isValue ? [250, 500, 1000, 1500] : (isMeasured ? [1, 2, 5, 10] : [6, 12, 24, 48]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-xs">
       <div className="w-full max-w-md bg-[#121824] border border-[#1E293B] rounded-t-3xl sm:rounded-3xl p-5 md:p-6 shadow-2xl animate-in fade-in slide-in-from-bottom duration-200">
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+            <div className={`w-9 h-9 rounded-xl ${isMeasured ? 'bg-cyan-500/20 border border-cyan-500/40 text-cyan-400' : 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-400'} flex items-center justify-center`}>
               <PackagePlus className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold block">
-                Restock Counter
+              <span className={`text-[10px] font-mono uppercase tracking-wider ${isMeasured ? 'text-cyan-400' : 'text-emerald-400'} font-bold block`}>
+                {isMeasured ? 'Restock Measured Drink' : 'Restock Counter'}
               </span>
               <h3 className="text-base font-bold text-white tracking-tight truncate max-w-[260px]">
                 {product.name}
@@ -66,14 +72,14 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
           <div className="p-3 rounded-2xl bg-[#0E1420] border border-slate-800 flex items-center justify-between text-xs font-mono">
             <span className="text-slate-400">Current on shelf:</span>
             <span className="text-white font-bold text-sm">
-              {currentCount} {product.unit.toLowerCase()}s
+              {isValue ? `KES ${currentCount.toLocaleString()} worth` : `${currentCount} ${unitLabel}`}
             </span>
           </div>
 
           {/* Quantity Stepper & Adjuster */}
           <div className="space-y-2">
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-              Add Bottles / Units to Counter
+              {isValue ? 'Add Amount / Worth (Kshs)' : `Add Amount (${unitLabel})`}
             </label>
 
             <div className="flex items-center gap-2">
@@ -87,13 +93,14 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
 
               <input
                 type="number"
-                min="1"
+                step="any"
+                min="0.1"
                 required
                 autoFocus
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
-                placeholder="e.g. 12"
-                className="flex-1 h-12 bg-[#0E1420] border border-slate-700 focus:border-emerald-500 rounded-2xl text-center font-mono font-black text-2xl text-emerald-400 placeholder:text-slate-600 focus:outline-none"
+                placeholder={isValue ? "e.g. 1500" : "e.g. 5"}
+                className={`flex-1 h-12 bg-[#0E1420] border border-slate-700 focus:border-cyan-500 rounded-2xl text-center font-mono font-black text-2xl ${isMeasured ? 'text-cyan-400' : 'text-emerald-400'} placeholder:text-slate-600 focus:outline-none`}
               />
 
               <button
@@ -107,18 +114,18 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
 
             {/* Quick Presets */}
             <div className="grid grid-cols-4 gap-1.5 pt-1">
-              {[6, 12, 24, 48].map((amt) => (
+              {presets.map((amt) => (
                 <button
                   key={amt}
                   type="button"
                   onClick={() => handleSetPreset(amt)}
                   className={`py-1.5 rounded-xl border text-xs font-mono font-semibold transition-all cursor-pointer ${
                     parsedQty === amt
-                      ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold'
+                      ? `${isMeasured ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300' : 'bg-emerald-500/20 border-emerald-500 text-emerald-300'} font-bold`
                       : 'bg-[#0E1420] border-slate-800 text-slate-400 hover:text-white'
                   }`}
                 >
-                  +{amt}
+                  +{amt} {isValue ? 'KES' : ''}
                 </button>
               ))}
             </div>

@@ -29,6 +29,7 @@ import {
   MoreVertical,
   Lock,
   Undo2,
+  Scale,
 } from 'lucide-react';
 
 interface WorkerTerminalProps {
@@ -456,22 +457,33 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
                   : 0;
                 const addedQty = ssi ? ssi.additions : 0;
 
+                const isMeasured = p.isMeasured;
+                const isValue = isMeasured && (p.measurementType === 'VALUE' || p.unit === 'VALUE_KES');
+                const measureUnit = isValue ? 'worth' : p.measureUnitLabel || (p.unit === 'VALUE_KES' ? 'KES' : 'bottles');
+
                 return (
                   <div
                     key={p.id}
                     className={`flex items-center justify-between p-3 rounded-2xl bg-[#0E1420] border transition-colors ${
                       addedQty > 0
                         ? 'border-emerald-500/40 hover:border-emerald-500/60 bg-gradient-to-r from-[#0E1420] to-emerald-950/20'
+                        : isMeasured
+                        ? 'border-cyan-900/60 hover:border-cyan-700 bg-gradient-to-r from-[#0E1420] to-cyan-950/10'
                         : 'border-slate-800/80 hover:border-slate-700'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <div className="w-8 h-8 rounded-xl bg-slate-800/80 flex items-center justify-center text-slate-400 shrink-0">
-                        <Wine className="w-4 h-4" />
+                      <div className={`w-8 h-8 rounded-xl ${isMeasured ? 'bg-cyan-950/80 text-cyan-400 border border-cyan-800/50' : 'bg-slate-800/80 text-slate-400'} flex items-center justify-center shrink-0`}>
+                        {isMeasured ? <Scale className="w-4 h-4" /> : <Wine className="w-4 h-4" />}
                       </div>
                       <div className="min-w-0 flex-1 truncate">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-bold text-white truncate">{p.name}</span>
+                          {isMeasured && (
+                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-cyan-950/90 text-cyan-400 border border-cyan-600/80 shrink-0">
+                              Measured
+                            </span>
+                          )}
                           {addedQty > 0 && (
                             <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-emerald-950/90 text-emerald-400 border border-emerald-600/80 shrink-0 animate-in fade-in">
                               +{addedQty} added
@@ -496,9 +508,9 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
                       <div className="text-right font-mono">
                         <div className="flex items-center justify-end gap-1">
                           <span className="text-base font-bold text-white">
-                            {count}
+                            {isValue ? `KES ${count.toLocaleString()}` : count}
                           </span>
-                          <span className="text-[11px] text-slate-500 font-sans">bottles</span>
+                          <span className="text-[11px] text-slate-500 font-sans">{measureUnit}</span>
                         </div>
                         {addedQty > 0 && (
                           <div className="text-[10px] text-emerald-400 font-bold">

@@ -1674,6 +1674,10 @@ class StoreService {
         transfersIn: 0,
         transfersOut: 0,
         damages: 0,
+        isMeasured: product.isMeasured,
+        measurementType: product.measurementType,
+        measureUnitLabel: product.measureUnitLabel,
+        totalMeasuredValueKes: product.totalMeasuredValueKes,
       };
       shiftStockItems.push(item);
 
@@ -2213,7 +2217,7 @@ class StoreService {
   }
 
   public adjustProductStock(productId: string, newQuantity: number): boolean {
-    const cleanQty = Math.max(0, Math.floor(Number(newQuantity) || 0));
+    const cleanQty = Math.max(0, Number(newQuantity) || 0);
     const inv = this.getInventory();
     const item = inv.find((i) => i.productId === productId);
     const prevQty = item ? item.quantityOnHand : 0;
@@ -2280,6 +2284,10 @@ class StoreService {
     volumeMl?: number;
     initialStock?: number;
     businessId?: string;
+    isMeasured?: boolean;
+    measurementType?: import('../types').MeasurementType;
+    measureUnitLabel?: string;
+    totalMeasuredValueKes?: number;
   }): Product {
     const currentBizId = params.businessId || this.getCurrentBusinessId();
     const products = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
@@ -2294,6 +2302,10 @@ class StoreService {
       reorderLevel: Number(params.reorderLevel) || 5,
       volumeMl: params.volumeMl ? Number(params.volumeMl) : undefined,
       isArchived: false,
+      isMeasured: Boolean(params.isMeasured),
+      measurementType: params.measurementType || (params.isMeasured ? 'VALUE' : 'COUNT'),
+      measureUnitLabel: params.measureUnitLabel,
+      totalMeasuredValueKes: params.totalMeasuredValueKes ? Number(params.totalMeasuredValueKes) : undefined,
     };
 
     products.push(newProduct);
@@ -2332,6 +2344,10 @@ class StoreService {
         transfersIn: 0,
         transfersOut: 0,
         damages: 0,
+        isMeasured: newProduct.isMeasured,
+        measurementType: newProduct.measurementType,
+        measureUnitLabel: newProduct.measureUnitLabel,
+        totalMeasuredValueKes: newProduct.totalMeasuredValueKes,
       };
       allSSIs.push(newSSI);
       this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);

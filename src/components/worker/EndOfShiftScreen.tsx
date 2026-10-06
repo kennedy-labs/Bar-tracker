@@ -125,8 +125,13 @@ export const EndOfShiftScreen: React.FC<EndOfShiftScreenProps> = ({
 
   let totalBottlesSold = 0;
   let expectedSalesRevenue = 0;
+  const products = store.getProducts();
 
   shiftStockItems.forEach((item) => {
+    const prod = products.find((p) => p.id === item.productId);
+    const isMeasured = prod?.isMeasured || item.unit === 'VALUE_KES';
+    const isValue = isMeasured && (prod?.measurementType === 'VALUE' || prod?.unit === 'VALUE_KES' || item.unit === 'VALUE_KES');
+
     const availableStock =
       item.openingPhysicalCount +
       item.additions +
@@ -138,8 +143,12 @@ export const EndOfShiftScreen: React.FC<EndOfShiftScreenProps> = ({
         ? closingPhysicalCounts[item.productId]
         : availableStock;
     const sold = Math.max(0, availableStock - leftOnCounter);
-    totalBottlesSold += sold;
-    expectedSalesRevenue += sold * item.sellingPrice;
+    if (!isValue) {
+      totalBottlesSold += sold;
+      expectedSalesRevenue += sold * item.sellingPrice;
+    } else {
+      expectedSalesRevenue += sold;
+    }
   });
 
   // Financial Variance: (Total Money Accounted For) - Expected Revenue
@@ -296,16 +305,30 @@ Generated via Bar Track System`;
                     : available;
                 const sold = Math.max(0, available - left);
 
+                const prod = products.find((p) => p.id === item.productId);
+                const isMeasured = prod?.isMeasured || item.unit === 'VALUE_KES';
+                const isValue = isMeasured && (prod?.measurementType === 'VALUE' || prod?.unit === 'VALUE_KES' || item.unit === 'VALUE_KES');
+                const stepDelta = isValue ? 100 : 1;
+                const unitLabel = isValue ? 'worth' : (prod?.measureUnitLabel || item.unit.toLowerCase());
+                const itemRevenue = isValue ? sold : sold * item.sellingPrice;
+
                 return (
                   <div
                     key={item.productId}
-                    className="p-3 rounded-2xl bg-[#0E1420] border border-slate-800 flex items-center justify-between gap-2"
+                    className={`p-3 rounded-2xl bg-[#0E1420] border flex items-center justify-between gap-2 ${
+                      isMeasured ? 'border-cyan-900/60 bg-gradient-to-r from-[#0E1420] to-cyan-950/20' : 'border-slate-800'
+                    }`}
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-xs sm:text-sm text-white truncate">
                           {item.productName}
                         </span>
+                        {isMeasured && (
+                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-cyan-950 text-cyan-400 border border-cyan-700/60 shrink-0">
+                            Measured
+                          </span>
+                        )}
                         {item.additions > 0 && (
                           <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-emerald-950/80 text-emerald-400 border border-emerald-800 shrink-0">
                             +{item.additions} added
@@ -314,13 +337,15 @@ Generated via Bar Track System`;
                       </div>
                       <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5 font-mono">
                         <span>
-                          Start: {available}
+                          Start: {isValue ? `KES ${available.toLocaleString()}` : `${available} ${unitLabel}`}
                           {item.additions > 0 && ` (inc. +${item.additions} restocked)`}
                         </span>
                         <span>·</span>
-                        <span className="text-emerald-400 font-bold">Sold: {sold}</span>
+                        <span className="text-emerald-400 font-bold">
+                          Sold: {isValue ? `KES ${sold.toLocaleString()}` : sold}
+                        </span>
                         <span>·</span>
-                        <span>KES {(sold * item.sellingPrice).toLocaleString()}</span>
+                        <span>KES {itemRevenue.toLocaleString()}</span>
                       </div>
                     </div>
 
@@ -328,30 +353,37 @@ Generated via Bar Track System`;
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
-                        onClick={() => adjustCount(item.productId, -1)}
+                        onClick={() => adjustCount(item.productId, -stepDelta)}
                         className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
+                        title={isValue ? '-100 KES' : '-1'}
                       >
                         <Minus className="w-4 h-4" />
                       </button>
 
                       <input
                         type="number"
+                        step="any"
                         min="0"
                         value={left}
                         onChange={(e) => {
-                          const val = parseInt(e.target.value, 10);
+                          const val = parseFloat(e.target.value);
                           setClosingPhysicalCounts((prev) => ({
                             ...prev,
                             [item.productId]: isNaN(val) ? 0 : Math.max(0, val),
                           }));
                         }}
-                        className="w-12 h-9 text-center bg-[#151D2C] border border-slate-700 rounded-xl font-mono font-bold text-sm text-white focus:outline-none"
+                        className={`w-16 h-9 text-center rounded-xl font-mono font-bold text-xs focus:outline-none ${
+                          isValue
+                            ? 'bg-[#0E1420] border border-cyan-700 text-cyan-300'
+                            : 'bg-[#151D2C] border border-slate-700 text-white'
+                        }`}
                       />
 
                       <button
                         type="button"
-                        onClick={() => adjustCount(item.productId, 1)}
+                        onClick={() => adjustCount(item.productId, stepDelta)}
                         className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
+                        title={isValue ? '+100 KES' : '+1'}
                       >
                         <Plus className="w-4 h-4" />
                       </button>
@@ -832,18 +864,31 @@ Generated via Bar Track System`;
                 <tbody className="divide-y divide-slate-800 font-mono">
                   {stockItems
                     .filter((item) => item.recordedSales > 0 || (item.closingPhysicalCount !== undefined && item.closingPhysicalCount < item.openingPhysicalCount))
-                    .map((item) => (
-                      <tr key={item.productId} className="hover:bg-slate-900/50">
-                        <td className="p-2.5 font-sans font-medium text-white">{item.productName}</td>
-                        <td className="p-2.5 text-center text-slate-400">{item.openingPhysicalCount}</td>
-                        <td className="p-2.5 text-center text-emerald-400">+{item.additions + item.transfersIn}</td>
-                        <td className="p-2.5 text-center text-slate-300">{item.closingPhysicalCount ?? '-'}</td>
-                        <td className="p-2.5 text-center font-bold text-emerald-400">{item.recordedSales}</td>
-                        <td className="p-2.5 text-right font-bold text-white">
-                          KES {(item.recordedSales * item.sellingPrice).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
+                    .map((item) => {
+                      const prod = products.find((p) => p.id === item.productId);
+                      const isValue = (prod?.isMeasured && prod.measurementType === 'VALUE') || item.unit === 'VALUE_KES';
+                      const rev = isValue ? item.recordedSales : item.recordedSales * item.sellingPrice;
+
+                      return (
+                        <tr key={item.productId} className="hover:bg-slate-900/50">
+                          <td className="p-2.5 font-sans font-medium text-white flex items-center gap-1.5">
+                            <span>{item.productName}</span>
+                            {prod?.isMeasured && (
+                              <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">
+                                Measured
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-2.5 text-center text-slate-400">{isValue ? `KES ${item.openingPhysicalCount.toLocaleString()}` : item.openingPhysicalCount}</td>
+                          <td className="p-2.5 text-center text-emerald-400">+{item.additions + item.transfersIn}</td>
+                          <td className="p-2.5 text-center text-slate-300">{item.closingPhysicalCount !== undefined ? (isValue ? `KES ${item.closingPhysicalCount.toLocaleString()}` : item.closingPhysicalCount) : '-'}</td>
+                          <td className="p-2.5 text-center font-bold text-emerald-400">{isValue ? `KES ${item.recordedSales.toLocaleString()}` : item.recordedSales}</td>
+                          <td className="p-2.5 text-right font-bold text-white">
+                            KES {rev.toLocaleString()}
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
