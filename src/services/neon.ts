@@ -60,6 +60,9 @@ export interface PullResult {
   partners?: BusinessPartner[];
 }
 
+export const DEFAULT_NEON_URL =
+  'postgresql://neondb_owner:npg_3H9lLezpVIMy@ep-mute-firefly-b1blllpb-pooler.c-5.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+
 const STORAGE_KEY_NEON_URL = 'bar_track_neon_url';
 const STORAGE_KEY_LAST_SYNC = 'bar_track_neon_last_sync';
 
@@ -71,6 +74,7 @@ class NeonService {
     databaseUrl: null,
   };
   private subscribers: ((state: NeonState) => void)[] = [];
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     const savedUrl = this.getSavedDatabaseUrl();
@@ -78,15 +82,48 @@ class NeonService {
       this.state.databaseUrl = savedUrl;
       this.initializeClient(savedUrl);
     }
+    if (typeof window !== 'undefined') {
+      this.setupNetworkListeners();
+    }
+  }
+
+  private setupNetworkListeners() {
+    window.addEventListener('online', () => {
+      this.checkConnectionNow();
+    });
+
+    window.addEventListener('offline', () => {
+      this.updateState({
+        status: 'DISCONNECTED',
+        errorMessage: 'Device offline. Changes will save locally and auto-sync when reconnected.',
+      });
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        this.checkConnectionNow();
+      }
+    });
+
+    // Start 30-second heartbeat check
+    this.heartbeatTimer = setInterval(() => {
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        this.checkConnectionNow();
+      }
+    }, 30000);
   }
 
   public getSavedDatabaseUrl(): string | null {
-    if (typeof window === 'undefined') return null;
-    const fromEnv = import.meta.env.VITE_NEON_DATABASE_URL;
-    if (fromEnv && fromEnv.startsWith('postgres')) return fromEnv;
+    if (typeof window === 'undefined') return DEFAULT_NEON_URL;
     const fromStorage = localStorage.getItem(STORAGE_KEY_NEON_URL);
     if (fromStorage && fromStorage.startsWith('postgres')) return fromStorage;
-    return null;
+
+    const fromEnv = import.meta.env.VITE_NEON_DATABASE_URL;
+    if (fromEnv && fromEnv.startsWith('postgres') && !fromEnv.includes('user:password@')) {
+      return fromEnv;
+    }
+
+    return DEFAULT_NEON_URL;
   }
 
   public setDatabaseUrl(url: string | null) {
@@ -98,10 +135,37 @@ class NeonService {
       this.initializeClient(cleanUrl);
     } else {
       localStorage.removeItem(STORAGE_KEY_NEON_URL);
-      this.state.databaseUrl = null;
-      this.client = null;
+      this.state.databaseUrl = DEFAULT_NEON_URL;
       this.schemaVerified = false;
-      this.updateState({ status: 'DISCONNECTED', errorMessage: undefined });
+      this.initializeClient(DEFAULT_NEON_URL);
+    }
+  }
+
+  public async checkConnectionNow(): Promise<boolean> {
+    const url = this.state.databaseUrl || this.getSavedDatabaseUrl();
+    if (!url) {
+      this.updateState({ status: 'DISCONNECTED', errorMessage: 'No database URL configured.' });
+      return false;
+    }
+
+    const res = await this.testConnection(url);
+    if (res.success) {
+      this.updateState({
+        status: 'CONNECTED',
+        databaseName: res.database,
+        latencyMs: res.latencyMs,
+        errorMessage: undefined,
+      });
+      if (!this.schemaVerified) {
+        this.ensureSchema(url).catch(() => {});
+      }
+      return true;
+    } else {
+      this.updateState({
+        status: 'ERROR',
+        errorMessage: res.error,
+      });
+      return false;
     }
   }
 
@@ -115,6 +179,7 @@ class NeonService {
             status: 'CONNECTED',
             databaseName: res.database,
             latencyMs: res.latencyMs,
+            errorMessage: undefined,
           });
           // Automatically run schema alignment in background to prevent column/relation mismatch errors
           this.ensureSchema(url).catch((err) => {
@@ -1236,6 +1301,55 @@ class NeonService {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       this.updateState({ status: 'ERROR', errorMessage: msg });
+      return { success: false, error: msg };
+    }
+  }
+
+  /**
+   * Pulls all business accounts and users from Neon PostgreSQL
+   * Enables cross-browser, cross-device instant account detection
+   */
+  public async pullAllBusinessesAndUsers(): Promise<{
+    success: boolean;
+    businesses?: BusinessProfile[];
+    users?: User[];
+    error?: string;
+  }> {
+    const url = this.state.databaseUrl || this.getSavedDatabaseUrl();
+    if (!url) return { success: false, error: 'No Neon Database URL configured.' };
+
+    try {
+      const sql = this.client || neon(url);
+      const bizRows = await sql`SELECT * FROM businesses ORDER BY created_at ASC;`;
+      const businesses: BusinessProfile[] = bizRows.map((b) => ({
+        id: b.id,
+        name: b.name,
+        phone: b.phone || '',
+        address: b.address || '',
+        ownerName: b.owner_name || '',
+        connectCode: b.connect_code || '',
+        activeShiftTransferCode: b.active_shift_transfer_code || b.active_shift_code || '',
+        activeShiftId: b.active_shift_code || '',
+      }));
+
+      const userRows = await sql`SELECT * FROM users;`;
+      const users: User[] = userRows.map((u) => ({
+        id: u.id,
+        businessId: u.business_id,
+        username: u.username,
+        name: u.name,
+        role: u.role,
+        password: u.password_hash || u.password,
+        passwordSalt: u.password_salt,
+        pinCode: u.pin_code_hash || u.pin_code,
+        pinSalt: u.pin_salt,
+        isArchived: u.is_archived,
+        createdAt: u.created_at,
+      }));
+
+      return { success: true, businesses, users };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
       return { success: false, error: msg };
     }
   }

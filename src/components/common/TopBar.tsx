@@ -212,47 +212,48 @@ export const TopBar: React.FC<TopBarProps> = ({
               onClick={currentUser?.role === 'OWNER' ? () => setActiveTab('settings') : undefined}
               title={
                 neonState.status === 'CONNECTED'
-                  ? `Neon PostgreSQL Connected (${neonState.databaseName || 'neondb'})`
-                  : neonState.status === 'SYNCING'
-                  ? 'Syncing to Neon Database...'
+                  ? `Neon PostgreSQL Connected (${neonState.databaseName || 'neondb'}). Automatic cloud sync is active.`
+                  : neonState.status === 'SYNCING' || isManualSyncing
+                  ? 'Auto-syncing operations to Neon Cloud...'
                   : neonState.status === 'ERROR'
-                  ? `Neon Error: ${neonState.errorMessage}`
-                  : 'Neon Database: Running Local Mode (Click to configure Neon in Settings)'
+                  ? `Neon Connection Notice: ${neonState.errorMessage}`
+                  : 'Neon Database: Offline mode. Changes will automatically sync when reconnected.'
               }
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] transition-all ${
                 currentUser?.role === 'OWNER' ? 'cursor-pointer hover:border-slate-700' : 'cursor-default'
               } ${
                 neonState.status === 'SYNCING' || isManualSyncing
-                  ? 'bg-amber-950/30 border-amber-600/50 text-amber-300'
+                  ? 'bg-cyan-950/40 border-cyan-500/50 text-cyan-300'
                   : neonState.status === 'ERROR'
                   ? 'bg-red-950/30 border-red-600/50 text-red-300'
                   : neonState.status === 'CONNECTED'
-                  ? 'bg-cyan-950/30 border-cyan-600/50 text-cyan-300'
-                  : 'bg-[#0E1420] border-slate-800 text-slate-400'
+                  ? 'bg-emerald-950/30 border-emerald-600/50 text-emerald-300'
+                  : 'bg-amber-950/20 border-amber-800/40 text-amber-400'
               }`}
             >
               {neonState.status === 'SYNCING' || isManualSyncing ? (
                 <>
-                  <RefreshCw className="w-3 h-3 text-amber-400 animate-spin" />
-                  <span className="text-[10px] text-amber-300 font-medium">Syncing Neon...</span>
+                  <RefreshCw className="w-3 h-3 text-cyan-400 animate-spin" />
+                  <span className="text-[10px] text-cyan-300 font-medium">Syncing...</span>
                 </>
               ) : neonState.status === 'ERROR' ? (
                 <>
                   <CloudOff className="w-3 h-3 text-red-400" />
-                  <span className="text-[10px] text-red-300 font-medium">Neon Issue</span>
+                  <span className="text-[10px] text-red-300 font-medium">DB Notice</span>
                 </>
               ) : neonState.status === 'CONNECTED' ? (
                 <>
-                  <Database className="w-3 h-3 text-cyan-400" />
-                  <span className="text-[10px] text-cyan-300 font-medium">
-                    Neon DB
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <Database className="w-3 h-3 text-emerald-400" />
+                  <span className="text-[10px] text-emerald-300 font-medium">
+                    Cloud Auto-Sync
                   </span>
                 </>
               ) : (
                 <>
-                  <Database className="w-3 h-3 text-slate-500" />
-                  <span className="text-[10px] text-slate-400 font-medium">
-                    {currentUser?.role === 'OWNER' ? 'Neon Setup' : 'Local'}
+                  <CloudOff className="w-3 h-3 text-amber-400" />
+                  <span className="text-[10px] text-amber-300 font-medium">
+                    Offline Sync
                   </span>
                 </>
               )}

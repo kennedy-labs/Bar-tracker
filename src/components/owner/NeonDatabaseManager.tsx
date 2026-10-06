@@ -265,6 +265,24 @@ export const NeonDatabaseManager: React.FC = () => {
           )}
         </div>
 
+        {/* Auto-Sync Real-Time Engine Notice */}
+        <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/30 text-xs text-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 font-bold text-emerald-300">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>Automatic Real-Time Cloud Synchronization Active</span>
+            </div>
+            <p className="text-[11px] text-slate-300">
+              Whenever your device is connected to the internet, all sales, shifts, expenses, inventory counts, and staff accounts automatically synchronize to your Neon PostgreSQL cloud database. No manual syncing is required.
+            </p>
+          </div>
+          <div className="text-right shrink-0">
+            <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/60 px-2 py-1 rounded-lg border border-emerald-500/40">
+              Auto-Sync: Live
+            </span>
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-center gap-3 pt-2">
           <button
             type="button"
@@ -283,7 +301,7 @@ export const NeonDatabaseManager: React.FC = () => {
             className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-950/50 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40"
           >
             {isSyncing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CloudUpload className="w-3.5 h-3.5" />}
-            <span>Sync Local Establishment Data to Neon</span>
+            <span>Force Immediate Manual Sync</span>
           </button>
         </div>
 

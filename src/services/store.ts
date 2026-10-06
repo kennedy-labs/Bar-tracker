@@ -19,7 +19,7 @@ import {
   StockAdditionRecord,
   HandoverDraft,
 } from '../types';
-import { neonService } from './neon';
+import { neonService, PullResult } from './neon';
 import { authService } from './auth';
 
 const STORAGE_KEYS = {
@@ -47,20 +47,134 @@ const STORAGE_KEYS = {
 
 class StoreService {
   private subscribers: (() => void)[] = [];
+  private pendingAutoSync = false;
+  private isAutoSyncing = false;
+  private autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastAutoSyncTime: string | null = null;
+  private hasInitialCloudSynced = false;
 
   constructor() {
     this.ensureInitialized();
     if (typeof window !== 'undefined') {
-      setTimeout(() => {
-        this.triggerNeonSync();
-      }, 500);
+      this.setupAutoSyncEngine();
     }
   }
 
-  public triggerNeonSync() {
-    if (typeof window !== 'undefined') {
-      this.uploadAllToNeon().catch(() => {});
+  private setupAutoSyncEngine() {
+    // Listen to Neon status changes: when connected, flush pending sync
+    neonService.subscribeStatus((st) => {
+      if (st.status === 'CONNECTED') {
+        if (this.pendingAutoSync || !this.hasInitialCloudSynced) {
+          this.scheduleAutoSync(400);
+        }
+      }
+    });
+
+    // Browser network events
+    window.addEventListener('online', () => {
+      this.set(STORAGE_KEYS.IS_ONLINE, true);
+      this.scheduleAutoSync(300);
+    });
+
+    window.addEventListener('offline', () => {
+      this.set(STORAGE_KEYS.IS_ONLINE, false);
+      this.pendingAutoSync = true;
+    });
+
+    // Heartbeat background sync every 45 seconds while online
+    setInterval(() => {
+      if (typeof navigator !== 'undefined' && navigator.onLine && neonService.getStatus().status === 'CONNECTED') {
+        this.syncWithCloud(true);
+      }
+    }, 45000);
+  }
+
+  public scheduleAutoSync(delayMs = 1200) {
+    if (typeof window === 'undefined') return;
+    this.pendingAutoSync = true;
+    if (this.autoSyncTimer) {
+      clearTimeout(this.autoSyncTimer);
     }
+    this.autoSyncTimer = setTimeout(() => {
+      this.syncWithCloud();
+    }, delayMs);
+  }
+
+  public async syncWithCloud(silent = false): Promise<{ success: boolean; message: string }> {
+    if (typeof window === 'undefined') return { success: false, message: 'Server context' };
+    if (this.isAutoSyncing) {
+      this.pendingAutoSync = true;
+      return { success: true, message: 'Sync already in progress' };
+    }
+
+    const neonStatus = neonService.getStatus();
+    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+
+    if (!isOnline || (neonStatus.status !== 'CONNECTED' && neonStatus.status !== 'SYNCING')) {
+      this.pendingAutoSync = true;
+      return { success: false, message: 'Offline. Queued for auto-sync.' };
+    }
+
+    this.isAutoSyncing = true;
+    try {
+      // 1. If we have a local active business, push local data to Neon
+      const currentBiz = this.getCurrentBusiness();
+      if (currentBiz && currentBiz.id) {
+        await this.uploadAllToNeon();
+      }
+
+      // 2. Pull businesses and users from Neon to stay in sync across devices
+      const pullRes = await neonService.pullAllBusinessesAndUsers();
+      if (pullRes.success && pullRes.businesses && pullRes.businesses.length > 0) {
+        this.mergeCloudBusinessesAndUsers(pullRes.businesses, pullRes.users || []);
+      }
+
+      // 3. If there is a current business, pull any updates for this business from cloud
+      if (currentBiz && currentBiz.id) {
+        const fullBizRes = await neonService.pullBusinessFromNeon(currentBiz.id);
+        if (fullBizRes.success && fullBizRes.data) {
+          this.mergeCloudBusinessData(fullBizRes.data);
+        }
+      }
+
+      this.pendingAutoSync = false;
+      this.hasInitialCloudSynced = true;
+      this.lastAutoSyncTime = new Date().toLocaleTimeString();
+
+      if (!silent) {
+        this.subscribers.forEach((cb) => {
+          try {
+            cb();
+          } catch (e) {
+            // ignore
+          }
+        });
+      }
+
+      return { success: true, message: 'Cloud database synchronized automatically.' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.pendingAutoSync = true;
+      return { success: false, message: msg };
+    } finally {
+      this.isAutoSyncing = false;
+    }
+  }
+
+  public getLastAutoSyncTime(): string | null {
+    return this.lastAutoSyncTime;
+  }
+
+  public hasPendingCloudSync(): boolean {
+    return this.pendingAutoSync;
+  }
+
+  public isCloudSyncing(): boolean {
+    return this.isAutoSyncing;
+  }
+
+  public triggerNeonSync() {
+    this.scheduleAutoSync(0);
   }
 
   public subscribe(callback: () => void) {
@@ -78,6 +192,8 @@ class StoreService {
         console.error('Subscriber callback error:', e);
       }
     });
+    // Automatically debounce cloud sync whenever any local state changes
+    this.scheduleAutoSync(1200);
   }
 
   private get<T>(key: string, defaultValue: T): T {
@@ -955,42 +1071,76 @@ class StoreService {
       );
     });
 
-    if (!user) {
+    let targetUser = user;
+    if (!targetUser && typeof navigator !== 'undefined' && navigator.onLine) {
+      try {
+        const pullRes = await neonService.pullAllBusinessesAndUsers();
+        if (pullRes.success && pullRes.users && pullRes.users.length > 0) {
+          this.mergeCloudBusinessesAndUsers(pullRes.businesses || [], pullRes.users);
+          const freshUsers = this.getUsers();
+          targetUser = freshUsers.find((u) => {
+            if (u.isArchived) return false;
+            const uU = u.username.toLowerCase();
+            const uN = u.name.toLowerCase().replace(/\s*\(.*?\)\s*/g, '').trim();
+            return (
+              uU === rawInput ||
+              uN === rawInput ||
+              uU.replace(/[_.-]/g, ' ').replace(/\s+/g, ' ').trim() === normalizedInput ||
+              uN.replace(/[_.-]/g, ' ').replace(/\s+/g, ' ').trim() === normalizedInput ||
+              uU.replace(/[\s_.-]/g, '') === compactInput ||
+              uN.replace(/[\s_.-]/g, '') === compactInput
+            );
+          });
+        }
+      } catch (e) {
+        // network error fallback
+      }
+    }
+
+    if (!targetUser) {
       authService.recordFailedAttempt(rawInput);
       return null;
     }
 
+    const activeUser = targetUser;
+
     // Verify Password
     let matched = false;
-    if (user.password && user.passwordSalt) {
-      matched = await authService.verifyCredential(cleanCredential, user.password, user.passwordSalt);
-    } else if (user.password && user.password === cleanCredential) {
+    if (activeUser.password && activeUser.passwordSalt) {
+      matched = await authService.verifyCredential(cleanCredential, activeUser.password, activeUser.passwordSalt);
+    } else if (activeUser.password && activeUser.password === cleanCredential) {
       // Auto-migrate plaintext to salt+hash
       const salt = authService.generateSalt();
-      user.passwordSalt = salt;
-      user.password = await authService.hashCredential(cleanCredential, salt);
-      this.set(STORAGE_KEYS.USERS, users);
+      activeUser.passwordSalt = salt;
+      activeUser.password = await authService.hashCredential(cleanCredential, salt);
+      const allUsers = this.getUsers();
+      const idx = allUsers.findIndex((u) => u.id === activeUser.id);
+      if (idx >= 0) allUsers[idx] = activeUser;
+      this.set(STORAGE_KEYS.USERS, allUsers);
       matched = true;
     }
 
     // Verify PIN
     if (!matched) {
-      if (user.pinCode && user.pinSalt) {
-        matched = await authService.verifyCredential(cleanCredential, user.pinCode, user.pinSalt);
-      } else if (user.pinCode && user.pinCode === cleanCredential) {
+      if (activeUser.pinCode && activeUser.pinSalt) {
+        matched = await authService.verifyCredential(cleanCredential, activeUser.pinCode, activeUser.pinSalt);
+      } else if (activeUser.pinCode && activeUser.pinCode === cleanCredential) {
         // Auto-migrate plaintext to salt+hash
         const salt = authService.generateSalt();
-        user.pinSalt = salt;
-        user.pinCode = await authService.hashCredential(cleanCredential, salt);
-        this.set(STORAGE_KEYS.USERS, users);
+        activeUser.pinSalt = salt;
+        activeUser.pinCode = await authService.hashCredential(cleanCredential, salt);
+        const allUsers = this.getUsers();
+        const idx = allUsers.findIndex((u) => u.id === activeUser.id);
+        if (idx >= 0) allUsers[idx] = activeUser;
+        this.set(STORAGE_KEYS.USERS, allUsers);
         matched = true;
       }
     }
 
     if (matched) {
       authService.clearFailedAttempts(rawInput);
-      authService.createSession(user);
-      return user;
+      authService.createSession(activeUser);
+      return activeUser;
     }
 
     authService.recordFailedAttempt(rawInput);
@@ -2560,6 +2710,70 @@ class StoreService {
       interTransfers: this.getInterBusinessTransfers(),
       partners: this.getPartners(),
     });
+  }
+
+  private mergeCloudBusinessesAndUsers(cloudBizs: BusinessProfile[], cloudUsers: User[]) {
+    const localBizs = this.get<BusinessProfile[]>(STORAGE_KEYS.BUSINESSES, []);
+    const bizMap = new Map<string, BusinessProfile>();
+    localBizs.forEach((b) => bizMap.set(b.id, b));
+    cloudBizs.forEach((b) => {
+      if (!bizMap.has(b.id)) {
+        bizMap.set(b.id, b);
+      } else {
+        const existing = bizMap.get(b.id)!;
+        bizMap.set(b.id, { ...existing, ...b });
+      }
+    });
+    this.set(STORAGE_KEYS.BUSINESSES, Array.from(bizMap.values()));
+
+    const localUsers = this.get<User[]>(STORAGE_KEYS.USERS, []);
+    const userMap = new Map<string, User>();
+    localUsers.forEach((u) => userMap.set(u.id, u));
+    cloudUsers.forEach((u) => {
+      if (!userMap.has(u.id)) {
+        userMap.set(u.id, u);
+      } else {
+        const existing = userMap.get(u.id)!;
+        userMap.set(u.id, { ...existing, ...u });
+      }
+    });
+    this.set(STORAGE_KEYS.USERS, Array.from(userMap.values()));
+  }
+
+  private mergeCloudBusinessData(data: PullResult) {
+    if (!data.business) return;
+    const bizId = data.business.id;
+
+    // Merge products
+    if (data.products && data.products.length > 0) {
+      const localProducts = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+      const prodMap = new Map<string, Product>();
+      localProducts.forEach((p) => prodMap.set(p.id, p));
+      data.products.forEach((p) => prodMap.set(p.id, p));
+      this.set(STORAGE_KEYS.PRODUCTS, Array.from(prodMap.values()));
+    }
+
+    // Merge shifts
+    if (data.shifts && data.shifts.length > 0) {
+      const shiftMap = this.get<Record<string, Shift[]>>(STORAGE_KEYS.SHIFTS_MAP, {});
+      const localShifts = shiftMap[bizId] || [];
+      const sMap = new Map<string, Shift>();
+      localShifts.forEach((s) => sMap.set(s.id, s));
+      data.shifts.forEach((s) => sMap.set(s.id, s));
+      shiftMap[bizId] = Array.from(sMap.values());
+      this.set(STORAGE_KEYS.SHIFTS_MAP, shiftMap);
+    }
+
+    // Merge inventory
+    if (data.inventory && data.inventory.length > 0) {
+      const invMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
+      const localInv = invMap[bizId] || [];
+      const iMap = new Map<string, InventoryItem>();
+      localInv.forEach((i) => iMap.set(i.productId, i));
+      data.inventory.forEach((i) => iMap.set(i.productId, i));
+      invMap[bizId] = Array.from(iMap.values());
+      this.set(STORAGE_KEYS.INVENTORY_MAP, invMap);
+    }
   }
 }
 
