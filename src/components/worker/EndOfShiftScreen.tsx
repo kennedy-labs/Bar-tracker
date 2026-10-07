@@ -251,7 +251,12 @@ Generated via Bar Track System`;
               </h1>
             </div>
             <button
-              onClick={onGoToCounter}
+              onClick={() => {
+                if (activeShift) {
+                  store.markCounterFinished(activeShift.id, false);
+                }
+                onGoToCounter();
+              }}
               className="py-1.5 px-3 rounded-xl bg-[#0E1420] border border-slate-800 hover:bg-slate-800 text-xs text-slate-300 font-semibold cursor-pointer"
             >
               Back to Counter

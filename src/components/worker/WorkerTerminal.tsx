@@ -189,7 +189,12 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
       <EndOfShiftScreen
         currentUser={currentUser}
         onGoToStartScreen={() => setActiveTab('start')}
-        onGoToCounter={() => setActiveTab('counter')}
+        onGoToCounter={() => {
+          if (activeShift) {
+            store.markCounterFinished(activeShift.id, false);
+          }
+          setActiveTab('counter');
+        }}
       />
     );
   }

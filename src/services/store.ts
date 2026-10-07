@@ -1644,6 +1644,19 @@ class StoreService {
         }
       });
 
+      // Synchronize additions directly from persistent StockAddition records
+      // Guarantees that any restock requested by attendant stays on the counter across refreshes
+      const recordedAdditions = this.getStockAdditions(shiftId);
+      shiftItems.forEach((si) => {
+        const totalAdded = recordedAdditions
+          .filter((a) => a.productId === si.productId)
+          .reduce((sum, a) => sum + Number(a.quantity || 0), 0);
+        if (totalAdded > (si.additions || 0)) {
+          si.additions = totalAdded;
+          modified = true;
+        }
+      });
+
       if (modified) {
         this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, items);
       }
@@ -1758,7 +1771,7 @@ class StoreService {
       }
 
       const item: ShiftStockItem = {
-        id: `ssi-${Date.now()}-${product.id}`,
+        id: `ssi-${shiftId}-${product.id}`,
         shiftId,
         productId: product.id,
         productName: product.name,
@@ -1879,13 +1892,39 @@ class StoreService {
 
     // Update SSI additions
     const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
-    const ssi = allSSIs.find(
+    let ssi = allSSIs.find(
       (item) => item.shiftId === params.shiftId && item.productId === params.productId
     );
     if (ssi) {
-      ssi.additions += qty;
-      this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
+      ssi.additions = (ssi.additions || 0) + qty;
+    } else {
+      const currentInventory = this.getInventory();
+      const invItem = currentInventory.find((i) => i.productId === params.productId);
+      const openingCount = invItem ? Number(invItem.quantityOnHand || 0) : 0;
+      ssi = {
+        id: `ssi-${params.shiftId}-${params.productId}`,
+        shiftId: params.shiftId,
+        productId: params.productId,
+        productName: product.name,
+        unit: product.unit || 'BOTTLE',
+        sellingPrice: product.sellingPrice || 0,
+        costPrice: product.costPrice || 0,
+        openingSystemCount: openingCount,
+        openingPhysicalCount: openingCount,
+        openingVerified: true,
+        additions: qty,
+        recordedSales: 0,
+        transfersIn: 0,
+        transfersOut: 0,
+        damages: 0,
+        isMeasured: product.isMeasured,
+        measurementType: product.measurementType,
+        measureUnitLabel: product.measureUnitLabel,
+        totalMeasuredValueKes: product.totalMeasuredValueKes,
+      };
+      allSSIs.push(ssi);
     }
+    this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
 
     // Increment bar inventory
     const currentInventory = this.getInventory();
@@ -2235,6 +2274,7 @@ class StoreService {
       shiftsMap[bizId] = shifts;
       this.set(STORAGE_KEYS.SHIFTS_MAP, shiftsMap);
       this.notify();
+      this.triggerNeonSync();
     }
   }
 
@@ -2904,20 +2944,56 @@ class StoreService {
       this.set(STORAGE_KEYS.SHIFTS_MAP, shiftMap);
     }
 
-    // 3. Authoritative Merge for Inventory (Direct Live Quantities)
+    // 3. Authoritative Merge for Inventory (Direct Live Quantities with Local Restock Preservation)
     if (data.inventory && data.inventory.length > 0) {
       const invMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
-      invMap[bizId] = data.inventory;
+      const localInv = invMap[bizId] || [];
+      const localMap = new Map<string, InventoryItem>();
+      localInv.forEach((i) => localMap.set(i.productId, i));
+
+      const mergedInv = data.inventory.map((ci) => {
+        const li = localMap.get(ci.productId);
+        if (li && Number(li.quantityOnHand || 0) > Number(ci.quantityOnHand || 0)) {
+          return li;
+        }
+        return ci;
+      });
+      localInv.forEach((li) => {
+        if (!mergedInv.some((m) => m.productId === li.productId)) {
+          mergedInv.push(li);
+        }
+      });
+      invMap[bizId] = mergedInv;
       this.set(STORAGE_KEYS.INVENTORY_MAP, invMap);
     }
 
-    // 4. Authoritative Merge for Shift Stock Items (Solves 0-item counter view on new browser)
+    // 4. Authoritative Merge for Shift Stock Items (Preserve Local Additions across Refreshes)
     if (data.shiftStockItems && data.shiftStockItems.length > 0) {
       const localSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
-      const ssiMap = new Map<string, ShiftStockItem>();
-      localSSIs.forEach((i) => ssiMap.set(`${i.shiftId}-${i.productId}`, i));
-      data.shiftStockItems.forEach((i) => ssiMap.set(`${i.shiftId}-${i.productId}`, i));
-      this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, Array.from(ssiMap.values()));
+      const localMap = new Map<string, ShiftStockItem>();
+      localSSIs.forEach((i) => localMap.set(`${i.shiftId}-${i.productId}`, i));
+
+      const mergedSSIs = data.shiftStockItems.map((ci) => {
+        const li = localMap.get(`${ci.shiftId}-${ci.productId}`);
+        if (li) {
+          const additions = Math.max(Number(li.additions || 0), Number(ci.additions || 0));
+          const sales = Math.max(Number(li.recordedSales || 0), Number(ci.recordedSales || 0));
+          return {
+            ...ci,
+            ...li,
+            additions,
+            recordedSales: sales,
+            openingPhysicalCount: li.openingPhysicalCount !== undefined ? li.openingPhysicalCount : ci.openingPhysicalCount,
+          };
+        }
+        return ci;
+      });
+      localSSIs.forEach((li) => {
+        if (!mergedSSIs.some((m) => m.shiftId === li.shiftId && m.productId === li.productId)) {
+          mergedSSIs.push(li);
+        }
+      });
+      this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, mergedSSIs);
     }
 
     // 5. Authoritative Merge for Shift Expenses

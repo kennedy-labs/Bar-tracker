@@ -66,6 +66,12 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<string>(() => {
     try {
+      if (typeof window !== 'undefined') {
+        const savedTab = sessionStorage.getItem('bartrack_active_tab');
+        if (savedTab && ['start', 'counter', 'end_shift', 'history', 'overview', 'shifts', 'stock', 'settings', 'catalog', 'mpesa', 'partners', 'staff'].includes(savedTab)) {
+          return savedTab;
+        }
+      }
       const saved = localStorage.getItem('bartracker_session_user');
       if (saved) {
         const u = JSON.parse(saved);
@@ -84,6 +90,12 @@ export default function App() {
     }
     return 'start';
   });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('bartrack_active_tab', activeTab);
+    }
+  }, [activeTab]);
 
   // Strict route/tab authorization guard: prevent cross-role tab penetration
   useEffect(() => {
@@ -114,7 +126,7 @@ export default function App() {
       if (user?.role === 'WORKER') {
         const active = store.getActiveShift();
         if (active && activeTab === 'start') {
-          setActiveTab(active.counterFinished ? 'end_shift' : 'counter');
+          setActiveTab('counter');
         }
       }
     });
