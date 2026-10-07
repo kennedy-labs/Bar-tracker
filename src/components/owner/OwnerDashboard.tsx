@@ -317,7 +317,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                       className="py-2 px-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-md"
                     >
                       <FileText className="w-3.5 h-3.5" />
-                      <span>{products.length > 0 ? 'Manage Drinks & Prices' : 'Bulk Paste Real Drinks'}</span>
+                      <span>{products.length > 0 ? 'Manage Drinks & Prices' : 'Add Bar Drinks'}</span>
                     </button>
                   </div>
                 </div>

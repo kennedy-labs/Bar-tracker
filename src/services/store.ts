@@ -2197,23 +2197,32 @@ class StoreService {
   }
 
   public updateProductPricing(productId: string, sellingPrice: number, costPrice: number) {
-    const products = this.getProducts(true);
-    const product = products.find((p) => p.id === productId);
+    const allProducts = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+    const product = allProducts.find((p) => p.id === productId);
     if (!product) return;
+
+    if (!product.businessId) {
+      product.businessId = this.getCurrentBusinessId();
+    }
 
     product.sellingPrice = sellingPrice;
     product.costPrice = costPrice;
-    this.set(STORAGE_KEYS.PRODUCTS, products);
+    if (product.isMeasured) {
+      product.totalMeasuredValueKes = sellingPrice;
+    }
+    this.set(STORAGE_KEYS.PRODUCTS, allProducts);
 
     this.addEvent({
       type: 'INFO',
       title: `Price Updated: ${product.name}`,
-      description: `Selling: KES ${sellingPrice.toLocaleString()} | Cost: KES ${costPrice.toLocaleString()}`,
+      description: `Price: KES ${sellingPrice.toLocaleString()} | Cost: KES ${costPrice.toLocaleString()}`,
       actorName: 'Owner Audit Desk',
       severity: 'INFO',
     });
 
     this.notify();
+    this.triggerNeonSync();
+    this.uploadAllToNeon().catch((e) => console.warn('Instant neon sync notice:', e));
   }
 
   public adjustProductStock(productId: string, newQuantity: number): boolean {
@@ -2222,18 +2231,22 @@ class StoreService {
     const item = inv.find((i) => i.productId === productId);
     const prevQty = item ? item.quantityOnHand : 0;
     const delta = cleanQty - prevQty;
+    const bizId = this.getCurrentBusinessId();
 
     if (item) {
       item.quantityOnHand = cleanQty;
       item.updatedAt = new Date().toISOString();
+      if (!item.id) item.id = `${bizId}-${productId}`;
     } else {
       inv.push({
+        id: `${bizId}-${productId}`,
         productId,
         quantityOnHand: cleanQty,
         updatedAt: new Date().toISOString(),
       });
     }
     this.saveCurrentInventory(inv);
+    this.uploadAllToNeon().catch((e) => console.warn('Instant neon sync notice:', e));
 
     // If an active shift exists and stock changed, keep active shift in balance
     const activeShift = this.getActiveShift();
@@ -2614,36 +2627,45 @@ class StoreService {
   }
 
   public updateProduct(productId: string, updates: Partial<Product>): Product | null {
-    const products = this.getProducts(true);
-    const product = products.find((p) => p.id === productId);
+    const allProducts = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+    const product = allProducts.find((p) => p.id === productId);
     if (!product) return null;
 
+    if (!product.businessId) {
+      product.businessId = this.getCurrentBusinessId();
+    }
+
     Object.assign(product, updates);
-    this.set(STORAGE_KEYS.PRODUCTS, products);
+    if (product.isMeasured && updates.sellingPrice !== undefined && updates.totalMeasuredValueKes === undefined) {
+      product.totalMeasuredValueKes = updates.sellingPrice;
+    }
+    this.set(STORAGE_KEYS.PRODUCTS, allProducts);
 
     this.addEvent({
       type: 'INFO',
       title: `Catalog Updated: ${product.name}`,
-      description: `Selling Price: KES ${product.sellingPrice} | Cost Price: KES ${product.costPrice}`,
+      description: `Price: KES ${product.sellingPrice} | Cost: KES ${product.costPrice}`,
       actorName: 'Owner Audit Desk',
       severity: 'INFO',
     });
 
     this.notify();
+    this.triggerNeonSync();
+    this.uploadAllToNeon().catch((e) => console.warn('Instant neon sync notice:', e));
     return product;
   }
 
   public deleteProduct(productId: string, permanent = false): boolean {
-    const products = this.getProducts(true);
-    const product = products.find((p) => p.id === productId);
+    const allProducts = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+    const product = allProducts.find((p) => p.id === productId);
     if (!product) return false;
 
     if (permanent) {
-      const filtered = products.filter((p) => p.id !== productId);
+      const filtered = allProducts.filter((p) => p.id !== productId);
       this.set(STORAGE_KEYS.PRODUCTS, filtered);
     } else {
       product.isArchived = true;
-      this.set(STORAGE_KEYS.PRODUCTS, products);
+      this.set(STORAGE_KEYS.PRODUCTS, allProducts);
     }
 
     this.addEvent({
@@ -2655,16 +2677,17 @@ class StoreService {
     });
 
     this.notify();
+    this.triggerNeonSync();
     return true;
   }
 
   public restoreProduct(productId: string): boolean {
-    const products = this.getProducts(true);
-    const product = products.find((p) => p.id === productId);
+    const allProducts = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+    const product = allProducts.find((p) => p.id === productId);
     if (!product) return false;
 
     product.isArchived = false;
-    this.set(STORAGE_KEYS.PRODUCTS, products);
+    this.set(STORAGE_KEYS.PRODUCTS, allProducts);
 
     this.addEvent({
       type: 'INFO',
@@ -2675,6 +2698,7 @@ class StoreService {
     });
 
     this.notify();
+    this.triggerNeonSync();
     return true;
   }
 
@@ -2763,10 +2787,33 @@ class StoreService {
     // Merge products
     if (data.products && data.products.length > 0) {
       const localProducts = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
-      const prodMap = new Map<string, Product>();
-      localProducts.forEach((p) => prodMap.set(p.id, p));
-      data.products.forEach((p) => prodMap.set(p.id, p));
-      this.set(STORAGE_KEYS.PRODUCTS, Array.from(prodMap.values()));
+      const localMap = new Map<string, Product>();
+      localProducts.forEach((p) => localMap.set(p.id, p));
+
+      const mergedMap = new Map<string, Product>();
+      data.products.forEach((cp) => {
+        const lp = localMap.get(cp.id);
+        if (lp) {
+          mergedMap.set(cp.id, {
+            ...cp,
+            ...lp,
+            sellingPrice: lp.sellingPrice !== undefined ? lp.sellingPrice : cp.sellingPrice,
+            costPrice: lp.costPrice !== undefined ? lp.costPrice : cp.costPrice,
+            totalMeasuredValueKes: lp.totalMeasuredValueKes ?? cp.totalMeasuredValueKes,
+            isMeasured: lp.isMeasured ?? cp.isMeasured,
+            measurementType: lp.measurementType ?? cp.measurementType,
+            measureUnitLabel: lp.measureUnitLabel ?? cp.measureUnitLabel,
+          });
+        } else {
+          mergedMap.set(cp.id, cp);
+        }
+      });
+      localProducts.forEach((lp) => {
+        if (!mergedMap.has(lp.id)) {
+          mergedMap.set(lp.id, lp);
+        }
+      });
+      this.set(STORAGE_KEYS.PRODUCTS, Array.from(mergedMap.values()));
     }
 
     // Merge shifts
@@ -2784,10 +2831,29 @@ class StoreService {
     if (data.inventory && data.inventory.length > 0) {
       const invMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
       const localInv = invMap[bizId] || [];
-      const iMap = new Map<string, InventoryItem>();
-      localInv.forEach((i) => iMap.set(i.productId, i));
-      data.inventory.forEach((i) => iMap.set(i.productId, i));
-      invMap[bizId] = Array.from(iMap.values());
+      const localInvMap = new Map<string, InventoryItem>();
+      localInv.forEach((i) => localInvMap.set(i.productId, i));
+
+      const mergedInvMap = new Map<string, InventoryItem>();
+      data.inventory.forEach((ci) => {
+        const li = localInvMap.get(ci.productId);
+        if (li) {
+          mergedInvMap.set(ci.productId, {
+            id: li.id || ci.id,
+            productId: ci.productId,
+            quantityOnHand: li.quantityOnHand !== undefined ? li.quantityOnHand : ci.quantityOnHand,
+            updatedAt: li.updatedAt || ci.updatedAt,
+          });
+        } else {
+          mergedInvMap.set(ci.productId, ci);
+        }
+      });
+      localInv.forEach((li) => {
+        if (!mergedInvMap.has(li.productId)) {
+          mergedInvMap.set(li.productId, li);
+        }
+      });
+      invMap[bizId] = Array.from(mergedInvMap.values());
       this.set(STORAGE_KEYS.INVENTORY_MAP, invMap);
     }
   }

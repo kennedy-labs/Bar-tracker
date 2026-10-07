@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Product, ProductCategory, ProductUnit } from '../../types';
 import { store } from '../../services/store';
 import {
@@ -23,6 +23,11 @@ import {
 } from 'lucide-react';
 
 export const CatalogManager: React.FC = () => {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    return store.subscribe(() => setTick((t) => t + 1));
+  }, []);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [showArchived, setShowArchived] = useState(false);
@@ -31,13 +36,6 @@ export const CatalogManager: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
-
-  // Bulk Import & Clean Slate States
-  const [showBulkModal, setShowBulkModal] = useState(false);
-  const [bulkText, setBulkText] = useState('');
-  const [bulkSuccessMsg, setBulkSuccessMsg] = useState<string | null>(null);
-  const [defaultBulkStock, setDefaultBulkStock] = useState('0');
-  const [showWipeConfirmModal, setShowWipeConfirmModal] = useState(false);
 
   // Form State for Add / Edit
   const [name, setName] = useState('');
@@ -50,18 +48,14 @@ export const CatalogManager: React.FC = () => {
   const [volumeMl, setVolumeMl] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Measured Drink Modal States
+  // Measured Drink Modal States (Pure Value Measurement)
   const [showMeasuredModal, setShowMeasuredModal] = useState(false);
   const [measuredEditingProduct, setMeasuredEditingProduct] = useState<Product | null>(null);
   const [measuredName, setMeasuredName] = useState('');
   const [measuredCategory, setMeasuredCategory] = useState<ProductCategory>('TRADITIONAL_BREW');
-  const [measuredMode, setMeasuredMode] = useState<'VALUE' | 'VOLUME' | 'BOTH'>('VALUE');
-  const [measuredUnitLabel, setMeasuredUnitLabel] = useState('KES Value');
   const [measuredStock, setMeasuredStock] = useState('1500');
   const [measuredCost, setMeasuredCost] = useState('1000');
   const [measuredSell, setMeasuredSell] = useState('1500');
-  const [measuredVolumeAmount, setMeasuredVolumeAmount] = useState('5 Litres');
-  const [measuredPortionPrice, setMeasuredPortionPrice] = useState('150');
   const [measuredError, setMeasuredError] = useState<string | null>(null);
 
   // Quick Inline Price Editing
@@ -133,17 +127,14 @@ export const CatalogManager: React.FC = () => {
   };
 
   // Open Add Measured Modal
+  // Open Add Measured Modal
   const handleOpenAddMeasured = () => {
     setMeasuredEditingProduct(null);
     setMeasuredName('');
     setMeasuredCategory('TRADITIONAL_BREW');
-    setMeasuredMode('VALUE');
-    setMeasuredUnitLabel('KES Value');
     setMeasuredStock('1500');
     setMeasuredCost('1000');
     setMeasuredSell('1500');
-    setMeasuredVolumeAmount('5 Litres');
-    setMeasuredPortionPrice('150');
     setMeasuredError(null);
     setShowMeasuredModal(true);
   };
@@ -153,17 +144,11 @@ export const CatalogManager: React.FC = () => {
     if (p.isMeasured) {
       setMeasuredEditingProduct(p);
       setMeasuredName(p.name);
-      const mType = (!p.measurementType || p.measurementType === 'COUNT')
-        ? (p.unit === 'VALUE_KES' ? 'VALUE' : 'VOLUME')
-        : p.measurementType;
-      setMeasuredMode(mType);
-      setMeasuredUnitLabel(p.measureUnitLabel || (p.unit === 'VALUE_KES' ? 'KES Value' : p.unit.toLowerCase()));
+      setMeasuredCategory(p.category);
       const invItem = inventory.find((i) => i.productId === p.id);
-      setMeasuredStock(String(invItem?.quantityOnHand || 0));
+      setMeasuredStock(String(invItem?.quantityOnHand ?? p.totalMeasuredValueKes ?? p.sellingPrice ?? 0));
       setMeasuredCost(String(p.costPrice));
       setMeasuredSell(String(p.sellingPrice));
-      setMeasuredVolumeAmount(p.volumeMl ? `${p.volumeMl}ml` : '');
-      setMeasuredPortionPrice('');
       setMeasuredError(null);
       setShowMeasuredModal(true);
       return;
@@ -242,67 +227,60 @@ export const CatalogManager: React.FC = () => {
     setEditingProduct(null);
   };
 
-  // Save Add or Edit Measured Product
+  // Save Add or Edit Measured Product (Pure Value Measurement)
   const handleSubmitMeasuredProduct = (e: React.FormEvent) => {
     e.preventDefault();
     setMeasuredError(null);
 
     if (!measuredName.trim()) {
-      setMeasuredError('Please enter a drink name (e.g. Muratina).');
+      setMeasuredError('Please enter a drink name (e.g. Makali, Muratina).');
       return;
     }
 
     const cost = parseFloat(measuredCost);
     const sell = parseFloat(measuredSell);
-    const stock = parseFloat(measuredStock) || 0;
+    const stock = parseFloat(measuredStock);
 
     if (isNaN(cost) || cost < 0) {
-      setMeasuredError('Please enter a valid wholesale cost amount.');
+      setMeasuredError('Please enter a valid cost.');
       return;
     }
 
     if (isNaN(sell) || sell <= 0) {
-      setMeasuredError('Please enter a valid retail selling price or total value.');
+      setMeasuredError('Please enter a valid price.');
       return;
     }
 
-    const unitType: ProductUnit =
-      measuredMode === 'VALUE'
-        ? 'VALUE_KES'
-        : measuredUnitLabel.toLowerCase().includes('litre')
-        ? 'LITRE'
-        : 'CUSTOM';
-
-    const label = measuredUnitLabel.trim() || (measuredMode === 'VALUE' ? 'KES Value' : 'Litres');
+    const cleanStock = isNaN(stock) || stock < 0 ? 0 : stock;
 
     if (measuredEditingProduct) {
       store.updateProduct(measuredEditingProduct.id, {
         name: measuredName.trim(),
         category: measuredCategory,
-        unit: unitType,
+        unit: 'VALUE_KES',
         costPrice: cost,
         sellingPrice: sell,
         isMeasured: true,
-        measurementType: measuredMode,
-        measureUnitLabel: label,
-        totalMeasuredValueKes: measuredMode === 'VALUE' ? sell : undefined,
+        measurementType: 'VALUE',
+        measureUnitLabel: 'KES Value',
+        totalMeasuredValueKes: sell,
       });
 
       // Update on-shelf inventory
-      store.adjustProductStock(measuredEditingProduct.id, stock);
+      store.adjustProductStock(measuredEditingProduct.id, cleanStock);
     } else {
       store.addProduct({
         name: measuredName.trim(),
         category: measuredCategory,
-        unit: unitType,
+        unit: 'VALUE_KES',
         costPrice: cost,
         sellingPrice: sell,
-        initialStock: stock,
+        initialStock: cleanStock,
         reorderLevel: 5,
         isMeasured: true,
-        measurementType: measuredMode,
-        measureUnitLabel: label,
-        totalMeasuredValueKes: measuredMode === 'VALUE' ? sell : undefined,
+        measurementType: 'VALUE',
+        measureUnitLabel: 'KES Value',
+        totalMeasuredValueKes: sell,
       });
     }
 
@@ -332,100 +310,6 @@ export const CatalogManager: React.FC = () => {
     setInlineEditId(null);
   };
 
-  // Bulk import parser: parses lines of "Name, Price, Cost, Category, Stock" or "Name, Price"
-  const parseBulkLines = (text: string) => {
-    const lines = text.split('\n').filter((l) => l.trim().length > 0);
-    return lines.map((line, idx) => {
-      const parts = line.includes(',')
-        ? line.split(',').map((p) => p.trim())
-        : line.includes('\t')
-        ? line.split('\t').map((p) => p.trim())
-        : line.includes(' - ')
-        ? line.split(' - ').map((p) => p.trim())
-        : line.split(':').map((p) => p.trim());
-
-      const rawName = parts[0] || `Drink ${idx + 1}`;
-      const rawSell = parts[1] ? parseFloat(parts[1].replace(/[^0-9.]/g, '')) : 0;
-      const rawCost = parts[2] ? parseFloat(parts[2].replace(/[^0-9.]/g, '')) : undefined;
-      const rawCat = parts[3]?.toUpperCase();
-      const rawStock = parts[4] ? parseInt(parts[4].replace(/[^0-9]/g, ''), 10) : undefined;
-
-      // Smart category detection from drink keywords
-      let guessedCat: ProductCategory = 'BEER';
-      const lower = rawName.toLowerCase();
-      if (
-        lower.includes('whisky') ||
-        lower.includes('whiskey') ||
-        lower.includes('gin') ||
-        lower.includes('vodka') ||
-        lower.includes('rum') ||
-        lower.includes('brandy') ||
-        lower.includes('cognac') ||
-        lower.includes('tequila') ||
-        lower.includes('liqueur') ||
-        lower.includes('spirit') ||
-        lower.includes('jameson') ||
-        lower.includes('gilbeys') ||
-        lower.includes('johnnie') ||
-        lower.includes('black label') ||
-        lower.includes('red label') ||
-        lower.includes('flagon') ||
-        lower.includes('richot') ||
-        lower.includes('viceroy') ||
-        lower.includes('captain morgan') ||
-        lower.includes('jack daniel')
-      ) {
-        guessedCat = 'SPIRIT';
-      } else if (lower.includes('cider') || lower.includes('savanna') || lower.includes('hunters') || lower.includes('snapp')) {
-        guessedCat = 'CIDER';
-      } else if (lower.includes('wine') || lower.includes('sauvignon') || lower.includes('merlot') || lower.includes('chardonnay') || lower.includes('cabernet') || lower.includes('cellar cask') || lower.includes('4th street')) {
-        guessedCat = 'WINE';
-      } else if (lower.includes('soda') || lower.includes('coca') || lower.includes('coke') || lower.includes('fanta') || lower.includes('sprite') || lower.includes('water') || lower.includes('juice') || lower.includes('red bull') || lower.includes('energy') || lower.includes('tonic') || lower.includes('ginger ale') || lower.includes('krest')) {
-        guessedCat = 'SOFT_DRINK';
-      } else if (lower.includes('smoke') || lower.includes('cigarette') || lower.includes('dunhill') || lower.includes('sportsman') || lower.includes('embassy')) {
-        guessedCat = 'CIGARETTE';
-      }
-
-      const validCats: ProductCategory[] = ['BEER', 'CIDER', 'SPIRIT', 'WINE', 'SOFT_DRINK', 'CIGARETTE'];
-      const category: ProductCategory = validCats.includes(rawCat as ProductCategory) ? (rawCat as ProductCategory) : guessedCat;
-
-      const sellingPrice = isNaN(rawSell) ? 0 : rawSell;
-      const costPrice = rawCost !== undefined && !isNaN(rawCost) ? rawCost : Math.round(sellingPrice * 0.75);
-      const stock = rawStock !== undefined && !isNaN(rawStock) ? rawStock : parseInt(defaultBulkStock, 10) || 0;
-
-      return {
-        name: rawName,
-        sellingPrice,
-        costPrice,
-        category,
-        unit: ('BOTTLE' as ProductUnit),
-        initialStock: stock,
-        reorderLevel: 5,
-      };
-    });
-  };
-
-  const handleBulkImport = () => {
-    const parsed = parseBulkLines(bulkText).filter((p) => p.name.trim().length > 0 && p.sellingPrice > 0);
-    if (parsed.length === 0) {
-      setFormError('Please enter at least one drink with a valid name and price.');
-      return;
-    }
-
-    const added = store.bulkAddProducts(parsed);
-    setBulkSuccessMsg(`Successfully imported ${added.length} real drinks into your catalog!`);
-    setTimeout(() => {
-      setShowBulkModal(false);
-      setBulkText('');
-      setBulkSuccessMsg(null);
-    }, 1200);
-  };
-
-  const handleWipeTestData = () => {
-    store.clearAllProducts();
-    setShowWipeConfirmModal(false);
-  };
-
   const handleRestoreTemplate = () => {
     store.restoreDefaultCatalog();
   };
@@ -436,7 +320,6 @@ export const CatalogManager: React.FC = () => {
   const projectedMargin = numSell - numCost;
   const projectedPct = numSell > 0 ? Math.round((projectedMargin / numSell) * 100) : 0;
 
-  const parsedBulkPreview = parseBulkLines(bulkText);
 
   return (
     <div className="space-y-4">
@@ -458,24 +341,7 @@ export const CatalogManager: React.FC = () => {
           </div>
 
           <div className="flex items-center flex-wrap gap-2">
-            <button
-              onClick={() => setShowBulkModal(true)}
-              className="py-2.5 px-3.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
-            >
-              <FileText className="w-4 h-4" />
-              <span>Bulk Paste Real Drinks</span>
-            </button>
 
-            {allProducts.length > 0 && (
-              <button
-                onClick={() => setShowWipeConfirmModal(true)}
-                className="py-2.5 px-3 rounded-xl bg-red-950/40 hover:bg-red-950/70 border border-red-800/60 text-red-300 font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
-                title="Wipe sample drinks to start with clean real data"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Wipe Sample Drinks</span>
-              </button>
-            )}
 
             <button
               onClick={() => setShowArchived(!showArchived)}
@@ -562,13 +428,7 @@ export const CatalogManager: React.FC = () => {
             </div>
             {allProducts.length === 0 && (
               <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2">
-                <button
-                  onClick={() => setShowBulkModal(true)}
-                  className="w-full sm:w-auto py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-950/40"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>Bulk Paste Real Drinks & Prices</span>
-                </button>
+
                 <button
                   onClick={handleOpenAdd}
                   className="w-full sm:w-auto py-2.5 px-4 rounded-xl bg-[#151D2C] hover:bg-[#1E293B] border border-slate-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
@@ -1047,178 +907,7 @@ export const CatalogManager: React.FC = () => {
       )}
 
       {/* 5. MODAL: BULK PASTE REAL DRINKS */}
-      {showBulkModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-2xl bg-[#121824] border border-[#1E293B] rounded-3xl p-5 sm:p-7 shadow-2xl space-y-4 max-h-[92vh] flex flex-col">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-bold text-white">
-                    Bulk Import Real Products & Prices
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Paste your list of drinks directly from text, WhatsApp, or Excel.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setShowBulkModal(false);
-                  setFormError(null);
-                }}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {bulkSuccessMsg && (
-              <div className="p-3.5 rounded-2xl bg-emerald-950/60 border border-emerald-500/60 text-emerald-200 text-xs flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span className="font-semibold">{bulkSuccessMsg}</span>
-              </div>
-            )}
-
-            {formError && (
-              <div className="p-3 rounded-2xl bg-red-950/60 border border-red-800 text-red-200 text-xs flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-                <span>{formError}</span>
-              </div>
-            )}
-
-            <div className="space-y-3 flex-1 overflow-y-auto pr-1">
-              <div className="p-3 rounded-2xl bg-[#0E1420] border border-slate-800 text-[11px] text-slate-300 space-y-1.5">
-                <div className="font-bold text-emerald-400 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Flexible Format Examples (One Drink Per Line):</span>
-                </div>
-                <div className="font-mono text-slate-400 space-y-0.5 pl-1 text-[10px]">
-                  <div>Tusker Lager, 250</div>
-                  <div>White Cap, 260, 190 (Name, Selling Price, Cost Price)</div>
-                  <div>Guinness Foreign Extra: 300</div>
-                  <div>Gilbeys Gin 750ml, 1600, 1200, SPIRIT, 12 (with initial stock)</div>
-                  <div>Jameson 750ml - 2800</div>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                    Paste Your Products & Prices List *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBulkText(
-                        `Tusker Lager 500ml, 250\nWhite Cap Crisp 500ml, 260, 190\nGuinness Foreign Extra 500ml, 300\nTusker Cider 500ml, 280\nGilbeys Gin 750ml, 1600, 1200\nJameson Irish Whiskey 750ml, 2800, 2200\nJohnnie Walker Black Label 750ml, 3800\nCoca Cola 300ml, 80, 50\nWater 500ml, 60, 30`
-                      );
-                    }}
-                    className="text-[10px] text-emerald-400 hover:text-emerald-300 font-mono underline cursor-pointer"
-                  >
-                    Paste Kenyan Bar Sample Format
-                  </button>
-                </div>
-                <textarea
-                  rows={7}
-                  value={bulkText}
-                  onChange={(e) => {
-                    setBulkText(e.target.value);
-                    setFormError(null);
-                  }}
-                  placeholder={`Tusker Lager, 250\nWhite Cap, 260\nGuinness 500ml, 300\nGilbeys Gin 750ml, 1600\nJameson 750ml, 2800, 2200`}
-                  className="w-full bg-[#0E1420] border border-slate-800 focus:border-emerald-500 rounded-2xl p-3.5 text-xs text-white font-mono placeholder-slate-600 focus:outline-none resize-none leading-relaxed"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                    Default Initial Stock (per drink)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={defaultBulkStock}
-                    onChange={(e) => setDefaultBulkStock(e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-[#0E1420] border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
-                  />
-                  <p className="text-[10px] text-slate-500 mt-0.5">
-                    Leave 0 if physical stock will be counted during shift opening.
-                  </p>
-                </div>
-
-                <div className="p-3 rounded-xl bg-[#0E1420] border border-slate-800 flex flex-col justify-center">
-                  <div className="text-[10px] text-slate-400">Live Parser Summary</div>
-                  <div className="text-sm font-bold text-white mt-0.5">
-                    {parsedBulkPreview.filter((p) => p.name.trim() && p.sellingPrice > 0).length} drink(s) detected
-                  </div>
-                </div>
-              </div>
-
-              {/* Live Preview List */}
-              {parsedBulkPreview.length > 0 && (
-                <div className="border border-slate-800 rounded-2xl overflow-hidden">
-                  <div className="bg-[#0E1420] px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800">
-                    Preview ({parsedBulkPreview.filter((p) => p.name.trim() && p.sellingPrice > 0).length} ready)
-                  </div>
-                  <div className="max-h-36 overflow-y-auto divide-y divide-slate-800/60 text-xs">
-                    {parsedBulkPreview
-                      .filter((p) => p.name.trim())
-                      .map((p, idx) => (
-                        <div key={idx} className="px-3 py-2 flex items-center justify-between bg-[#121824]">
-                          <div className="flex items-center gap-2 truncate">
-                            <span className="text-slate-300 font-medium truncate">{p.name}</span>
-                            <span className="text-[9px] px-1.5 py-0.5 rounded font-mono bg-slate-800 text-slate-400 uppercase">
-                              {p.category}
-                            </span>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <span className="font-bold text-emerald-400">KES {p.sellingPrice}</span>
-                            {p.costPrice !== undefined && (
-                              <span className="text-[10px] text-slate-500 ml-1.5">
-                                (Cost: KES {p.costPrice})
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowBulkModal(false);
-                  setFormError(null);
-                }}
-                className="py-3 px-4 rounded-xl bg-[#0E1420] border border-slate-800 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleBulkImport}
-                disabled={parsedBulkPreview.filter((p) => p.name.trim() && p.sellingPrice > 0).length === 0}
-                className="flex-1 py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/50 cursor-pointer"
-              >
-                <Check className="w-4 h-4" />
-                <span>
-                  Import {parsedBulkPreview.filter((p) => p.name.trim() && p.sellingPrice > 0).length} Drinks to Menu
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 5. MODAL: ADD / EDIT MEASURED CONTINUOUS DRINK */}
+      {/* 5. MODAL: ADD / EDIT MEASURED DRINK (VALUE-BASED) */}
       {showMeasuredModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-lg bg-[#121824] border border-cyan-800/80 rounded-3xl p-5 sm:p-6 shadow-2xl max-h-[92vh] overflow-y-auto space-y-4">
@@ -1230,10 +919,10 @@ export const CatalogManager: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-white tracking-tight">
-                    {measuredEditingProduct ? 'Edit Measured Drink' : 'Add Measured / Continuous Drink'}
+                    {measuredEditingProduct ? 'Edit Measured Drink' : 'Add Measured Drink'}
                   </h3>
                   <p className="text-[11px] text-cyan-300">
-                    For uncounted products measured by price, volume, or custom portions
+                    Continuous drink measured by value (e.g. Makali, Muratina, local brew)
                   </p>
                 </div>
               </div>
@@ -1258,7 +947,7 @@ export const CatalogManager: React.FC = () => {
             )}
 
             <form onSubmit={handleSubmitMeasuredProduct} className="space-y-4">
-              {/* Quick Preset Drink Ideas */}
+              {/* Quick Preset Staples */}
               {!measuredEditingProduct && (
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
@@ -1266,30 +955,20 @@ export const CatalogManager: React.FC = () => {
                   </label>
                   <div className="flex flex-wrap gap-1.5">
                     {[
-                      { name: 'Muratina', unit: 'VALUE', price: '1500', cost: '1000' },
-                      { name: 'Busaa / Local Brew', unit: 'VOLUME', label: 'Jugs', price: '200', cost: '120' },
-                      { name: 'Keg Draught (White Cap/Balozi)', unit: 'VOLUME', label: 'Cups', price: '120', cost: '80' },
-                      { name: 'Bulk House Wine', unit: 'VOLUME', label: 'Litres', price: '600', cost: '400' },
-                      { name: 'Palm Wine (Mnazi)', unit: 'VALUE', price: '1200', cost: '800' },
+                      { name: 'Makali', price: '1500', cost: '1000' },
+                      { name: 'Muratina', price: '1500', cost: '1000' },
+                      { name: 'Busaa / Local Brew', price: '1200', cost: '800' },
+                      { name: 'Keg Draught', price: '2000', cost: '1400' },
+                      { name: 'Palm Wine (Mnazi)', price: '1000', cost: '600' },
                     ].map((preset) => (
                       <button
                         key={preset.name}
                         type="button"
                         onClick={() => {
                           setMeasuredName(preset.name);
-                          if (preset.unit === 'VALUE') {
-                            setMeasuredMode('VALUE');
-                            setMeasuredSell(preset.price);
-                            setMeasuredCost(preset.cost);
-                            setMeasuredStock(preset.price);
-                            setMeasuredUnitLabel('KES Value');
-                          } else {
-                            setMeasuredMode('VOLUME');
-                            setMeasuredUnitLabel(preset.label || 'Litres');
-                            setMeasuredPortionPrice(preset.price);
-                            setMeasuredCost(preset.cost);
-                            setMeasuredStock('10');
-                          }
+                          setMeasuredSell(preset.price);
+                          setMeasuredCost(preset.cost);
+                          setMeasuredStock(preset.price);
                         }}
                         className="py-1 px-2.5 rounded-lg bg-[#0E1420] hover:bg-cyan-950 border border-slate-800 hover:border-cyan-700 text-xs text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
                       >
@@ -1311,65 +990,9 @@ export const CatalogManager: React.FC = () => {
                   autoFocus
                   value={measuredName}
                   onChange={(e) => setMeasuredName(e.target.value)}
-                  placeholder="e.g. Muratina, Keg Draught, House Wine Carafe"
+                  placeholder="e.g. Makali, Muratina, Local Brew"
                   className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                 />
-              </div>
-
-              {/* Mode Selector */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  How is this drink measured?
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMeasuredMode('VALUE');
-                      setMeasuredUnitLabel('KES Value');
-                    }}
-                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                      measuredMode === 'VALUE'
-                        ? 'bg-cyan-950/90 border-cyan-500 text-cyan-200'
-                        : 'bg-[#0E1420] border-slate-800 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <div className="text-xs font-bold">By Value (Kshs)</div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">e.g. Muratina = 1500 KES batch</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMeasuredMode('VOLUME');
-                      if (measuredUnitLabel === 'KES Value') setMeasuredUnitLabel('Litres');
-                    }}
-                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                      measuredMode === 'VOLUME'
-                        ? 'bg-cyan-950/90 border-cyan-500 text-cyan-200'
-                        : 'bg-[#0E1420] border-slate-800 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <div className="text-xs font-bold">Amount + Price</div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">e.g. Litres, Jugs @ 150 KES</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMeasuredMode('BOTH');
-                      if (measuredUnitLabel === 'KES Value') setMeasuredUnitLabel('Litres');
-                    }}
-                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                      measuredMode === 'BOTH'
-                        ? 'bg-cyan-950/90 border-cyan-500 text-cyan-200'
-                        : 'bg-[#0E1420] border-slate-800 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <div className="text-xs font-bold">Both (Value & Vol)</div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">e.g. Batch value & volume rate</div>
-                  </button>
-                </div>
               </div>
 
               {/* Category */}
@@ -1390,271 +1013,73 @@ export const CatalogManager: React.FC = () => {
                 </select>
               </div>
 
-              {/* Dynamic Inputs Based on Mode */}
-              {measuredMode === 'VALUE' ? (
-                /* Mode 1: PURE VALUE (Kshs) */
-                <div className="space-y-3 p-3.5 rounded-2xl bg-[#0E1420] border border-cyan-900/60">
-                  <div className="text-[11px] text-cyan-400 font-bold uppercase tracking-wider">
-                    Value Pricing (KES)
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">
-                        Retail Selling Value (KES)
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        min="1"
-                        required
-                        value={measuredSell}
-                        onChange={(e) => {
-                          setMeasuredSell(e.target.value);
-                          if (!measuredEditingProduct && measuredStock === measuredSell) {
-                            setMeasuredStock(e.target.value);
-                          }
-                        }}
-                        placeholder="e.g. 1500"
-                        className="w-full bg-[#121824] border border-cyan-500 rounded-xl px-3 py-2 text-sm font-mono font-bold text-cyan-300 focus:outline-none"
-                      />
-                      <span className="text-[10px] text-slate-500">Total batch revenue</span>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">
-                        Wholesale / Brew Cost (KES)
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
-                        required
-                        value={measuredCost}
-                        onChange={(e) => setMeasuredCost(e.target.value)}
-                        placeholder="e.g. 1000"
-                        className="w-full bg-[#121824] border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono text-white focus:outline-none"
-                      />
-                      <span className="text-[10px] text-slate-500">Cost to produce / buy</span>
-                    </div>
+              {/* Pricing & Stock Fields (Pure Value) */}
+              <div className="space-y-3 p-3.5 rounded-2xl bg-[#0E1420] border border-cyan-900/60">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Price (KES)
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="1"
+                      required
+                      value={measuredSell}
+                      onChange={(e) => {
+                        setMeasuredSell(e.target.value);
+                        if (!measuredEditingProduct && measuredStock === measuredSell) {
+                          setMeasuredStock(e.target.value);
+                        }
+                      }}
+                      placeholder="e.g. 1500"
+                      className="w-full bg-[#121824] border border-cyan-500 rounded-xl px-3 py-2 text-sm font-mono font-bold text-cyan-300 focus:outline-none"
+                    />
+                    <span className="text-[10px] text-slate-500">Retail selling price</span>
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      Current Value on Shelf (KES)
+                      Cost (KES)
                     </label>
                     <input
                       type="number"
                       step="any"
                       min="0"
                       required
-                      value={measuredStock}
-                      onChange={(e) => setMeasuredStock(e.target.value)}
-                      placeholder="e.g. 1500"
-                      className="w-full bg-[#121824] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
+                      value={measuredCost}
+                      onChange={(e) => setMeasuredCost(e.target.value)}
+                      placeholder="e.g. 1000"
+                      className="w-full bg-[#121824] border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono text-white focus:outline-none"
                     />
-                    <span className="text-[10px] text-slate-400">
-                      Amount of KES worth currently remaining on the counter
-                    </span>
+                    <span className="text-[10px] text-slate-500">Wholesale / brew cost</span>
                   </div>
                 </div>
-              ) : measuredMode === 'VOLUME' ? (
-                /* Mode 2: VOLUME / AMOUNT (Text) + PRICE */
-                <div className="space-y-3 p-3.5 rounded-2xl bg-[#0E1420] border border-cyan-900/60">
-                  <div className="text-[11px] text-cyan-400 font-bold uppercase tracking-wider">
-                    Volume & Portion Pricing
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">
-                        Measure Unit Label
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={measuredUnitLabel}
-                        onChange={(e) => setMeasuredUnitLabel(e.target.value)}
-                        placeholder="e.g. Litres, Jugs, Cups"
-                        className="w-full bg-[#121824] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
-                      />
-                      <div className="flex gap-1 mt-1">
-                        {['Litres', 'Jugs', 'Cups', 'Glasses', 'Kegs'].map((u) => (
-                          <button
-                            key={u}
-                            type="button"
-                            onClick={() => setMeasuredUnitLabel(u)}
-                            className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-white"
-                          >
-                            {u}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">
-                        Stock on Shelf ({measuredUnitLabel || 'units'})
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
-                        required
-                        value={measuredStock}
-                        onChange={(e) => setMeasuredStock(e.target.value)}
-                        placeholder="e.g. 10"
-                        className="w-full bg-[#121824] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
-                      />
-                      <span className="text-[10px] text-slate-500">Initial count on counter</span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">
-                        Selling Price per {measuredUnitLabel || 'unit'} (KES)
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        min="1"
-                        required
-                        value={measuredPortionPrice}
-                        onChange={(e) => {
-                          setMeasuredPortionPrice(e.target.value);
-                          setMeasuredSell(e.target.value);
-                        }}
-                        placeholder="e.g. 150"
-                        className="w-full bg-[#121824] border border-cyan-500 rounded-xl px-3 py-2 text-sm font-mono font-bold text-cyan-300 focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">
-                        Wholesale Cost per {measuredUnitLabel || 'unit'} (KES)
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
-                        required
-                        value={measuredCost}
-                        onChange={(e) => setMeasuredCost(e.target.value)}
-                        placeholder="e.g. 100"
-                        className="w-full bg-[#121824] border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono text-white focus:outline-none"
-                      />
-                    </div>
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Current Stock on Shelf (KES)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    required
+                    value={measuredStock}
+                    onChange={(e) => setMeasuredStock(e.target.value)}
+                    placeholder="e.g. 1500"
+                    className="w-full bg-[#121824] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
+                  />
+                  <span className="text-[10px] text-slate-400">
+                    KES worth of drink currently remaining on the counter
+                  </span>
                 </div>
-              ) : (
-                /* Mode 3: BOTH (VALUE & VOLUME) */
-                <div className="space-y-3 p-3.5 rounded-2xl bg-[#0E1420] border border-cyan-900/60">
-                  <div className="text-[11px] text-cyan-400 font-bold uppercase tracking-wider">
-                    Volume Amount & Total Batch Value
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                        Measure Label
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={measuredUnitLabel}
-                        onChange={(e) => setMeasuredUnitLabel(e.target.value)}
-                        placeholder="e.g. Litres"
-                        className="w-full bg-[#121824] border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                        Volume Amount
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
-                        required
-                        value={measuredStock}
-                        onChange={(e) => {
-                          setMeasuredStock(e.target.value);
-                          const qty = parseFloat(e.target.value) || 0;
-                          const rate = parseFloat(measuredPortionPrice) || 0;
-                          if (qty > 0 && rate > 0) {
-                            setMeasuredSell(String(qty * rate));
-                          }
-                        }}
-                        placeholder="e.g. 10"
-                        className="w-full bg-[#121824] border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-mono text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                        Rate per Unit (KES)
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        min="1"
-                        required
-                        value={measuredPortionPrice}
-                        onChange={(e) => {
-                          setMeasuredPortionPrice(e.target.value);
-                          const rate = parseFloat(e.target.value) || 0;
-                          const qty = parseFloat(measuredStock) || 0;
-                          if (qty > 0 && rate > 0) {
-                            setMeasuredSell(String(qty * rate));
-                          }
-                        }}
-                        placeholder="e.g. 150"
-                        className="w-full bg-[#121824] border border-cyan-500 rounded-xl px-2.5 py-1.5 text-xs font-mono text-cyan-300 font-bold"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">
-                        Total Batch Retail Value (KES)
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        min="1"
-                        required
-                        value={measuredSell}
-                        onChange={(e) => setMeasuredSell(e.target.value)}
-                        placeholder="e.g. 1500"
-                        className="w-full bg-[#121824] border border-emerald-500 rounded-xl px-3 py-2 text-sm font-mono font-bold text-emerald-400"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">
-                        Total Batch Cost (KES)
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
-                        required
-                        value={measuredCost}
-                        onChange={(e) => setMeasuredCost(e.target.value)}
-                        placeholder="e.g. 1000"
-                        className="w-full bg-[#121824] border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono text-white"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
+              </div>
 
               {/* Profit & Margin Preview */}
               {parseFloat(measuredSell) > 0 && (
                 <div className="p-3 rounded-2xl bg-[#0E1420] border border-slate-800 text-xs flex items-center justify-between font-mono">
-                  <div className="text-slate-400">Estimated Margin:</div>
+                  <div className="text-slate-400">Estimated Profit:</div>
                   <div className="text-cyan-400 font-bold">
                     KES {(parseFloat(measuredSell) - (parseFloat(measuredCost) || 0)).toLocaleString()} (
                     {Math.round(
@@ -1667,7 +1092,7 @@ export const CatalogManager: React.FC = () => {
                 </div>
               )}
 
-              {/* Buttons */}
+              {/* Action Buttons */}
               <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
                 <button
                   type="button"
@@ -1687,63 +1112,12 @@ export const CatalogManager: React.FC = () => {
                   <Check className="w-4 h-4" />
                   <span>
                     {measuredEditingProduct
-                      ? 'Save Measured Drink'
-                      : `Add ${measuredName || 'Measured Drink'} to Catalog`}
+                      ? 'Save Changes'
+                      : 'Add Measured Drink'}
                   </span>
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* 6. MODAL: WIPE TEST / SAMPLE DATA CONFIRMATION */}
-      {showWipeConfirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-md bg-[#121824] border border-red-900/50 rounded-3xl p-6 shadow-2xl space-y-4">
-            <div className="flex items-center gap-3 text-red-400">
-              <div className="w-12 h-12 rounded-2xl bg-red-950/60 border border-red-500/40 flex items-center justify-center shrink-0">
-                <Trash2 className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">
-                  Wipe Sample / Test Drinks?
-                </h3>
-                <p className="text-xs text-red-300">
-                  Reset catalog to a 100% clean slate
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-300 leading-relaxed">
-              This will remove all {allProducts.length} sample/test drinks for this establishment so you can enter or paste your real products and prices right away.
-            </p>
-
-            <div className="p-3.5 rounded-2xl bg-[#0E1420] border border-slate-800 text-[11px] text-slate-400 space-y-1">
-              <div className="text-slate-200 font-semibold flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                <span>What remains intact:</span>
-              </div>
-              <p>Your business establishment profile, staff accounts, and financial accounts will NOT be deleted.</p>
-            </div>
-
-            <div className="flex items-center gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowWipeConfirmModal(false)}
-                className="py-2.5 px-4 rounded-xl bg-[#0E1420] border border-slate-800 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
-              >
-                Keep Existing
-              </button>
-              <button
-                type="button"
-                onClick={handleWipeTestData}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-red-950/50"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Yes, Wipe Test Drinks</span>
-              </button>
-            </div>
           </div>
         </div>
       )}
