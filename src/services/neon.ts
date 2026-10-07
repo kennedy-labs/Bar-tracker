@@ -17,6 +17,7 @@ import {
   StockAdditionRecord,
   InterBusinessTransfer,
   BusinessPartner,
+  ShiftStockItem,
 } from '../types';
 
 export type NeonStatus = 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'SYNCING' | 'ERROR';
@@ -43,6 +44,7 @@ export interface SyncPayload {
   discrepancies?: Discrepancy[];
   interTransfers?: InterBusinessTransfer[];
   partners?: BusinessPartner[];
+  shiftStockItems?: ShiftStockItem[];
 }
 
 export interface PullResult {
@@ -58,6 +60,7 @@ export interface PullResult {
   discrepancies?: Discrepancy[];
   interTransfers?: InterBusinessTransfer[];
   partners?: BusinessPartner[];
+  shiftStockItems?: ShiftStockItem[];
 }
 
 export const DEFAULT_NEON_URL =
@@ -578,6 +581,39 @@ class NeonService {
         );
       `;
 
+      // 13. Shift Stock Items (Active & Historical shift counter counts)
+      await sql`
+        CREATE TABLE IF NOT EXISTS shift_stock_items (
+          id TEXT PRIMARY KEY,
+          business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+          shift_id TEXT NOT NULL,
+          product_id TEXT NOT NULL,
+          product_name TEXT NOT NULL,
+          unit TEXT,
+          selling_price NUMERIC(12,2) DEFAULT 0,
+          cost_price NUMERIC(12,2) DEFAULT 0,
+          opening_system_count NUMERIC(12,2) DEFAULT 0,
+          opening_physical_count NUMERIC(12,2) DEFAULT 0,
+          opening_verified BOOLEAN DEFAULT TRUE,
+          additions NUMERIC(12,2) DEFAULT 0,
+          recorded_sales NUMERIC(12,2) DEFAULT 0,
+          transfers_in NUMERIC(12,2) DEFAULT 0,
+          transfers_out NUMERIC(12,2) DEFAULT 0,
+          damages NUMERIC(12,2) DEFAULT 0,
+          closing_physical_count NUMERIC(12,2),
+          expected_closing_count NUMERIC(12,2),
+          discrepancy_count NUMERIC(12,2),
+          discrepancy_value NUMERIC(12,2),
+          is_measured BOOLEAN DEFAULT FALSE,
+          measurement_type TEXT,
+          measure_unit_label TEXT,
+          total_measured_value_kes NUMERIC(12,2),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_ssi_shift ON shift_stock_items(shift_id);`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_ssi_biz ON shift_stock_items(business_id);`;
+
       // Safe Foreign Key Constraints with ON DELETE CASCADE
       const ensureFkSql = [
         `DO $$ BEGIN
@@ -823,7 +859,10 @@ class NeonService {
             ${s.netProfit || 0},
             ${s.financialVariance || 0},
             ${s.closingNotes || ''},
-            ${JSON.stringify(s)}::jsonb,
+            ${JSON.stringify({
+              ...s,
+              items: (payload.shiftStockItems || []).filter((item) => item.shiftId === s.id),
+            })}::jsonb,
             NOW()
           )
           ON CONFLICT (id) DO UPDATE SET
@@ -1058,6 +1097,63 @@ class NeonService {
             partner_name = EXCLUDED.partner_name,
             partner_phone = EXCLUDED.partner_phone,
             net_cost_balance = EXCLUDED.net_cost_balance;
+        `;
+      }
+
+      // 13. Upsert shift stock items (Enables live shift counter synchronization across all browsers)
+      const stockItemsToSync = payload.shiftStockItems || [];
+      for (const item of stockItemsToSync) {
+        await sql`
+          INSERT INTO shift_stock_items (
+            id, business_id, shift_id, product_id, product_name, unit,
+            selling_price, cost_price, opening_system_count, opening_physical_count,
+            opening_verified, additions, recorded_sales, transfers_in, transfers_out,
+            damages, closing_physical_count, expected_closing_count,
+            discrepancy_count, discrepancy_value, is_measured,
+            measurement_type, measure_unit_label, total_measured_value_kes,
+            updated_at
+          )
+          VALUES (
+            ${item.id || `ssi-${item.shiftId}-${item.productId}`},
+            ${business.id},
+            ${item.shiftId},
+            ${item.productId},
+            ${item.productName},
+            ${item.unit || 'BOTTLE'},
+            ${item.sellingPrice || 0},
+            ${item.costPrice || 0},
+            ${item.openingSystemCount || 0},
+            ${item.openingPhysicalCount || 0},
+            ${item.openingVerified !== false},
+            ${item.additions || 0},
+            ${item.recordedSales || 0},
+            ${item.transfersIn || 0},
+            ${item.transfersOut || 0},
+            ${item.damages || 0},
+            ${item.closingPhysicalCount != null ? item.closingPhysicalCount : null},
+            ${item.expectedClosingCount != null ? item.expectedClosingCount : null},
+            ${item.discrepancyCount != null ? item.discrepancyCount : null},
+            ${item.discrepancyValue != null ? item.discrepancyValue : null},
+            ${item.isMeasured || false},
+            ${item.measurementType || (item.isMeasured ? 'VALUE' : 'COUNT')},
+            ${item.measureUnitLabel || null},
+            ${item.totalMeasuredValueKes != null ? item.totalMeasuredValueKes : null},
+            NOW()
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            opening_physical_count = EXCLUDED.opening_physical_count,
+            additions = EXCLUDED.additions,
+            recorded_sales = EXCLUDED.recorded_sales,
+            transfers_in = EXCLUDED.transfers_in,
+            transfers_out = EXCLUDED.transfers_out,
+            damages = EXCLUDED.damages,
+            closing_physical_count = EXCLUDED.closing_physical_count,
+            expected_closing_count = EXCLUDED.expected_closing_count,
+            discrepancy_count = EXCLUDED.discrepancy_count,
+            discrepancy_value = EXCLUDED.discrepancy_value,
+            selling_price = EXCLUDED.selling_price,
+            cost_price = EXCLUDED.cost_price,
+            updated_at = NOW();
         `;
       }
 
@@ -1297,6 +1393,49 @@ class NeonService {
         connectedAt: p.connected_at,
       }));
 
+      // Pull shift stock items across active and historical shifts
+      const ssiRows = await sql`
+        SELECT * FROM shift_stock_items 
+        WHERE business_id = ${businessId} 
+        ORDER BY updated_at DESC;
+      `;
+      const shiftStockItems: ShiftStockItem[] = ssiRows.map((row) => ({
+        id: row.id,
+        shiftId: row.shift_id,
+        productId: row.product_id,
+        productName: row.product_name,
+        unit: row.unit || 'BOTTLE',
+        sellingPrice: Number(row.selling_price || 0),
+        costPrice: Number(row.cost_price || 0),
+        openingSystemCount: Number(row.opening_system_count || 0),
+        openingPhysicalCount: Number(row.opening_physical_count || 0),
+        openingVerified: Boolean(row.opening_verified),
+        additions: Number(row.additions || 0),
+        recordedSales: Number(row.recorded_sales || 0),
+        transfersIn: Number(row.transfers_in || 0),
+        transfersOut: Number(row.transfers_out || 0),
+        damages: Number(row.damages || 0),
+        closingPhysicalCount: row.closing_physical_count != null ? Number(row.closing_physical_count) : undefined,
+        expectedClosingCount: row.expected_closing_count != null ? Number(row.expected_closing_count) : undefined,
+        discrepancyCount: row.discrepancy_count != null ? Number(row.discrepancy_count) : undefined,
+        discrepancyValue: row.discrepancy_value != null ? Number(row.discrepancy_value) : undefined,
+        isMeasured: Boolean(row.is_measured),
+        measurementType: row.measurement_type,
+        measureUnitLabel: row.measure_unit_label,
+        totalMeasuredValueKes: row.total_measured_value_kes != null ? Number(row.total_measured_value_kes) : undefined,
+      }));
+
+      // Double-resilience: also merge any stock items embedded in shift_data
+      shifts.forEach((s: any) => {
+        if (s.items && Array.isArray(s.items)) {
+          s.items.forEach((item: ShiftStockItem) => {
+            if (!shiftStockItems.some((si) => si.id === item.id || (si.shiftId === s.id && si.productId === item.productId))) {
+              shiftStockItems.push(item);
+            }
+          });
+        }
+      });
+
       this.updateState({ status: 'CONNECTED', errorMessage: undefined });
       return {
         success: true,
@@ -1313,6 +1452,7 @@ class NeonService {
           discrepancies,
           interTransfers,
           partners,
+          shiftStockItems,
         },
       };
     } catch (err: unknown) {

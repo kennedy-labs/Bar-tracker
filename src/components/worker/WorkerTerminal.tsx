@@ -452,10 +452,11 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
             <div className="space-y-2">
               {filteredProducts.map((p) => {
                 const ssi = shiftStockItems.find((item) => item.productId === p.id);
+                const invQty = inventory.find((i) => i.productId === p.id)?.quantityOnHand ?? 0;
                 const count = ssi
-                  ? ssi.openingPhysicalCount + ssi.additions + ssi.transfersIn - ssi.transfersOut - ssi.damages
-                  : 0;
-                const addedQty = ssi ? ssi.additions : 0;
+                  ? (Number(ssi.openingPhysicalCount || 0) + Number(ssi.additions || 0) + Number(ssi.transfersIn || 0) - Number(ssi.transfersOut || 0) - Number(ssi.damages || 0))
+                  : Number(invQty);
+                const addedQty = ssi ? Number(ssi.additions || 0) : 0;
 
                 const isMeasured = p.isMeasured;
                 const isValue = isMeasured && (p.measurementType === 'VALUE' || p.unit === 'VALUE_KES');

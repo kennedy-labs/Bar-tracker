@@ -101,12 +101,25 @@ export default function App() {
   // tick triggers re-render whenever store state mutates
   const [, setTick] = useState<number>(0);
 
+  // Initial live cloud synchronization on application launch
+  useEffect(() => {
+    store.syncWithCloud(true);
+  }, []);
+
   useEffect(() => {
     const unsubscribe = store.subscribe(() => {
       setTick((t) => t + 1);
+      // Auto-detect active shift if worker was on start screen
+      const user = authService.getActiveSession();
+      if (user?.role === 'WORKER') {
+        const active = store.getActiveShift();
+        if (active && activeTab === 'start') {
+          setActiveTab(active.counterFinished ? 'end_shift' : 'counter');
+        }
+      }
     });
     return unsubscribe;
-  }, []);
+  }, [activeTab]);
 
   useEffect(() => {
     const handleHash = () => {

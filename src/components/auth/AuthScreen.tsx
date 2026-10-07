@@ -105,6 +105,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
     return () => clearInterval(timer);
   }, [lockoutSeconds]);
 
+  // Initial cloud sync to detect existing businesses in clean browsers
+  useEffect(() => {
+    store.syncWithCloud(true).then(() => {
+      if (store.hasAnyBusiness()) {
+        const hash = typeof window !== 'undefined' ? window.location.hash.toLowerCase() : '';
+        if (!hash.includes('signup') && !hash.includes('register')) {
+          setViewMode('SIGN_IN');
+        }
+      }
+    });
+  }, []);
+
   const switchMode = (mode: 'SIGN_IN' | 'REGISTER') => {
     if (mode === 'SIGN_IN' && !store.hasAnyBusiness()) {
       triggerError('Please set up your establishment first.');

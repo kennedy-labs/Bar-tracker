@@ -52,10 +52,23 @@ class StoreService {
   private autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
   private lastAutoSyncTime: string | null = null;
   private hasInitialCloudSynced = false;
+  private liveChannel: BroadcastChannel | null = null;
 
   constructor() {
     this.ensureInitialized();
     if (typeof window !== 'undefined') {
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          this.liveChannel = new BroadcastChannel('bartrack_realtime_sync');
+          this.liveChannel.onmessage = (event) => {
+            if (event.data?.type === 'LOCAL_STORE_MUTATED') {
+              this.notifySubscribersOnly();
+            }
+          };
+        }
+      } catch (e) {
+        // BroadcastChannel unavailable
+      }
       this.setupAutoSyncEngine();
     }
   }
@@ -65,7 +78,7 @@ class StoreService {
     neonService.subscribeStatus((st) => {
       if (st.status === 'CONNECTED') {
         if (this.pendingAutoSync || !this.hasInitialCloudSynced) {
-          this.scheduleAutoSync(400);
+          this.scheduleAutoSync(200);
         }
       }
     });
@@ -73,7 +86,7 @@ class StoreService {
     // Browser network events
     window.addEventListener('online', () => {
       this.set(STORAGE_KEYS.IS_ONLINE, true);
-      this.scheduleAutoSync(300);
+      this.scheduleAutoSync(200);
     });
 
     window.addEventListener('offline', () => {
@@ -81,15 +94,27 @@ class StoreService {
       this.pendingAutoSync = true;
     });
 
-    // Heartbeat background sync every 45 seconds while online
+    // Continuous live synchronization loop:
+    // Polls cloud every 3.5 seconds while online to sync cross-browser edits seamlessly
     setInterval(() => {
-      if (typeof navigator !== 'undefined' && navigator.onLine && neonService.getStatus().status === 'CONNECTED') {
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
         this.syncWithCloud(true);
       }
-    }, 45000);
+    }, 3500);
+
+    // Immediate sync on window focus and tab visibility change
+    window.addEventListener('focus', () => {
+      this.syncWithCloud(true);
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        this.syncWithCloud(true);
+      }
+    });
   }
 
-  public scheduleAutoSync(delayMs = 1200) {
+  public scheduleAutoSync(delayMs = 600) {
     if (typeof window === 'undefined') return;
     this.pendingAutoSync = true;
     if (this.autoSyncTimer) {
@@ -117,23 +142,43 @@ class StoreService {
 
     this.isAutoSyncing = true;
     try {
-      // 1. If we have a local active business, push local data to Neon
       const currentBiz = this.getCurrentBusiness();
-      if (currentBiz && currentBiz.id) {
-        await this.uploadAllToNeon();
-      }
+      const hasLocalProducts = this.getProducts().length > 0;
 
-      // 2. Pull businesses and users from Neon to stay in sync across devices
-      const pullRes = await neonService.pullAllBusinessesAndUsers();
-      if (pullRes.success && pullRes.businesses && pullRes.businesses.length > 0) {
-        this.mergeCloudBusinessesAndUsers(pullRes.businesses, pullRes.users || []);
-      }
+      // Safe pull-first strategy for clean browser tabs or initial sync
+      if (!this.hasInitialCloudSynced || !hasLocalProducts) {
+        // 1. Pull businesses and users from Neon
+        const pullRes = await neonService.pullAllBusinessesAndUsers();
+        if (pullRes.success && pullRes.businesses && pullRes.businesses.length > 0) {
+          this.mergeCloudBusinessesAndUsers(pullRes.businesses, pullRes.users || []);
+        }
 
-      // 3. If there is a current business, pull any updates for this business from cloud
-      if (currentBiz && currentBiz.id) {
-        const fullBizRes = await neonService.pullBusinessFromNeon(currentBiz.id);
-        if (fullBizRes.success && fullBizRes.data) {
-          this.mergeCloudBusinessData(fullBizRes.data);
+        // 2. Pull authoritative establishment data for the current business
+        const bizToPull = this.getCurrentBusiness();
+        if (bizToPull && bizToPull.id) {
+          const fullBizRes = await neonService.pullBusinessFromNeon(bizToPull.id);
+          if (fullBizRes.success && fullBizRes.data) {
+            this.mergeCloudBusinessData(fullBizRes.data);
+          }
+        }
+      } else {
+        // If there are pending local offline mutations, upload first
+        if (currentBiz && currentBiz.id && (this.pendingAutoSync || this.getOfflineQueueCount() > 0)) {
+          await this.uploadAllToNeon();
+        }
+
+        // Pull businesses and users
+        const pullRes = await neonService.pullAllBusinessesAndUsers();
+        if (pullRes.success && pullRes.businesses && pullRes.businesses.length > 0) {
+          this.mergeCloudBusinessesAndUsers(pullRes.businesses, pullRes.users || []);
+        }
+
+        // Pull full business data to capture any remote edits
+        if (currentBiz && currentBiz.id) {
+          const fullBizRes = await neonService.pullBusinessFromNeon(currentBiz.id);
+          if (fullBizRes.success && fullBizRes.data) {
+            this.mergeCloudBusinessData(fullBizRes.data);
+          }
         }
       }
 
@@ -142,13 +187,7 @@ class StoreService {
       this.lastAutoSyncTime = new Date().toLocaleTimeString();
 
       if (!silent) {
-        this.subscribers.forEach((cb) => {
-          try {
-            cb();
-          } catch (e) {
-            // ignore
-          }
-        });
+        this.notifySubscribersOnly();
       }
 
       return { success: true, message: 'Cloud database synchronized automatically.' };
@@ -184,7 +223,7 @@ class StoreService {
     };
   }
 
-  private notify() {
+  private notifySubscribersOnly() {
     this.subscribers.forEach((cb) => {
       try {
         cb();
@@ -192,8 +231,17 @@ class StoreService {
         console.error('Subscriber callback error:', e);
       }
     });
+  }
+
+  private notify() {
+    this.notifySubscribersOnly();
+    try {
+      this.liveChannel?.postMessage({ type: 'LOCAL_STORE_MUTATED', timestamp: Date.now() });
+    } catch (e) {
+      // ignore
+    }
     // Automatically debounce cloud sync whenever any local state changes
-    this.scheduleAutoSync(1200);
+    this.scheduleAutoSync(600);
   }
 
   private get<T>(key: string, defaultValue: T): T {
@@ -1548,9 +1596,60 @@ class StoreService {
     return this.getShifts().find((s) => s.id === shiftId);
   }
 
+  public getAllShiftStockItems(): ShiftStockItem[] {
+    return this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
+  }
+
   public getShiftStockItems(shiftId: string): ShiftStockItem[] {
     const items = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
-    return items.filter((i) => i.shiftId === shiftId);
+    let shiftItems = items.filter((i) => i.shiftId === shiftId);
+
+    // Auto-heal active shift items from inventory and product catalog:
+    // If an active shift is in progress and some products do not have SSIs yet
+    // (e.g. freshly loaded on a new browser), populate them seamlessly from current inventory
+    const active = this.getActiveShift();
+    if (active && active.id === shiftId) {
+      const products = this.getProducts();
+      const inventory = this.getInventory();
+      let modified = false;
+
+      products.forEach((p) => {
+        if (!shiftItems.some((si) => si.productId === p.id)) {
+          const invItem = inventory.find((inv) => inv.productId === p.id);
+          const initialQty = invItem ? Number(invItem.quantityOnHand || 0) : 0;
+          const healedItem: ShiftStockItem = {
+            id: `ssi-${shiftId}-${p.id}`,
+            shiftId,
+            productId: p.id,
+            productName: p.name,
+            unit: p.unit || 'BOTTLE',
+            sellingPrice: p.sellingPrice || 0,
+            costPrice: p.costPrice || 0,
+            openingSystemCount: initialQty,
+            openingPhysicalCount: initialQty,
+            openingVerified: true,
+            additions: 0,
+            recordedSales: 0,
+            transfersIn: 0,
+            transfersOut: 0,
+            damages: 0,
+            isMeasured: p.isMeasured,
+            measurementType: p.measurementType,
+            measureUnitLabel: p.measureUnitLabel,
+            totalMeasuredValueKes: p.totalMeasuredValueKes,
+          };
+          shiftItems.push(healedItem);
+          items.push(healedItem);
+          modified = true;
+        }
+      });
+
+      if (modified) {
+        this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, items);
+      }
+    }
+
+    return shiftItems;
   }
 
   public getExpenses(shiftId?: string): Expense[] {
@@ -2749,6 +2848,7 @@ class StoreService {
       discrepancies: this.getDiscrepancies(),
       interTransfers: this.getInterBusinessTransfers(),
       partners: this.getPartners(),
+      shiftStockItems: this.getAllShiftStockItems(),
     });
   }
 
@@ -2784,30 +2884,11 @@ class StoreService {
     if (!data.business) return;
     const bizId = data.business.id;
 
-    // Merge products
+    // 1. Authoritative Merge for Products
     if (data.products && data.products.length > 0) {
       const localProducts = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
-      const localMap = new Map<string, Product>();
-      localProducts.forEach((p) => localMap.set(p.id, p));
-
       const mergedMap = new Map<string, Product>();
-      data.products.forEach((cp) => {
-        const lp = localMap.get(cp.id);
-        if (lp) {
-          mergedMap.set(cp.id, {
-            ...cp,
-            ...lp,
-            sellingPrice: lp.sellingPrice !== undefined ? lp.sellingPrice : cp.sellingPrice,
-            costPrice: lp.costPrice !== undefined ? lp.costPrice : cp.costPrice,
-            totalMeasuredValueKes: lp.totalMeasuredValueKes ?? cp.totalMeasuredValueKes,
-            isMeasured: lp.isMeasured ?? cp.isMeasured,
-            measurementType: lp.measurementType ?? cp.measurementType,
-            measureUnitLabel: lp.measureUnitLabel ?? cp.measureUnitLabel,
-          });
-        } else {
-          mergedMap.set(cp.id, cp);
-        }
-      });
+      data.products.forEach((cp) => mergedMap.set(cp.id, cp));
       localProducts.forEach((lp) => {
         if (!mergedMap.has(lp.id)) {
           mergedMap.set(lp.id, lp);
@@ -2816,45 +2897,90 @@ class StoreService {
       this.set(STORAGE_KEYS.PRODUCTS, Array.from(mergedMap.values()));
     }
 
-    // Merge shifts
+    // 2. Authoritative Merge for Shifts (Includes Active Attendant Shifts)
     if (data.shifts && data.shifts.length > 0) {
       const shiftMap = this.get<Record<string, Shift[]>>(STORAGE_KEYS.SHIFTS_MAP, {});
-      const localShifts = shiftMap[bizId] || [];
-      const sMap = new Map<string, Shift>();
-      localShifts.forEach((s) => sMap.set(s.id, s));
-      data.shifts.forEach((s) => sMap.set(s.id, s));
-      shiftMap[bizId] = Array.from(sMap.values());
+      shiftMap[bizId] = data.shifts;
       this.set(STORAGE_KEYS.SHIFTS_MAP, shiftMap);
     }
 
-    // Merge inventory
+    // 3. Authoritative Merge for Inventory (Direct Live Quantities)
     if (data.inventory && data.inventory.length > 0) {
       const invMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
-      const localInv = invMap[bizId] || [];
-      const localInvMap = new Map<string, InventoryItem>();
-      localInv.forEach((i) => localInvMap.set(i.productId, i));
-
-      const mergedInvMap = new Map<string, InventoryItem>();
-      data.inventory.forEach((ci) => {
-        const li = localInvMap.get(ci.productId);
-        if (li) {
-          mergedInvMap.set(ci.productId, {
-            id: li.id || ci.id,
-            productId: ci.productId,
-            quantityOnHand: li.quantityOnHand !== undefined ? li.quantityOnHand : ci.quantityOnHand,
-            updatedAt: li.updatedAt || ci.updatedAt,
-          });
-        } else {
-          mergedInvMap.set(ci.productId, ci);
-        }
-      });
-      localInv.forEach((li) => {
-        if (!mergedInvMap.has(li.productId)) {
-          mergedInvMap.set(li.productId, li);
-        }
-      });
-      invMap[bizId] = Array.from(mergedInvMap.values());
+      invMap[bizId] = data.inventory;
       this.set(STORAGE_KEYS.INVENTORY_MAP, invMap);
+    }
+
+    // 4. Authoritative Merge for Shift Stock Items (Solves 0-item counter view on new browser)
+    if (data.shiftStockItems && data.shiftStockItems.length > 0) {
+      const localSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
+      const ssiMap = new Map<string, ShiftStockItem>();
+      localSSIs.forEach((i) => ssiMap.set(`${i.shiftId}-${i.productId}`, i));
+      data.shiftStockItems.forEach((i) => ssiMap.set(`${i.shiftId}-${i.productId}`, i));
+      this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, Array.from(ssiMap.values()));
+    }
+
+    // 5. Authoritative Merge for Shift Expenses
+    if (data.expenses && data.expenses.length > 0) {
+      const localExpenses = this.get<Expense[]>(STORAGE_KEYS.EXPENSES, []);
+      const expMap = new Map<string, Expense>();
+      localExpenses.forEach((e) => expMap.set(e.id, e));
+      data.expenses.forEach((e) => expMap.set(e.id, e));
+      this.set(STORAGE_KEYS.EXPENSES, Array.from(expMap.values()));
+    }
+
+    // 6. Authoritative Merge for Stock Restock Additions
+    if (data.stockAdditions && data.stockAdditions.length > 0) {
+      const localAdditions = this.get<StockAdditionRecord[]>(STORAGE_KEYS.STOCK_ADDITIONS, []);
+      const addMap = new Map<string, StockAdditionRecord>();
+      localAdditions.forEach((a) => addMap.set(a.id, a));
+      data.stockAdditions.forEach((a) => addMap.set(a.id, a));
+      this.set(STORAGE_KEYS.STOCK_ADDITIONS, Array.from(addMap.values()));
+    }
+
+    // 7. Authoritative Merge for Discrepancies
+    if (data.discrepancies && data.discrepancies.length > 0) {
+      const localDiscs = this.get<Discrepancy[]>(STORAGE_KEYS.DISCREPANCIES, []);
+      const discMap = new Map<string, Discrepancy>();
+      localDiscs.forEach((d) => discMap.set(d.id, d));
+      data.discrepancies.forEach((d) => discMap.set(d.id, d));
+      this.set(STORAGE_KEYS.DISCREPANCIES, Array.from(discMap.values()));
+    }
+
+    // 8. Authoritative Merge for Inter-Business Transfers
+    if (data.interTransfers && data.interTransfers.length > 0) {
+      const localTrans = this.get<InterBusinessTransfer[]>(STORAGE_KEYS.INTER_TRANSFERS, []);
+      const trMap = new Map<string, InterBusinessTransfer>();
+      localTrans.forEach((t) => trMap.set(t.id, t));
+      data.interTransfers.forEach((t) => trMap.set(t.id, t));
+      this.set(STORAGE_KEYS.INTER_TRANSFERS, Array.from(trMap.values()));
+    }
+
+    // 9. Authoritative Merge for Business Partners
+    if (data.partners && data.partners.length > 0) {
+      const localPartners = this.get<BusinessPartner[]>(STORAGE_KEYS.PARTNERS, []);
+      const pMap = new Map<string, BusinessPartner>();
+      localPartners.forEach((p) => pMap.set(p.partnerBusinessId, p));
+      data.partners.forEach((p) => pMap.set(p.partnerBusinessId, p));
+      this.set(STORAGE_KEYS.PARTNERS, Array.from(pMap.values()));
+    }
+
+    // 10. Authoritative Merge for Operational Events
+    if (data.events && data.events.length > 0) {
+      const eventsMap = this.get<Record<string, OperationalEvent[]>>(STORAGE_KEYS.EVENTS_MAP, {});
+      const existing = eventsMap[bizId] || [];
+      const evMap = new Map<string, OperationalEvent>();
+      existing.forEach((e) => evMap.set(e.id, e));
+      data.events.forEach((e) => evMap.set(e.id, e));
+      eventsMap[bizId] = Array.from(evMap.values()).slice(0, 100);
+      this.set(STORAGE_KEYS.EVENTS_MAP, eventsMap);
+    }
+
+    // 11. Authoritative Merge for M-Pesa Accounts
+    if (data.mpesaAccounts && data.mpesaAccounts.length > 0) {
+      const mpesaMap = this.get<Record<string, MpesaAccount[]>>(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, {});
+      mpesaMap[bizId] = data.mpesaAccounts;
+      this.set(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, mpesaMap);
     }
   }
 }
