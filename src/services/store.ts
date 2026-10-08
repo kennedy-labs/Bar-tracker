@@ -37,6 +37,7 @@ const STORAGE_KEYS = {
   EXPENSES: 'bar_track_expenses',
   STOCK_MOVEMENTS: 'bar_track_stock_movements',
   STOCK_ADDITIONS: 'bar_track_stock_additions',
+  DELETED_STOCK_ADDITIONS: 'bar_track_deleted_stock_additions',
   HANDOVER_DRAFTS: 'bar_track_handover_drafts',
   DISCREPANCIES: 'bar_track_discrepancies',
   EVENTS_MAP: 'bar_track_events_map',
@@ -1651,7 +1652,7 @@ class StoreService {
         const totalAdded = recordedAdditions
           .filter((a) => a.productId === si.productId)
           .reduce((sum, a) => sum + Number(a.quantity || 0), 0);
-        if (totalAdded > (si.additions || 0)) {
+        if ((si.additions || 0) !== totalAdded) {
           si.additions = totalAdded;
           modified = true;
         }
@@ -1872,35 +1873,38 @@ class StoreService {
     return newShift;
   }
 
-  public recordStockAddition(params: {
+  public recordStockAdjustment(params: {
     shiftId: string;
     productId: string;
     quantity: number;
+    type?: 'ADD' | 'REDUCE';
+    reason?: string;
     workerName?: string;
     source?: string;
     note?: string;
   }): StockAdditionRecord {
-    this.queueOfflineOperation('recordStockAddition', params);
+    this.queueOfflineOperation('recordStockAdjustment', params);
 
     const shift = this.getShiftById(params.shiftId);
     if (!shift) throw new Error('Shift not found.');
     const product = this.getProducts().find((p) => p.id === params.productId);
     if (!product) throw new Error('Product not found.');
 
-    const qty = Number(params.quantity);
-    if (qty <= 0) throw new Error('Quantity must be greater than 0.');
+    const isReduce = params.type === 'REDUCE' || Number(params.quantity) < 0;
+    const rawQty = Math.abs(Number(params.quantity));
+    if (rawQty <= 0) throw new Error('Quantity must be greater than 0.');
+    const effectiveQty = isReduce ? -rawQty : rawQty;
 
-    // Update SSI additions
+    // Verify reduction does not make counter stock negative
     const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
     let ssi = allSSIs.find(
       (item) => item.shiftId === params.shiftId && item.productId === params.productId
     );
-    if (ssi) {
-      ssi.additions = (ssi.additions || 0) + qty;
-    } else {
-      const currentInventory = this.getInventory();
-      const invItem = currentInventory.find((i) => i.productId === params.productId);
-      const openingCount = invItem ? Number(invItem.quantityOnHand || 0) : 0;
+    const currentInventory = this.getInventory();
+    const invItem = currentInventory.find((i) => i.productId === params.productId);
+    const openingCount = invItem ? Number(invItem.quantityOnHand || 0) : 0;
+
+    if (!ssi) {
       ssi = {
         id: `ssi-${params.shiftId}-${params.productId}`,
         shiftId: params.shiftId,
@@ -1912,7 +1916,7 @@ class StoreService {
         openingSystemCount: openingCount,
         openingPhysicalCount: openingCount,
         openingVerified: true,
-        additions: qty,
+        additions: 0,
         recordedSales: 0,
         transfersIn: 0,
         transfersOut: 0,
@@ -1924,14 +1928,26 @@ class StoreService {
       };
       allSSIs.push(ssi);
     }
+
+    const currentCounterStock =
+      Number(ssi.openingPhysicalCount || 0) +
+      Number(ssi.additions || 0) +
+      Number(ssi.transfersIn || 0) -
+      Number(ssi.transfersOut || 0) -
+      Number(ssi.damages || 0);
+
+    if (isReduce && rawQty > currentCounterStock) {
+      throw new Error(`Cannot reduce ${rawQty} ${product.unit.toLowerCase()}s. Current counter stock is only ${currentCounterStock}.`);
+    }
+
+    // Apply to SSI additions
+    ssi.additions = (ssi.additions || 0) + effectiveQty;
     this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
 
-    // Increment bar inventory
-    const currentInventory = this.getInventory();
-    const inv = currentInventory.find((i) => i.productId === params.productId);
-    if (inv) {
-      inv.quantityOnHand += qty;
-      inv.updatedAt = new Date().toISOString();
+    // Apply to bar inventory
+    if (invItem) {
+      invItem.quantityOnHand = Math.max(0, invItem.quantityOnHand + effectiveQty);
+      invItem.updatedAt = new Date().toISOString();
       this.saveCurrentInventory(currentInventory);
     }
 
@@ -1942,11 +1958,13 @@ class StoreService {
       shiftId: params.shiftId,
       productId: params.productId,
       productName: product.name,
-      type: 'ADDITION',
-      quantity: qty,
+      type: isReduce ? 'REDUCTION' : 'ADDITION',
+      quantity: effectiveQty,
       unitPrice: product.costPrice,
       timestamp: new Date().toISOString(),
-      note: `Restocked ${qty} units.`,
+      note: isReduce
+        ? `Reduced stock: -${rawQty} units (${params.reason || 'Returned / Recount'}).`
+        : `Restocked stock: +${rawQty} units (${params.source || 'Central Storekeeper'}).`,
     });
     this.set(STORAGE_KEYS.STOCK_MOVEMENTS, movements);
 
@@ -1958,7 +1976,9 @@ class StoreService {
       shiftNumber: shift.shiftNumber,
       productId: params.productId,
       productName: product.name,
-      quantity: qty,
+      quantity: effectiveQty,
+      adjustmentType: isReduce ? 'REDUCE' : 'ADD',
+      reason: params.reason || (isReduce ? 'Returned to Store / Recount' : 'Store Restock Delivery'),
       workerName,
       timestamp: new Date().toISOString(),
       status: 'PENDING_OWNER_CONFIRMATION',
@@ -1968,18 +1988,40 @@ class StoreService {
     additions.unshift(additionRecord);
     this.set(STORAGE_KEYS.STOCK_ADDITIONS, additions);
 
+    // Ensure removed from deleted list if present
+    const deletedIds = this.get<string[]>(STORAGE_KEYS.DELETED_STOCK_ADDITIONS, []);
+    if (deletedIds.includes(additionRecord.id)) {
+      this.set(STORAGE_KEYS.DELETED_STOCK_ADDITIONS, deletedIds.filter((id) => id !== additionRecord.id));
+    }
+
     // Report directly to owner in events audit
     this.addEvent({
       type: 'ADDITION_RECORDED',
-      title: `Stock Restock: +${qty} ${product.name}`,
-      description: `${workerName} restocked ${qty}x ${product.name} on Shift #${shift.shiftNumber}. Awaiting owner verification & lock.`,
+      title: isReduce ? `Stock Reduced: -${rawQty} ${product.name}` : `Stock Restock: +${rawQty} ${product.name}`,
+      description: isReduce
+        ? `${workerName} reduced -${rawQty}x ${product.name} on Shift #${shift.shiftNumber} (${params.reason || 'Returned to store'}). Awaiting owner verification & lock.`
+        : `${workerName} restocked +${rawQty}x ${product.name} on Shift #${shift.shiftNumber}.${params.source ? ` Source: ${params.source}.` : ''} Awaiting owner verification & lock.`,
       actorName: workerName,
-      severity: 'WARNING',
+      severity: isReduce ? 'WARNING' : 'INFO',
     });
 
     this.notify();
     this.triggerNeonSync();
     return additionRecord;
+  }
+
+  public recordStockAddition(params: {
+    shiftId: string;
+    productId: string;
+    quantity: number;
+    workerName?: string;
+    source?: string;
+    note?: string;
+  }): StockAdditionRecord {
+    return this.recordStockAdjustment({
+      ...params,
+      type: 'ADD',
+    });
   }
 
   public getStockAdditions(shiftId?: string): StockAdditionRecord[] {
@@ -2001,13 +2043,14 @@ class StoreService {
 
     this.addEvent({
       type: 'INFO',
-      title: `Restock Verified & Saved: +${record.quantity} ${record.productName}`,
-      description: `Owner ${ownerName} confirmed and locked restock #${record.id}. Record is now permanently immutable to deletion.`,
+      title: `Stock Adjustment Verified & Saved: ${record.quantity > 0 ? `+${record.quantity}` : record.quantity} ${record.productName}`,
+      description: `Owner ${ownerName} confirmed and locked stock adjustment #${record.id}. Record is now permanently immutable.`,
       actorName: ownerName,
       severity: 'SUCCESS',
     });
 
     this.notify();
+    this.triggerNeonSync();
     return true;
   }
 
@@ -2018,10 +2061,10 @@ class StoreService {
 
     // Check immutability!
     if (record.isImmutable || record.status === 'SAVED_LOCKED') {
-      throw new Error('This restock record has been verified and saved by the owner. It is immutable to deletion.');
+      throw new Error('This stock adjustment has been verified and saved by the owner. It is immutable to deletion.');
     }
 
-    // Revert inventory and SSI
+    // Revert bar inventory
     const currentInventory = this.getInventory();
     const inv = currentInventory.find((i) => i.productId === record.productId);
     if (inv) {
@@ -2030,10 +2073,11 @@ class StoreService {
       this.saveCurrentInventory(currentInventory);
     }
 
+    // Revert SSI additions
     const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
     const ssi = allSSIs.find((item) => item.shiftId === record.shiftId && item.productId === record.productId);
     if (ssi) {
-      ssi.additions = Math.max(0, ssi.additions - record.quantity);
+      ssi.additions = (ssi.additions || 0) - record.quantity;
       this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
     }
 
@@ -2041,15 +2085,32 @@ class StoreService {
     const remaining = additions.filter((a) => a.id !== additionId);
     this.set(STORAGE_KEYS.STOCK_ADDITIONS, remaining);
 
+    // Track in deleted list so cloud sync never resurrects it
+    const deletedIds = this.get<string[]>(STORAGE_KEYS.DELETED_STOCK_ADDITIONS, []);
+    if (!deletedIds.includes(additionId)) {
+      deletedIds.push(additionId);
+      this.set(STORAGE_KEYS.DELETED_STOCK_ADDITIONS, deletedIds);
+    }
+
+    // Delete in Neon PostgreSQL database immediately
+    neonService.deleteStockAddition(additionId).catch((err) => {
+      console.warn('Neon deletion error:', err);
+    });
+    this.queueOfflineOperation('deleteStockAddition', { additionId });
+
+    const isReduction = record.quantity < 0 || record.adjustmentType === 'REDUCE';
     this.addEvent({
       type: 'INFO',
-      title: `Pending Restock Deleted: -${record.quantity} ${record.productName}`,
-      description: `Pending restock addition was removed before owner verification.`,
-      actorName: 'System Ledger',
+      title: isReduction
+        ? `Stock Reduction Undone: Restored +${Math.abs(record.quantity)} ${record.productName}`
+        : `Stock Restock Undone: Reverted -${record.quantity} ${record.productName}`,
+      description: `Pending ${isReduction ? 'reduction' : 'restock'} was undone before owner verification. Counter stock reverted.`,
+      actorName: 'Counter Attendant',
       severity: 'INFO',
     });
 
     this.notify();
+    this.triggerNeonSync();
     return true;
   }
 
@@ -2885,6 +2946,7 @@ class StoreService {
       mpesaAccounts: this.getMpesaAccounts(true),
       events: this.getEvents(),
       stockAdditions: this.getStockAdditions(),
+      deletedStockAdditionIds: this.get<string[]>(STORAGE_KEYS.DELETED_STOCK_ADDITIONS, []),
       discrepancies: this.getDiscrepancies(),
       interTransfers: this.getInterBusinessTransfers(),
       partners: this.getPartners(),
@@ -3005,12 +3067,17 @@ class StoreService {
       this.set(STORAGE_KEYS.EXPENSES, Array.from(expMap.values()));
     }
 
-    // 6. Authoritative Merge for Stock Restock Additions
+    // 6. Authoritative Merge for Stock Restock Additions & Reductions
     if (data.stockAdditions && data.stockAdditions.length > 0) {
+      const deletedIds = new Set(this.get<string[]>(STORAGE_KEYS.DELETED_STOCK_ADDITIONS, []));
       const localAdditions = this.get<StockAdditionRecord[]>(STORAGE_KEYS.STOCK_ADDITIONS, []);
       const addMap = new Map<string, StockAdditionRecord>();
-      localAdditions.forEach((a) => addMap.set(a.id, a));
-      data.stockAdditions.forEach((a) => addMap.set(a.id, a));
+      localAdditions.forEach((a) => {
+        if (!deletedIds.has(a.id)) addMap.set(a.id, a);
+      });
+      data.stockAdditions.forEach((a) => {
+        if (!deletedIds.has(a.id)) addMap.set(a.id, a);
+      });
       this.set(STORAGE_KEYS.STOCK_ADDITIONS, Array.from(addMap.values()));
     }
 

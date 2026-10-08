@@ -339,11 +339,17 @@ Generated via Bar Track System`;
                             +{item.additions} added
                           </span>
                         )}
+                        {item.additions < 0 && (
+                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-rose-950/80 text-rose-400 border border-rose-800 shrink-0">
+                            {item.additions} reduced
+                          </span>
+                        )}
                       </div>
                       <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5 font-mono">
                         <span>
                           Start: {isValue ? `KES ${available.toLocaleString()}` : `${available} ${unitLabel}`}
                           {item.additions > 0 && ` (inc. +${item.additions} restocked)`}
+                          {item.additions < 0 && ` (inc. ${item.additions} reduced)`}
                         </span>
                         <span>·</span>
                         <span className="text-emerald-400 font-bold">

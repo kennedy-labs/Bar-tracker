@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Shift, Product } from '../../types';
 import { store } from '../../services/store';
 import { StartScreen } from './StartScreen';
@@ -30,6 +30,8 @@ import {
   Lock,
   Undo2,
   Scale,
+  PackageMinus,
+  RotateCcw,
 } from 'lucide-react';
 
 interface WorkerTerminalProps {
@@ -50,6 +52,11 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
   const [restockTarget, setRestockTarget] = useState<{ product: Product; count: number } | null>(null);
   const [dispatchToast, setDispatchToast] = useState<string | null>(null);
   const [selectedHistoricalShift, setSelectedHistoricalShift] = useState<Shift | null>(null);
+  const [, setStoreTick] = useState<number>(0);
+
+  useEffect(() => {
+    return store.subscribe(() => setStoreTick((t) => t + 1));
+  }, []);
 
   const products = store.getProducts();
   const activeShift = store.getActiveShift();
@@ -78,25 +85,46 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
     setActiveTab('counter');
   };
 
-  const handleConfirmItemRestock = (quantity: number) => {
+  const handleConfirmItemRestock = (params: {
+    quantity: number;
+    type: 'ADD' | 'REDUCE';
+    reason?: string;
+    note?: string;
+  }) => {
     if (!activeShift || !restockTarget) return;
-    store.recordStockAddition({
-      shiftId: activeShift.id,
-      productId: restockTarget.product.id,
-      quantity,
-      workerName: currentUser.name,
-    });
-    setDispatchToast(
-      `Restocked +${quantity} ${restockTarget.product.name}. Recorded & reported to owner.`
-    );
-    setRestockTarget(null);
-    setTimeout(() => setDispatchToast(null), 5000);
+    try {
+      store.recordStockAdjustment({
+        shiftId: activeShift.id,
+        productId: restockTarget.product.id,
+        quantity: params.quantity,
+        type: params.type,
+        reason: params.reason,
+        note: params.note,
+        workerName: currentUser.name,
+      });
+      const isRed = params.type === 'REDUCE';
+      setDispatchToast(
+        isRed
+          ? `Stock reduced: -${params.quantity} ${restockTarget.product.name} (${params.reason || 'Returned'}). Undoable below.`
+          : `Restocked: +${params.quantity} ${restockTarget.product.name}. Counter updated & undoable below.`
+      );
+      setRestockTarget(null);
+      setTimeout(() => setDispatchToast(null), 5000);
+    } catch (err: any) {
+      alert(err.message || 'Error updating stock.');
+    }
   };
 
   const handleUndoRestock = (additionId: string) => {
     try {
+      const record = shiftAdditions.find((a) => a.id === additionId);
       store.deleteStockAddition(additionId);
-      setDispatchToast('Restock addition cancelled and counter stock reverted.');
+      const isRed = record && (record.quantity < 0 || record.adjustmentType === 'REDUCE');
+      setDispatchToast(
+        isRed
+          ? `Stock reduction undone: Re-added +${Math.abs(record ? record.quantity : 0)} ${record ? record.productName : ''} back to counter.`
+          : `Restock undone: Reverted -${record ? record.quantity : 0} ${record ? record.productName : ''} from counter.`
+      );
       setTimeout(() => setDispatchToast(null), 4000);
     } catch (err: any) {
       alert(err.message || 'Cannot delete restock record.');
@@ -436,7 +464,7 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
                   Drinks on Counter
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  Tap the 3-dot icon on any drink to restock
+                  Tap the 3-dot icon on any drink to adjust stock (add or reduce)
                 </p>
               </div>
 
@@ -473,6 +501,8 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
                     className={`flex items-center justify-between p-3 rounded-2xl bg-[#0E1420] border transition-colors ${
                       addedQty > 0
                         ? 'border-emerald-500/40 hover:border-emerald-500/60 bg-gradient-to-r from-[#0E1420] to-emerald-950/20'
+                        : addedQty < 0
+                        ? 'border-rose-500/40 hover:border-rose-500/60 bg-gradient-to-r from-[#0E1420] to-rose-950/20'
                         : isMeasured
                         ? 'border-cyan-900/60 hover:border-cyan-700 bg-gradient-to-r from-[#0E1420] to-cyan-950/10'
                         : 'border-slate-800/80 hover:border-slate-700'
@@ -495,14 +525,24 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
                               +{addedQty} added
                             </span>
                           )}
+                          {addedQty < 0 && (
+                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-rose-950/90 text-rose-400 border border-rose-600/80 shrink-0 animate-in fade-in">
+                              {addedQty} reduced
+                            </span>
+                          )}
                         </div>
                         <div className="text-[11px] text-emerald-400 font-mono mt-0.5 flex items-center gap-2">
                           <span>KES {p.sellingPrice.toLocaleString()}</span>
-                          {addedQty > 0 && (
+                          {addedQty !== 0 && (
                             <>
                               <span className="text-slate-600">·</span>
                               <span className="text-slate-400 text-[10px]">
-                                Start: {ssi?.openingPhysicalCount || 0} · <strong className="text-emerald-400 font-semibold">+{addedQty} restocked</strong>
+                                Start: {ssi?.openingPhysicalCount || 0} ·{' '}
+                                {addedQty > 0 ? (
+                                  <strong className="text-emerald-400 font-semibold">+{addedQty} restocked</strong>
+                                ) : (
+                                  <strong className="text-rose-400 font-semibold">{addedQty} reduced</strong>
+                                )}
                               </span>
                             </>
                           )}
@@ -523,13 +563,18 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
                             +{addedQty} added
                           </div>
                         )}
+                        {addedQty < 0 && (
+                          <div className="text-[10px] text-rose-400 font-bold">
+                            {addedQty} reduced
+                          </div>
+                        )}
                       </div>
 
-                      {/* 3-DOT RESTOCK BUTTON */}
+                      {/* 3-DOT STOCK ADJUSTMENT BUTTON */}
                       <button
                         type="button"
                         onClick={() => setRestockTarget({ product: p, count })}
-                        title={`Restock ${p.name}`}
+                        title={`Adjust stock for ${p.name} (Add / Reduce)`}
                         className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white flex items-center justify-center cursor-pointer border border-slate-700/80 transition-colors shadow-sm"
                       >
                         <MoreVertical className="w-4 h-4" />
@@ -541,24 +586,25 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
             </div>
           </div>
 
-          {/* Shift Restock Audit Trail */}
+          {/* Shift Restock & Adjustments Audit Trail */}
           {shiftAdditions.length > 0 && (
             <div className="p-4 rounded-3xl bg-[#121824] border border-[#1E293B] space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-slate-800">
                 <div className="flex items-center gap-2">
                   <PackagePlus className="w-4 h-4 text-emerald-400" />
                   <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                    Shift Restock Activity ({shiftAdditions.length})
+                    Shift Stock Adjustments & Activity ({shiftAdditions.length})
                   </h4>
                 </div>
                 <span className="text-[10px] text-slate-400 font-mono">
-                  Reported to Owner
+                  Reported to Owner · Undoable
                 </span>
               </div>
 
               <div className="divide-y divide-slate-800 text-xs">
                 {shiftAdditions.map((item) => {
                   const isLocked = item.isImmutable || item.status === 'SAVED_LOCKED';
+                  const isReduction = item.quantity < 0 || item.adjustmentType === 'REDUCE';
 
                   return (
                     <div
@@ -567,23 +613,43 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-white">{item.productName}</span>
-                          <span className="font-mono font-black text-emerald-400 text-[11px] px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-800">
-                            +{item.quantity}
+                          {isReduction ? (
+                            <PackageMinus className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                          ) : (
+                            <PackagePlus className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          )}
+                          <span className="font-bold text-white truncate">{item.productName}</span>
+                          <span
+                            className={`font-mono font-black text-[11px] px-1.5 py-0.5 rounded border shrink-0 ${
+                              isReduction
+                                ? 'text-rose-400 bg-rose-950/80 border-rose-800'
+                                : 'text-emerald-400 bg-emerald-950/80 border-emerald-800'
+                            }`}
+                          >
+                            {item.quantity > 0 ? `+${item.quantity}` : item.quantity}
+                          </span>
+                          <span className="text-[10px] text-slate-400 hidden sm:inline truncate">
+                            {isReduction ? `(${item.reason || 'Stock Reduced'})` : '(Restocked)'}
                           </span>
                         </div>
-                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                          {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          {' · '}
+                        <div className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
+                          <span>
+                            {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          <span>·</span>
                           {isLocked ? (
                             <span className="text-emerald-400 font-semibold inline-flex items-center gap-1">
                               <Lock className="w-2.5 h-2.5" />
                               Saved & Locked by Owner (Immutable)
                             </span>
                           ) : (
-                            <span className="text-amber-400 font-semibold">
-                              Pending Owner Verification
+                            <span className="text-amber-400 font-semibold inline-flex items-center gap-1">
+                              <RotateCcw className="w-2.5 h-2.5 text-cyan-400" />
+                              Pending Owner Verification · Undoable
                             </span>
+                          )}
+                          {isReduction && item.reason && (
+                            <span className="text-slate-400 sm:hidden">· {item.reason}</span>
                           )}
                         </div>
                       </div>
@@ -592,9 +658,10 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
                         <button
                           type="button"
                           onClick={() => handleUndoRestock(item.id)}
-                          className="py-1 px-2.5 rounded-lg bg-[#0E1420] hover:bg-red-950/60 border border-slate-800 hover:border-red-800 text-slate-400 hover:text-red-300 text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                          title={`Undo ${isReduction ? 'reduction' : 'restock'} of ${item.productName}`}
+                          className="py-1 px-2.5 rounded-lg bg-[#0E1420] hover:bg-red-950/60 border border-slate-800 hover:border-red-800 text-slate-300 hover:text-red-300 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-xs active:scale-95"
                         >
-                          <Undo2 className="w-3 h-3" />
+                          <Undo2 className="w-3 h-3 text-cyan-400" />
                           <span>Undo</span>
                         </button>
                       ) : (

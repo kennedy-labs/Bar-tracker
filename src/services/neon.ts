@@ -41,6 +41,7 @@ export interface SyncPayload {
   mpesaAccounts: MpesaAccount[];
   events?: OperationalEvent[];
   stockAdditions?: StockAdditionRecord[];
+  deletedStockAdditionIds?: string[];
   discrepancies?: Discrepancy[];
   interTransfers?: InterBusinessTransfer[];
   partners?: BusinessPartner[];
@@ -518,6 +519,8 @@ class NeonService {
       await sql`ALTER TABLE stock_additions ADD COLUMN IF NOT EXISTS saved_at TIMESTAMPTZ;`;
       await sql`ALTER TABLE stock_additions ADD COLUMN IF NOT EXISTS saved_by TEXT;`;
       await sql`ALTER TABLE stock_additions ADD COLUMN IF NOT EXISTS is_immutable BOOLEAN DEFAULT FALSE;`;
+      await sql`ALTER TABLE stock_additions ADD COLUMN IF NOT EXISTS adjustment_type TEXT DEFAULT 'ADD';`;
+      await sql`ALTER TABLE stock_additions ADD COLUMN IF NOT EXISTS reason TEXT;`;
 
       // 10. Discrepancies
       await sql`
@@ -693,6 +696,7 @@ class NeonService {
         mpesaAccounts,
         events = [],
         stockAdditions = [],
+        deletedStockAdditionIds = [],
         discrepancies = [],
         interTransfers = [],
         partners = [],
@@ -968,13 +972,24 @@ class NeonService {
         `;
       }
 
-      // 9. Upsert stock additions
+      // 9. Process deleted stock additions (ensure undo is permanent across all devices)
+      if (deletedStockAdditionIds && deletedStockAdditionIds.length > 0) {
+        for (const delId of deletedStockAdditionIds) {
+          await sql`
+            DELETE FROM stock_additions
+            WHERE id = ${delId}
+              AND (is_immutable IS NULL OR is_immutable = FALSE);
+          `;
+        }
+      }
+
+      // 10. Upsert stock additions & reductions
       for (const add of stockAdditions) {
         await sql`
           INSERT INTO stock_additions (
             id, business_id, shift_id, shift_number, product_id, product_name,
             quantity, unit_cost, worker_name, status, saved_at, saved_by,
-            is_immutable, timestamp
+            is_immutable, timestamp, adjustment_type, reason
           )
           VALUES (
             ${add.id},
@@ -990,14 +1005,18 @@ class NeonService {
             ${add.savedAt || null},
             ${add.savedBy || null},
             ${add.isImmutable || false},
-            ${add.timestamp || new Date().toISOString()}
+            ${add.timestamp || new Date().toISOString()},
+            ${add.adjustmentType || (Number(add.quantity) < 0 ? 'REDUCE' : 'ADD')},
+            ${add.reason || null}
           )
           ON CONFLICT (id) DO UPDATE SET
             quantity = EXCLUDED.quantity,
             status = EXCLUDED.status,
             saved_at = EXCLUDED.saved_at,
             saved_by = EXCLUDED.saved_by,
-            is_immutable = EXCLUDED.is_immutable;
+            is_immutable = EXCLUDED.is_immutable,
+            adjustment_type = EXCLUDED.adjustment_type,
+            reason = EXCLUDED.reason;
         `;
       }
 
@@ -1330,6 +1349,8 @@ class NeonService {
         productId: a.product_id,
         productName: a.product_name,
         quantity: Number(a.quantity),
+        adjustmentType: a.adjustment_type || (Number(a.quantity) < 0 ? 'REDUCE' : 'ADD'),
+        reason: a.reason,
         workerName: a.worker_name,
         timestamp: a.timestamp,
         status: a.status || 'SAVED_LOCKED',
@@ -1508,6 +1529,26 @@ class NeonService {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, error: msg };
+    }
+  }
+
+  /**
+   * Deletes a mutable pending stock addition/adjustment directly from Neon PostgreSQL
+   */
+  public async deleteStockAddition(additionId: string): Promise<boolean> {
+    const url = this.state.databaseUrl || this.getSavedDatabaseUrl();
+    if (!url) return false;
+    try {
+      const sql = this.client || neon(url);
+      await sql`
+        DELETE FROM stock_additions
+        WHERE id = ${additionId}
+          AND (is_immutable IS NULL OR is_immutable = FALSE);
+      `;
+      return true;
+    } catch (err: unknown) {
+      console.warn('Failed to delete stock addition from Neon:', err);
+      return false;
     }
   }
 }

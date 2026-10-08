@@ -3,6 +3,7 @@ import { User, StockAdditionRecord } from '../../types';
 import { store } from '../../services/store';
 import {
   PackagePlus,
+  PackageMinus,
   Lock,
   CheckCircle,
   AlertTriangle,
@@ -157,9 +158,17 @@ export const RestockAuditManager: React.FC<RestockAuditManagerProps> = ({ curren
                       <span>{item.productName}</span>
                     </span>
 
-                    <span className="font-mono font-black text-emerald-400 text-xs px-2 py-0.5 rounded-lg bg-emerald-950/60 border border-emerald-800">
-                      +{item.quantity} units
-                    </span>
+                    {item.quantity < 0 || item.adjustmentType === 'REDUCE' ? (
+                      <span className="font-mono font-black text-rose-400 text-xs px-2 py-0.5 rounded-lg bg-rose-950/60 border border-rose-800 flex items-center gap-1">
+                        <PackageMinus className="w-3 h-3" />
+                        <span>{item.quantity} units (Reduced)</span>
+                      </span>
+                    ) : (
+                      <span className="font-mono font-black text-emerald-400 text-xs px-2 py-0.5 rounded-lg bg-emerald-950/60 border border-emerald-800 flex items-center gap-1">
+                        <PackagePlus className="w-3 h-3" />
+                        <span>+{item.quantity} units (Restocked)</span>
+                      </span>
+                    )}
 
                     {isSaved ? (
                       <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded font-bold bg-emerald-950 text-emerald-400 border border-emerald-700 flex items-center gap-1">
@@ -179,6 +188,12 @@ export const RestockAuditManager: React.FC<RestockAuditManagerProps> = ({ curren
                     <span>·</span>
                     <span>Attendant: <strong className="text-slate-300">{item.workerName}</strong></span>
                     <span>·</span>
+                    {item.reason && (
+                      <>
+                        <span className="text-cyan-400 font-sans">Reason: {item.reason}</span>
+                        <span>·</span>
+                      </>
+                    )}
                     <span>{new Date(item.timestamp).toLocaleString()}</span>
                   </div>
 

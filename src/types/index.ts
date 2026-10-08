@@ -169,6 +169,7 @@ export type StockMovementType =
   | 'OPENING_COUNT'
   | 'SALE'
   | 'ADDITION'
+  | 'REDUCTION'
   | 'TRANSFER_OUT'
   | 'TRANSFER_IN'
   | 'DAMAGE_BREAKAGE'
@@ -199,6 +200,8 @@ export interface StockAdditionRecord {
   savedAt?: string;
   savedBy?: string;
   isImmutable: boolean;
+  adjustmentType?: 'ADD' | 'REDUCE';
+  reason?: string;
 }
 
 export type ExpenseCategory =
