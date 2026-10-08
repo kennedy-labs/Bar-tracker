@@ -393,7 +393,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   <div>
                     <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                       <span className="text-sm sm:text-base font-bold text-white tracking-wide">
-                        Shift #{targetShift.shiftNumber}
+                        Shift Report
                       </span>
                       <span className="text-xs text-slate-300 font-mono">
                         Attendant: <strong className="text-white font-bold">{targetShift.workerName}</strong>
@@ -475,7 +475,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                     >
                       {closedShifts.map((s) => (
                         <option key={s.id} value={s.id}>
-                          Shift #{s.shiftNumber} ({s.workerName}) {s.isReviewedByOwner ? '✓✓ Read' : '✓ New'}
+                          {s.workerName} · {new Date(s.openedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })} {s.isReviewedByOwner ? '✓✓ Read' : '✓ New'}
                         </option>
                       ))}
                     </select>
@@ -501,7 +501,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                     KES {shiftExpectedSales.toLocaleString()}
                   </div>
                   <div className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">
-                    Shift #{targetShift.shiftNumber} ({targetShift.workerName})
+                    Attendant: {targetShift.workerName}
                   </div>
                 </div>
 
@@ -619,7 +619,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                           </div>
                           <div className="text-xs text-slate-400 font-mono mt-0.5">
-                            Shift #{shift.shiftNumber} · Opened{' '}
+                            Opened{' '}
                             {new Date(shift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </div>
                         </div>
@@ -845,7 +845,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                     <div>
                       <div className="text-sm font-bold text-white">{d.itemName}</div>
                       <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                        Shift #{d.shiftNumber}
+                        Reported {new Date(d.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                       </div>
                     </div>
                     <span

@@ -270,7 +270,7 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-bold text-white text-xs sm:text-sm">
-                          {s.shiftNumber}
+                          {new Date(s.openedAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
                         </span>
                         <span
                           className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded font-bold ${
@@ -393,7 +393,7 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
                 <span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse ring-4 ring-emerald-500/20" />
                 <div>
                   <div className="text-sm sm:text-base font-black text-white">
-                    Shift in Progress · #{activeShift.shiftNumber}
+                    Shift in Progress
                   </div>
                   <div className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
                     <span>Attendant: <strong className="text-emerald-400">{activeShift.workerName.split(' ')[0]}</strong></span>

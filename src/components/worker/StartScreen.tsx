@@ -102,7 +102,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                   Shift in Progress
                 </span>
                 <h2 className="text-lg font-black text-white">
-                  Shift #{activeShift.shiftNumber}
+                  Active Shift
                 </h2>
               </div>
             </div>
@@ -196,7 +196,9 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             <div className="p-3.5 rounded-2xl bg-[#0E1420] border border-slate-800 text-xs space-y-2">
               <div className="flex items-center justify-between text-[11px] text-slate-400 pb-1.5 border-b border-slate-800/80">
                 <span className="font-semibold text-slate-300">Previous Shift Handover</span>
-                <span className="font-mono text-emerald-400">Shift #{lastShift.shiftNumber}</span>
+                <span className="font-mono text-slate-400">
+                  {new Date(lastShift.openedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                </span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-slate-300">
                 <div>

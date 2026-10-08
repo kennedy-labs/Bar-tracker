@@ -184,7 +184,7 @@ export const RestockAuditManager: React.FC<RestockAuditManagerProps> = ({ curren
                   </div>
 
                   <div className="text-[11px] text-slate-400 font-mono mt-1 flex flex-wrap items-center gap-2">
-                    <span>Shift #{item.shiftNumber || 'Current'}</span>
+                    <span>Shift Restock</span>
                     <span>·</span>
                     <span>Attendant: <strong className="text-slate-300">{item.workerName}</strong></span>
                     <span>·</span>

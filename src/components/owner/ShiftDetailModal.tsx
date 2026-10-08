@@ -32,7 +32,7 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({ shift, onClo
           <div>
             <div className="flex items-center gap-2">
               <span className="text-base font-bold text-white tracking-tight">
-                Shift Audit Ledger: {shift.shiftNumber}
+                Shift Audit Ledger
               </span>
               <span
                 className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded font-bold ${

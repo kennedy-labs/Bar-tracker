@@ -111,9 +111,6 @@ export const PartnerBarsManager: React.FC = () => {
                 <div className="text-xl font-mono font-bold text-emerald-400 tracking-widest mt-0.5">
                   {shiftCodeInfo.code}
                 </div>
-                <div className="text-[9px] text-slate-500 font-mono">
-                  Shift: {shiftCodeInfo.shiftId}
-                </div>
               </div>
               <div className="flex flex-col gap-1">
                 <button

@@ -199,7 +199,6 @@ export const EndOfShiftScreen: React.FC<EndOfShiftScreenProps> = ({
 
     const text = `📋 *BAR TRACK — SHIFT HANDOVER REPORT*
 🏪 Establishment: ${currentBiz.name}
-🔢 Shift #: ${shiftToExport.shiftNumber}
 👤 Attendant: ${shiftToExport.workerName}
 ⏰ Time: ${new Date(shiftToExport.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${shiftToExport.closedAt ? new Date(shiftToExport.closedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now'}
 
@@ -781,9 +780,6 @@ Generated via Bar Track System`;
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
                     Reconciled & Closed
-                  </span>
-                  <span className="text-xs text-slate-400 font-mono">
-                    Shift #{shift.shiftNumber}
                   </span>
                 </div>
                 <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-0.5">
