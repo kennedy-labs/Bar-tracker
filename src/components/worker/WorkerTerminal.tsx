@@ -429,32 +429,24 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
             </div>
           </div>
 
-          {/* Operational Quick Actions (Receive Drinks banner removed as per request) */}
-          <div className="grid grid-cols-2 gap-2.5">
-            {/* 1. Borrow / Lend */}
-            <button
-              onClick={() => setActiveModal('INTER_TRANSFER')}
-              className="p-3.5 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-amber-500/30 text-center transition-all active:scale-95 cursor-pointer flex flex-col items-center justify-center gap-1.5 shadow-sm"
-            >
-              <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
-                <Truck className="w-4 h-4" />
+          {/* Operational Quick Action: Pay Expense */}
+          <button
+            onClick={() => setActiveModal('EXPENSE')}
+            className="w-full p-3 sm:px-4 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-[#1E293B] hover:border-slate-700 text-left transition-all active:scale-[0.99] cursor-pointer flex items-center justify-between shadow-sm group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-slate-800 text-amber-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Receipt className="w-4 h-4" />
               </div>
-              <span className="text-xs font-bold text-white">Lend / Borrow</span>
-              <span className="text-[10px] text-slate-400">Neighbor Bar</span>
-            </button>
-
-            {/* 2. Record Simplified Expense */}
-            <button
-              onClick={() => setActiveModal('EXPENSE')}
-              className="p-3.5 rounded-2xl bg-[#121824] hover:bg-[#182132] border border-[#1E293B] text-center transition-all active:scale-95 cursor-pointer flex flex-col items-center justify-center gap-1.5 shadow-sm"
-            >
-              <div className="w-8 h-8 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center">
-                <Receipt className="w-4 h-4 text-amber-400" />
+              <div>
+                <span className="text-xs font-bold text-white block">Pay Shift Expense</span>
+                <span className="text-[10px] text-slate-400">Record cash paid for ice, lemons, casual wages</span>
               </div>
-              <span className="text-xs font-bold text-white">Pay Expense</span>
-              <span className="text-[10px] text-slate-400">Ice, Lemons</span>
-            </button>
-          </div>
+            </div>
+            <span className="text-[11px] font-semibold text-slate-300 bg-slate-800/90 px-3 py-1 rounded-xl border border-slate-700/60 group-hover:text-white transition-colors">
+              Record
+            </span>
+          </button>
 
           {/* Clean Drink Shelf Reference */}
           <div className="bg-[#121824] border border-[#1E293B] rounded-3xl p-4 sm:p-5 space-y-3">
@@ -676,6 +668,32 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
               </div>
             </div>
           )}
+
+          {/* Optional: Stock Transfer (Minimised Infrequent Action) */}
+          <div className="p-3 sm:p-3.5 rounded-2xl bg-[#0E1420]/80 border border-slate-800/80 flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-7 h-7 rounded-lg bg-slate-800/80 text-slate-400 flex items-center justify-center shrink-0">
+                <Truck className="w-3.5 h-3.5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-slate-300">Transfer</span>
+                  <span className="text-[9px] font-mono font-medium text-slate-500 uppercase px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">
+                    Optional
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 truncate">
+                  Send drinks to a neighboring partner bar (rare)
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveModal('INTER_TRANSFER')}
+              className="py-1.5 px-3 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold shrink-0 transition-colors cursor-pointer border border-slate-700/50"
+            >
+              Transfer
+            </button>
+          </div>
 
           {/* Finish Shift Button at Bottom of Active Counter Page */}
           <div className="pt-2">

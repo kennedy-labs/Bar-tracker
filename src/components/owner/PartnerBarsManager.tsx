@@ -146,7 +146,7 @@ export const PartnerBarsManager: React.FC = () => {
         {/* Connect New Bar Input Form */}
         <form onSubmit={handleConnect} className="space-y-3">
           <label className="block text-xs font-bold text-slate-200 uppercase tracking-wider">
-            Link Neighboring Bar for Stock Loan
+            Link Neighboring Bar for Stock Transfers
           </label>
           <div className="flex flex-col sm:flex-row gap-2">
             <input
@@ -190,7 +190,7 @@ export const PartnerBarsManager: React.FC = () => {
               <span>Connected Partner Bars & Net Cost Balance</span>
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Automated financial cost accounting for borrowed and lent crates
+              Automated financial cost accounting for partner stock transfers
             </p>
           </div>
           <span className="text-xs font-mono font-bold text-slate-400">
@@ -240,7 +240,7 @@ export const PartnerBarsManager: React.FC = () => {
 
                   {/* Net Balance Pill Box */}
                   <div className="p-3 rounded-xl bg-[#151D2C] border border-slate-800 flex items-center justify-between font-mono text-xs">
-                    <span className="text-slate-400 text-[11px]">Net Stock Loan:</span>
+                    <span className="text-slate-400 text-[11px]">Net Stock Balance:</span>
                     <div>
                       {owesUs ? (
                         <span className="font-bold text-emerald-400">
@@ -311,11 +311,11 @@ export const PartnerBarsManager: React.FC = () => {
                       <td className="p-3 font-sans">
                         {isOutbound ? (
                           <span className="text-amber-400 font-bold flex items-center gap-1">
-                            <span>↗ Outbound (Lent)</span>
+                            <span>↗ Outbound (Transfer)</span>
                           </span>
                         ) : (
                           <span className="text-emerald-400 font-bold flex items-center gap-1">
-                            <span>↙ Inbound (Borrowed)</span>
+                            <span>↙ Inbound (Transfer)</span>
                           </span>
                         )}
                       </td>

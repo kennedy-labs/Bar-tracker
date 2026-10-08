@@ -106,10 +106,10 @@ export const InterBusinessDispatchModal: React.FC<InterBusinessDispatchModalProp
             </div>
             <div>
               <h2 className="text-base font-bold text-white tracking-tight">
-                Send Stock to Partner Bar
+                Transfer Stock to Partner Bar
               </h2>
               <p className="text-xs text-slate-400">
-                Loan or transfer drinks directly to a neighboring business
+                Transfer drinks directly to a neighboring business
               </p>
             </div>
           </div>
@@ -264,7 +264,7 @@ export const InterBusinessDispatchModal: React.FC<InterBusinessDispatchModalProp
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Emergency loan for weekend rush"
+              placeholder="e.g. Stock transfer for weekend rush"
               className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-slate-500"
             />
           </div>
