@@ -1684,6 +1684,205 @@ class StoreService {
     return discrepancies;
   }
 
+  // --- Shift Stock Item Row Editing (Single Unified Counter Sheet) ---
+  public updateShiftStockItemRow(params: {
+    shiftId: string;
+    productId: string;
+    openingPhysicalCount?: number;
+    additions?: number;
+    closingPhysicalCount?: number;
+  }) {
+    const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
+    let ssi = allSSIs.find(
+      (item) => item.shiftId === params.shiftId && item.productId === params.productId
+    );
+
+    const product = this.getProducts().find((p) => p.id === params.productId);
+    if (!product) return;
+
+    if (!ssi) {
+      const inv = this.getInventory().find((i) => i.productId === params.productId);
+      const openCount = params.openingPhysicalCount !== undefined 
+        ? params.openingPhysicalCount 
+        : (inv ? Number(inv.quantityOnHand || 0) : 0);
+      ssi = {
+        id: `ssi-${params.shiftId}-${params.productId}`,
+        shiftId: params.shiftId,
+        productId: params.productId,
+        productName: product.name,
+        unit: product.unit || 'BOTTLE',
+        sellingPrice: product.sellingPrice || 0,
+        costPrice: product.costPrice || 0,
+        openingSystemCount: openCount,
+        openingPhysicalCount: openCount,
+        openingVerified: true,
+        additions: params.additions !== undefined ? params.additions : 0,
+        recordedSales: 0,
+        transfersIn: 0,
+        transfersOut: 0,
+        damages: 0,
+        closingPhysicalCount: params.closingPhysicalCount,
+        isMeasured: product.isMeasured,
+        measurementType: product.measurementType,
+        measureUnitLabel: product.measureUnitLabel,
+        totalMeasuredValueKes: product.totalMeasuredValueKes,
+      };
+      allSSIs.push(ssi);
+    } else {
+      if (params.openingPhysicalCount !== undefined) {
+        ssi.openingPhysicalCount = Math.max(0, params.openingPhysicalCount);
+      }
+      if (params.additions !== undefined) {
+        ssi.additions = Math.max(0, params.additions);
+      }
+      if (params.closingPhysicalCount !== undefined) {
+        ssi.closingPhysicalCount = Math.max(0, params.closingPhysicalCount);
+      }
+    }
+
+    const available = Number(ssi.openingPhysicalCount || 0) + Number(ssi.additions || 0) + Number(ssi.transfersIn || 0) - Number(ssi.transfersOut || 0) - Number(ssi.damages || 0);
+    if (ssi.closingPhysicalCount !== undefined) {
+      ssi.recordedSales = Math.max(0, available - ssi.closingPhysicalCount);
+    }
+
+    this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
+
+    // Keep inventory in sync
+    const currentInventory = this.getInventory();
+    const inv = currentInventory.find((i) => i.productId === params.productId);
+    if (inv) {
+      inv.quantityOnHand = ssi.closingPhysicalCount !== undefined ? ssi.closingPhysicalCount : available;
+      inv.updatedAt = new Date().toISOString();
+      this.saveCurrentInventory(currentInventory);
+    }
+
+    // Keep StockAdditionRecord in sync if additions were edited
+    if (params.additions !== undefined) {
+      const shift = this.getShiftById(params.shiftId);
+      const additions = this.get<StockAdditionRecord[]>(STORAGE_KEYS.STOCK_ADDITIONS, []);
+      const recIdx = additions.findIndex((a) => a.shiftId === params.shiftId && a.productId === params.productId);
+      if (params.additions > 0) {
+        if (recIdx !== -1) {
+          additions[recIdx].quantity = params.additions;
+          additions[recIdx].timestamp = new Date().toISOString();
+        } else {
+          const newRecord: StockAdditionRecord = {
+            id: `add-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            shiftId: params.shiftId,
+            shiftNumber: shift ? shift.shiftNumber : 'ACTIVE',
+            productId: params.productId,
+            productName: product.name,
+            quantity: params.additions,
+            workerName: shift ? shift.workerName : 'Attendant',
+            timestamp: new Date().toISOString(),
+            status: 'PENDING_OWNER_CONFIRMATION',
+            isImmutable: false,
+          };
+          additions.unshift(newRecord);
+        }
+      } else if (params.additions === 0 && recIdx !== -1) {
+        additions.splice(recIdx, 1);
+      }
+      this.set(STORAGE_KEYS.STOCK_ADDITIONS, additions);
+    }
+
+    this.notify();
+    this.triggerNeonSync();
+  }
+
+  public batchUpdateShiftStockItems(
+    shiftId: string,
+    updates: Record<string, { opening?: number; added?: number; closing?: number }>
+  ) {
+    const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
+    const products = this.getProducts();
+    const currentInventory = this.getInventory();
+    const shift = this.getShiftById(shiftId);
+    const additions = this.get<StockAdditionRecord[]>(STORAGE_KEYS.STOCK_ADDITIONS, []);
+
+    Object.entries(updates).forEach(([productId, vals]) => {
+      const product = products.find((p) => p.id === productId);
+      if (!product) return;
+
+      let ssi = allSSIs.find((item) => item.shiftId === shiftId && item.productId === productId);
+      const inv = currentInventory.find((i) => i.productId === productId);
+      const defaultOpen = inv ? Number(inv.quantityOnHand || 0) : 0;
+
+      if (!ssi) {
+        const openVal = vals.opening !== undefined ? vals.opening : defaultOpen;
+        ssi = {
+          id: `ssi-${shiftId}-${productId}`,
+          shiftId,
+          productId,
+          productName: product.name,
+          unit: product.unit || 'BOTTLE',
+          sellingPrice: product.sellingPrice || 0,
+          costPrice: product.costPrice || 0,
+          openingSystemCount: openVal,
+          openingPhysicalCount: openVal,
+          openingVerified: true,
+          additions: vals.added !== undefined ? vals.added : 0,
+          recordedSales: 0,
+          transfersIn: 0,
+          transfersOut: 0,
+          damages: 0,
+          closingPhysicalCount: vals.closing,
+          isMeasured: product.isMeasured,
+          measurementType: product.measurementType,
+          measureUnitLabel: product.measureUnitLabel,
+          totalMeasuredValueKes: product.totalMeasuredValueKes,
+        };
+        allSSIs.push(ssi);
+      } else {
+        if (vals.opening !== undefined) ssi.openingPhysicalCount = Math.max(0, vals.opening);
+        if (vals.added !== undefined) ssi.additions = Math.max(0, vals.added);
+        if (vals.closing !== undefined) ssi.closingPhysicalCount = Math.max(0, vals.closing);
+      }
+
+      const available = Number(ssi.openingPhysicalCount || 0) + Number(ssi.additions || 0) + Number(ssi.transfersIn || 0) - Number(ssi.transfersOut || 0) - Number(ssi.damages || 0);
+      if (ssi.closingPhysicalCount !== undefined) {
+        ssi.recordedSales = Math.max(0, available - ssi.closingPhysicalCount);
+      }
+
+      if (inv) {
+        inv.quantityOnHand = ssi.closingPhysicalCount !== undefined ? ssi.closingPhysicalCount : available;
+        inv.updatedAt = new Date().toISOString();
+      }
+
+      if (vals.added !== undefined) {
+        const recIdx = additions.findIndex((a) => a.shiftId === shiftId && a.productId === productId);
+        if (vals.added > 0) {
+          if (recIdx !== -1) {
+            additions[recIdx].quantity = vals.added;
+            additions[recIdx].timestamp = new Date().toISOString();
+          } else {
+            const rec: StockAdditionRecord = {
+              id: `add-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              shiftId,
+              shiftNumber: shift ? shift.shiftNumber : 'ACTIVE',
+              productId,
+              productName: product.name,
+              quantity: vals.added,
+              workerName: shift ? shift.workerName : 'Attendant',
+              timestamp: new Date().toISOString(),
+              status: 'PENDING_OWNER_CONFIRMATION',
+              isImmutable: false,
+            };
+            additions.unshift(rec);
+          }
+        } else if (vals.added === 0 && recIdx !== -1) {
+          additions.splice(recIdx, 1);
+        }
+      }
+    });
+
+    this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
+    this.saveCurrentInventory(currentInventory);
+    this.set(STORAGE_KEYS.STOCK_ADDITIONS, additions);
+    this.notify();
+    this.triggerNeonSync();
+  }
+
   // --- Shift Operations ---
   public openShift(params: {
     workerId: string;

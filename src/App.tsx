@@ -79,16 +79,14 @@ export default function App() {
           const authenticUser = store.validateSessionUser(u.id, u.username);
           if (authenticUser) {
             if (authenticUser.role === 'OWNER') return 'overview';
-            const active = store.getActiveShift();
-            if (!active) return 'start';
-            return active.counterFinished ? 'end_shift' : 'counter';
+            return 'counter';
           }
         }
       }
     } catch {
       // fallback
     }
-    return 'start';
+    return 'counter';
   });
 
   useEffect(() => {
@@ -101,10 +99,10 @@ export default function App() {
   useEffect(() => {
     if (!currentUser) return;
     const ownerTabs = ['overview', 'shifts', 'stock', 'settings', 'catalog', 'mpesa', 'partners', 'staff'];
-    const workerTabs = ['start', 'counter', 'end_shift', 'history'];
+    const workerTabs = ['counter', 'history'];
 
-    if (currentUser.role === 'WORKER' && ownerTabs.includes(activeTab)) {
-      setActiveTab('start');
+    if (currentUser.role === 'WORKER' && !workerTabs.includes(activeTab)) {
+      setActiveTab('counter');
     } else if (currentUser.role === 'OWNER' && workerTabs.includes(activeTab)) {
       setActiveTab('overview');
     }
@@ -121,11 +119,10 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = store.subscribe(() => {
       setTick((t) => t + 1);
-      // Auto-detect active shift if worker was on start screen
+      // Auto-guard worker to counter sheet or history
       const user = authService.getActiveSession();
       if (user?.role === 'WORKER') {
-        const active = store.getActiveShift();
-        if (active && activeTab === 'start') {
+        if (activeTab !== 'counter' && activeTab !== 'history') {
           setActiveTab('counter');
         }
       }
@@ -161,12 +158,7 @@ export default function App() {
     if (authentic.role === 'OWNER') {
       setActiveTab('overview');
     } else {
-      const active = store.getActiveShift();
-      if (!active) {
-        setActiveTab('start');
-      } else {
-        setActiveTab(active.counterFinished ? 'end_shift' : 'counter');
-      }
+      setActiveTab('counter');
     }
   };
 

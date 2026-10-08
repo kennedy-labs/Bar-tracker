@@ -85,34 +85,16 @@ export const TopBar: React.FC<TopBarProps> = ({
     },
   ];
 
-  const workerNavItems: NavItem[] = [];
+  const workerNavItems: NavItem[] = [
+    { id: 'counter', label: 'Counter Sheet', icon: Layers },
+    { id: 'history', label: 'Past Shifts', icon: Clock },
+  ];
 
   const isWorker = currentUser?.role !== 'OWNER';
   const activeShift = store.getActiveShift();
 
   // Progressive work routine lock checks for workers
   const checkTabLockStatus = (tabId: string): { isLocked: boolean; reason?: string } => {
-    if (!isWorker) return { isLocked: false };
-    if (tabId === 'history') return { isLocked: false };
-
-    if (!activeShift) {
-      if (tabId === 'counter') {
-        return { isLocked: true, reason: 'Open a shift first to access the Active Counter.' };
-      }
-      if (tabId === 'end_shift') {
-        return { isLocked: true, reason: 'Open a shift and serve on the counter before ending a shift.' };
-      }
-      return { isLocked: false };
-    }
-
-    // Active shift in progress
-    if (tabId === 'end_shift' && !activeShift.counterFinished) {
-      return {
-        isLocked: true,
-        reason: 'Work routine is progressive. Finish the Active Counter at the bottom of the page before proceeding to End of Shift.',
-      };
-    }
-
     return { isLocked: false };
   };
 
@@ -200,7 +182,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             {/* Attendant Past Shifts access button */}
             {isWorker && (
               <button
-                onClick={() => setActiveTab(activeTab === 'history' ? (activeShift ? 'counter' : 'start') : 'history')}
+                onClick={() => setActiveTab(activeTab === 'history' ? 'counter' : 'history')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
                   activeTab === 'history'
                     ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40'
@@ -209,7 +191,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                 title="View Past Shift Records"
               >
                 <Clock className="w-3.5 h-3.5 text-slate-400" />
-                <span>Past Shifts</span>
+                <span>{activeTab === 'history' ? 'Back to Counter' : 'Past Shifts'}</span>
               </button>
             )}
 
