@@ -1,6 +1,6 @@
 {
   "name": "Bar Track — Operations, Stock Audit & Reconciliation System",
-  "description": "Bar operations management and profit reconciliation system featuring shift transitions, physical stock counts, M-Pesa and cash float tracking, and owner oversight.",
+  "description": "Bar operations management and sales reconciliation system featuring shift transitions, physical stock counts, M-Pesa and cash float tracking, and owner oversight.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

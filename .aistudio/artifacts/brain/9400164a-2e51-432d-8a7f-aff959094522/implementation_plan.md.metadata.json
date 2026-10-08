@@ -1,0 +1,6 @@
+{
+  "summary":  "Plan to separate authentication from the browser and migrate to Cloud Firestore as the single source of truth:\n1. Sync all users and businesses directly to Cloud Firestore so accounts created on one browser (e.g., Chrome) are instantly available across all browsers and devices (e.g., Edge, mobile).\n2. Refactor login verification to provide specific error messages: explicitly distinguish between 'Username not found' and 'Incorrect password or PIN'.\n3. Strictly enforce clean session teardown on logout so users must re-authenticate with their credentials.\n4. Update firestore.rules to permit secure synchronization of user accounts and business profiles.",
+  "updatedAt":  "2026-10-05T16:31:26.207413719Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

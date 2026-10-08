@@ -112,7 +112,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const shiftExpectedSales = targetShift?.expectedSalesRevenue || 0;
   const shiftNetMpesa = targetShift?.calculatedMpesaIncome || 0;
   const shiftNetCash = targetShift?.calculatedCashIncome || 0;
-  const shiftNetProfit = targetShift?.netProfit || 0;
   const shiftExpenses = targetShift?.totalExpenses || 0;
 
   const handleToggleShiftRead = (shiftId: string, currentReadState: boolean) => {
@@ -485,7 +484,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               </div>
 
               {/* High-level KPI Cards (FOR THIS ONE SHIFT ONLY) */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4">
                 {/* 1. Total Expected Sales */}
                 <div
                   className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl border transition-all ${
@@ -555,30 +554,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                     Drawer - KES {targetShift.openingCashFloat.toLocaleString()} float
                   </div>
                 </div>
-
-                {/* 4. Net Bar Profit */}
-                <div
-                  className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl border transition-all ${
-                    isShiftRead
-                      ? 'bg-[#121824]/60 border-slate-800/80'
-                      : 'bg-[#121824] border-slate-700/80 ring-1 ring-sky-500/20'
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-xs text-slate-400 mb-0.5 sm:mb-1">
-                    <span className="font-medium text-[11px] sm:text-xs">Net Bar Profit</span>
-                    <span className="text-[9px] sm:text-[10px] font-mono text-emerald-400 font-bold">
-                      {shiftExpectedSales > 0
-                        ? `${Math.round((shiftNetProfit / shiftExpectedSales) * 100)}%`
-                        : 'N/A'}
-                    </span>
-                  </div>
-                  <div className="text-lg sm:text-2xl font-bold font-mono text-emerald-300 tabular-nums">
-                    KES {shiftNetProfit.toLocaleString()}
-                  </div>
-                  <div className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">
-                    After COGS & expenses
-                  </div>
-                </div>
               </div>
             </div>
           ) : (
@@ -589,7 +564,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               </div>
               <div className="text-base font-bold text-white">Awaiting Shift Submission</div>
               <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
-                When a counter attendant finishes and submits their shift handover, the 4 shift financial banners (Sales, M-Pesa, Cash, Profit) will appear here for review with WhatsApp-style read verification.
+                When a counter attendant finishes and submits their shift handover, the 3 shift financial banners (Sales, M-Pesa, Cash) will appear here for review with WhatsApp-style read verification.
               </p>
             </div>
           )}

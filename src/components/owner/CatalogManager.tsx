@@ -314,11 +314,6 @@ export const CatalogManager: React.FC = () => {
     store.restoreDefaultCatalog();
   };
 
-  // Calculated margin for Add/Edit Modal preview
-  const numCost = parseFloat(costPrice) || 0;
-  const numSell = parseFloat(sellingPrice) || 0;
-  const projectedMargin = numSell - numCost;
-  const projectedPct = numSell > 0 ? Math.round((projectedMargin / numSell) * 100) : 0;
 
 
   return (
@@ -457,8 +452,6 @@ export const CatalogManager: React.FC = () => {
             const isInline = inlineEditId === p.id;
             const inv = inventory.find((i) => i.productId === p.id);
             const stockOnHand = inv ? inv.quantityOnHand : 0;
-            const margin = p.sellingPrice - p.costPrice;
-            const marginPct = p.sellingPrice > 0 ? Math.round((margin / p.sellingPrice) * 100) : 0;
 
             return (
               <div
@@ -543,7 +536,7 @@ export const CatalogManager: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Price & Margin Matrix */}
+                {/* Price Matrix */}
                 {!isInline ? (
                   <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between font-mono text-xs">
                     <div className="space-y-0.5">
@@ -564,13 +557,6 @@ export const CatalogManager: React.FC = () => {
                         {p.isMeasured && p.measurementType === 'VOLUME' && (
                           <span className="text-[10px] text-slate-400 font-normal"> / {p.measureUnitLabel || 'unit'}</span>
                         )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-0.5 text-right">
-                      <div className="text-[10px] text-slate-500 uppercase font-sans">Gross Margin</div>
-                      <div className="text-emerald-400 font-bold">
-                        +{marginPct}% <span className="text-[11px] text-slate-400 font-normal">({margin} KES)</span>
                       </div>
                     </div>
 
@@ -758,15 +744,6 @@ export const CatalogManager: React.FC = () => {
                 </div>
               </div>
 
-              {/* Projected Profit Margin Card */}
-              {numSell > 0 && (
-                <div className="p-3 rounded-2xl bg-[#0E1420] border border-slate-800 text-xs flex items-center justify-between font-mono">
-                  <div className="text-slate-400">Projected Margin per Unit:</div>
-                  <div className="text-emerald-400 font-bold">
-                    KES {projectedMargin.toLocaleString()} (+{projectedPct}%)
-                  </div>
-                </div>
-              )}
 
               {/* Initial Stock & Reorder Alert Level */}
               <div className="grid grid-cols-2 gap-3">
@@ -1076,21 +1053,6 @@ export const CatalogManager: React.FC = () => {
                 </div>
               </div>
 
-              {/* Profit & Margin Preview */}
-              {parseFloat(measuredSell) > 0 && (
-                <div className="p-3 rounded-2xl bg-[#0E1420] border border-slate-800 text-xs flex items-center justify-between font-mono">
-                  <div className="text-slate-400">Estimated Profit:</div>
-                  <div className="text-cyan-400 font-bold">
-                    KES {(parseFloat(measuredSell) - (parseFloat(measuredCost) || 0)).toLocaleString()} (
-                    {Math.round(
-                      ((parseFloat(measuredSell) - (parseFloat(measuredCost) || 0)) /
-                        parseFloat(measuredSell)) *
-                        100
-                    )}
-                    %)
-                  </div>
-                </div>
-              )}
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 pt-2 border-t border-slate-800">

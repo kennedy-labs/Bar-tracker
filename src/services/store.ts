@@ -2203,7 +2203,6 @@ class StoreService {
       const discrepancyValue = overageCount * item.sellingPrice;
 
       expectedSalesRevenue += calculatedSold * item.sellingPrice;
-      totalCostOfGoodsSold += calculatedSold * item.costPrice;
 
       return {
         ...item,
@@ -2216,8 +2215,9 @@ class StoreService {
     });
 
     const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
-    const grossProfit = expectedSalesRevenue - totalCostOfGoodsSold;
-    const netProfit = grossProfit - totalExpenses;
+    // Profit calculations removed for v1 simplicity (will be added in future)
+    const grossProfit = 0;
+    const netProfit = 0;
 
     const financialVariance =
       totalIncomeReturned + totalExpenses - expectedSalesRevenue;
@@ -2301,7 +2301,7 @@ class StoreService {
     this.addEvent({
       type: 'SHIFT_CLOSED',
       title: `Shift Closed: ${shift.shiftNumber}`,
-      description: `Reconciled by ${shift.workerName}. Net Money Returned: KES ${recon.totalIncomeReturned.toLocaleString()} | Net Profit: KES ${recon.netProfit.toLocaleString()}`,
+      description: `Reconciled by ${shift.workerName}. Net Money Returned: KES ${recon.totalIncomeReturned.toLocaleString()} | Expected Sales: KES ${recon.expectedSalesRevenue.toLocaleString()}`,
       actorName: shift.workerName,
       severity: Math.abs(recon.financialVariance) > 5 ? 'WARNING' : 'SUCCESS',
       amount: recon.totalIncomeReturned,

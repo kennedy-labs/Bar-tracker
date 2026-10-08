@@ -1,4 +1,4 @@
-# Bar Track — Bar Operations Reconciliation & Profit System
+# Bar Track — Bar Operations & Shift Reconciliation System
 
 A dual-actor operational system connecting on-the-ground Kenyan bar operations to remote owner oversight through strict transition gates, physical stock accountability, cash/M-Pesa balance tracking, automated calculations, and real-time discrepancy alerts.
 
@@ -15,7 +15,6 @@ A dual-actor operational system connecting on-the-ground Kenyan bar operations t
    - Net Cash Income = `Ending Cash - Opening Float` (e.g., KES 14,500 - 3,000 = 11,500)
    - Total Gross Income = Net Cash + Net M-Pesa (KES 18,500)
    - Automatic Discrepancy & Variance calculation against expected drink sales
-   - Cost of Goods Sold (COGS), Gross Profit, and Net Profit after shift expenses
 3. **Real-Time Executive Oversight**:
    - Live auto-updating event stream
    - High-priority Discrepancy Radar
