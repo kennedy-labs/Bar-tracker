@@ -174,59 +174,46 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 pb-28 md:pb-16 w-full">
-      {/* Welcoming Boss Bar Header */}
-      <div className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-[#121824] via-[#151D2C] to-[#0E1522] border border-[#1E293B] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-            <Store className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="text-[11px] font-mono uppercase tracking-wider text-emerald-400 font-bold flex items-center gap-1.5">
-              <span>{currentBiz.name}</span>
-              <span>·</span>
-              <span className="text-slate-400">Boss Admin</span>
-            </div>
-            <h1 className="text-lg sm:text-xl font-black text-white tracking-tight mt-0.5">
-              Habari, {currentUser.name.split(' ')[0]} 👋
-            </h1>
-          </div>
+      {/* Clean Owner Header */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-[#111622] border border-[#1E2638] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">
+            Bar Operations Overview
+          </h1>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {currentBiz.name} · Real-time sales, attendant shifts, and stock reconciliation.
+          </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Active Counters Tag */}
-          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#0E1420] border border-slate-800 text-xs">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0D1117] border border-slate-800 text-xs">
             <span
-              className={`w-2.5 h-2.5 rounded-full ${
-                activeShifts.length > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+              className={`w-2 h-2 rounded-full ${
+                activeShifts.length > 0 ? 'bg-emerald-400' : 'bg-slate-500'
               }`}
             />
             <span className="text-slate-300 font-medium">
-              {activeShifts.length > 0 ? `${activeShifts.length} Counter Open` : 'Counter Closed'}
+              {activeShifts.length > 0 ? `${activeShifts.length} Counter Active` : 'Counters Closed'}
             </span>
           </div>
 
-          {/* Pending Discrepancies / Shortages */}
-          {pendingDiscrepancies.length > 0 && (
-            <button
-              onClick={() => setActiveTab('discrepancies')}
-              className="px-3 py-2 rounded-xl bg-red-950/60 border border-red-800 text-red-300 font-bold flex items-center gap-1.5 hover:bg-red-900/60 transition-colors cursor-pointer text-xs"
-            >
-              <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-              <span>
-                {pendingDiscrepancies.length} Shortage Alert
-                {pendingDiscrepancies.length > 1 ? 's' : ''}
-              </span>
-            </button>
-          )}
-
-          {/* Pending Restock Deliveries */}
           {pendingRestocksCount > 0 && (
             <button
               onClick={() => setActiveTab('stock')}
-              className="px-3 py-2 rounded-xl bg-amber-950/60 border border-amber-800 text-amber-300 font-bold flex items-center gap-1.5 hover:bg-amber-900/60 transition-colors cursor-pointer text-xs"
+              className="px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 font-medium text-xs hover:bg-amber-500/20 transition-colors cursor-pointer flex items-center gap-1.5"
             >
-              <PackagePlus className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <PackagePlus className="w-3.5 h-3.5" />
               <span>{pendingRestocksCount} Restock Pending</span>
+            </button>
+          )}
+
+          {pendingDiscrepancies.length > 0 && (
+            <button
+              onClick={() => setActiveTab('discrepancies')}
+              className="px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 font-medium text-xs hover:bg-rose-500/20 transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>{pendingDiscrepancies.length} Shortage Alert{pendingDiscrepancies.length > 1 ? 's' : ''}</span>
             </button>
           )}
         </div>
@@ -364,118 +351,66 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
             </div>
           )}
 
-          {/* ONE-SHIFT SUMMARY HERO CONTAINER (WhatsApp-style Read/Unread) */}
+          {/* SHIFT SUMMARY CONTAINER */}
           {targetShift ? (
-            <div
-              className={`p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl transition-all duration-300 ${
-                isShiftRead
-                  ? 'bg-[#0E131E] border border-slate-800/80 shadow-md'
-                  : 'bg-gradient-to-b from-[#111A29] via-[#0E1522] to-[#0A0E17] border-2 border-sky-500/70 shadow-xl shadow-sky-950/40 ring-1 ring-sky-500/25'
-              }`}
-            >
-              {/* Header: Shift Identity + WhatsApp Read Status */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 sm:pb-4 mb-3 sm:mb-4 border-b border-slate-800/80">
-                <div className="flex items-center gap-2.5 sm:gap-3">
-                  <div
-                    className={`w-10 h-10 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
-                      isShiftRead
-                        ? 'bg-slate-800/50 text-sky-400 border-slate-700/60'
-                        : 'bg-sky-500/15 text-sky-400 border-sky-500/30'
-                    }`}
-                  >
-                    {isShiftRead ? (
-                      <CheckCheck className="w-5 h-5 text-sky-400" />
-                    ) : (
-                      <Clock className="w-5 h-5 text-sky-400 animate-pulse" />
+            <div className="p-4 sm:p-5 rounded-2xl bg-[#111622] border border-[#1E2638] space-y-4">
+              {/* Header: Shift Identity */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm sm:text-base font-bold text-white tracking-wide">
+                      Shift #{targetShift.shiftNumber} Report
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono">
+                      Attendant: <strong className="text-slate-200">{targetShift.workerName}</strong>
+                    </span>
+                    {targetShift.closedAt && (
+                      <span className="text-[11px] text-slate-500 font-mono">
+                        · {new Date(targetShift.closedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })},{' '}
+                        {new Date(targetShift.closedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                      </span>
                     )}
                   </div>
-
-                  <div>
-                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                      <span className="text-sm sm:text-base font-bold text-white tracking-wide">
-                        Shift Report
-                      </span>
-                      <span className="text-xs text-slate-300 font-mono">
-                        Attendant: <strong className="text-white font-bold">{targetShift.workerName}</strong>
-                      </span>
-                      {targetShift.closedAt && (
-                        <span className="text-[10px] sm:text-[11px] text-slate-400 font-mono">
-                          • {new Date(targetShift.closedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })},{' '}
-                          {new Date(targetShift.closedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* WhatsApp Status Indicator */}
-                    <div className="flex items-center gap-2 mt-1">
-                      {isShiftRead ? (
-                        <div className="flex items-center gap-1.5 text-xs text-slate-300 font-medium bg-slate-900/90 px-2.5 sm:px-3 py-1 rounded-full border border-slate-800 flex-wrap">
-                          {/* WhatsApp iconic Double Blue Ticks */}
-                          <span className="inline-flex items-center -space-x-1.5 text-sky-400">
-                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                          </span>
-                          <span className="text-sky-300 font-bold">Marked as Read</span>
-                          {targetShift.reviewedAt && (
-                            <span className="text-[10px] sm:text-[11px] text-slate-400 font-mono">
-                              • By {targetShift.reviewedBy || 'Owner'} at{' '}
-                              {new Date(targetShift.reviewedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-sky-200 bg-sky-950/80 border border-sky-500/50 px-2.5 sm:px-3 py-1 rounded-full animate-pulse shadow-sm">
-                          {/* WhatsApp Single Grey Tick */}
-                          <Check className="w-3.5 h-3.5 text-slate-400 stroke-[2]" />
-                          <span>New Shift Submitted • Unread</span>
-                        </div>
-                      )}
-                    </div>
+                  <div className="text-xs text-slate-400 mt-0.5">
+                    {isShiftRead ? (
+                      <span className="text-emerald-400">Reviewed by {targetShift.reviewedBy || 'Owner'}</span>
+                    ) : (
+                      <span className="text-amber-400">New Shift Handover · Awaiting Review</span>
+                    )}
                   </div>
                 </div>
 
-                {/* Actions: Mark as Read / Unread / Inspect / Switch Shift */}
-                <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto mt-1 sm:mt-0">
-                  {isShiftRead ? (
-                    <button
-                      onClick={() => handleToggleShiftRead(targetShift.id, true)}
-                      className="flex-1 sm:flex-initial text-xs text-slate-400 hover:text-slate-200 px-3.5 py-2.5 rounded-xl border border-slate-800 hover:border-slate-700 bg-slate-900/60 transition-colors cursor-pointer text-center"
-                      title="Mark this shift as unread"
-                    >
-                      Mark as Unread
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleToggleShiftRead(targetShift.id, false)}
-                      className="flex-1 sm:flex-initial text-xs font-bold text-slate-950 bg-sky-400 hover:bg-sky-300 px-4 py-2.5 rounded-xl transition-all shadow-md shadow-sky-950 flex items-center justify-center gap-1.5 cursor-pointer"
-                      title="Mark shift as reviewed and read"
-                    >
-                      <span className="inline-flex items-center -space-x-1 text-slate-950">
-                        <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                        <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                      </span>
-                      <span>Mark as Read</span>
-                    </button>
-                  )}
+                {/* Actions: Mark as Reviewed / Full Audit / Switch Shift */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => handleToggleShiftRead(targetShift.id, isShiftRead)}
+                    className={`text-xs px-3 py-1.5 rounded-lg border transition-colors cursor-pointer ${
+                      isShiftRead
+                        ? 'border-slate-800 text-slate-400 hover:text-white'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white font-medium border-emerald-600'
+                    }`}
+                  >
+                    {isShiftRead ? 'Mark as Unread' : 'Mark as Reviewed'}
+                  </button>
 
                   <button
                     onClick={() => setSelectedShiftForAudit(targetShift)}
-                    className="text-xs font-semibold text-slate-300 hover:text-white px-3.5 py-2.5 rounded-xl border border-slate-800 hover:bg-slate-800 bg-slate-900/60 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    className="text-xs font-medium text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-800 hover:bg-slate-800 bg-[#0D1117] flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <Eye className="w-3.5 h-3.5 text-slate-400" />
                     <span>Full Audit</span>
                   </button>
 
-                  {/* If multiple closed shifts exist, mini selector */}
+                  {/* If multiple closed shifts exist, clean selector */}
                   {closedShifts.length > 1 && (
                     <select
                       value={targetShift.id}
                       onChange={(e) => setSelectedShiftId(e.target.value)}
-                      className="w-full sm:w-auto text-xs bg-slate-900 border border-slate-800 text-slate-300 rounded-xl px-2.5 py-2 cursor-pointer font-mono"
+                      className="text-xs bg-[#0D1117] border border-slate-800 text-slate-300 rounded-lg px-2.5 py-1.5 cursor-pointer font-mono"
                     >
                       {closedShifts.map((s) => (
                         <option key={s.id} value={s.id}>
-                          {s.workerName} · {new Date(s.openedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })} {s.isReviewedByOwner ? '✓✓ Read' : '✓ New'}
+                          Shift #{s.shiftNumber} ({s.workerName})
                         </option>
                       ))}
                     </select>
@@ -483,75 +418,26 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                 </div>
               </div>
 
-              {/* High-level KPI Cards (FOR THIS ONE SHIFT ONLY) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4">
-                {/* 1. Total Expected Sales */}
-                <div
-                  className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl border transition-all ${
-                    isShiftRead
-                      ? 'bg-[#121824]/60 border-slate-800/80'
-                      : 'bg-[#121824] border-slate-700/80 ring-1 ring-sky-500/20'
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-xs text-slate-400 mb-0.5 sm:mb-1">
-                    <span className="font-medium text-[11px] sm:text-xs">Total Expected Sales</span>
-                    <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
-                  </div>
-                  <div className="text-lg sm:text-2xl font-bold font-mono text-white tabular-nums">
+              {/* High-level KPI Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3.5 rounded-xl bg-[#0D1117] border border-slate-800">
+                  <span className="text-[10px] text-slate-400 font-sans uppercase block">Expected Sales Revenue</span>
+                  <div className="text-lg font-bold font-mono text-white mt-0.5">
                     KES {shiftExpectedSales.toLocaleString()}
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">
-                    Attendant: {targetShift.workerName}
-                  </div>
                 </div>
 
-                {/* 2. Net M-Pesa Received (READ ONLY - NO SETUP TILLS ENDPOINT) */}
-                <div
-                  className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl border transition-all cursor-default select-none ${
-                    isShiftRead
-                      ? 'bg-[#121824]/60 border-slate-800/80'
-                      : 'bg-[#121824] border-slate-700/80 ring-1 ring-sky-500/20'
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-xs text-slate-400 mb-0.5 sm:mb-1">
-                    <span className="flex items-center gap-1 font-medium text-[11px] sm:text-xs">
-                      <Smartphone className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400" />
-                      <span>Net M-Pesa</span>
-                    </span>
-                    <span className="text-[9px] sm:text-[10px] font-mono text-slate-400 bg-slate-900/80 px-1.5 py-0.5 rounded border border-slate-800">
-                      Read Only
-                    </span>
-                  </div>
-                  <div className="text-lg sm:text-2xl font-bold font-mono text-emerald-400 tabular-nums">
+                <div className="p-3.5 rounded-xl bg-[#0D1117] border border-slate-800">
+                  <span className="text-[10px] text-slate-400 font-sans uppercase block">Net M-Pesa Collected</span>
+                  <div className="text-lg font-bold font-mono text-emerald-400 mt-0.5">
                     KES {shiftNetMpesa.toLocaleString()}
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">
-                    Closing - Opening delta
-                  </div>
                 </div>
 
-                {/* 3. Net Cash Returned */}
-                <div
-                  className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl border transition-all ${
-                    isShiftRead
-                      ? 'bg-[#121824]/60 border-slate-800/80'
-                      : 'bg-[#121824] border-slate-700/80 ring-1 ring-sky-500/20'
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-xs text-slate-400 mb-0.5 sm:mb-1">
-                    <span className="flex items-center gap-1 font-medium text-[11px] sm:text-xs">
-                      <Banknote className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400" />
-                      <span>Net Cash</span>
-                    </span>
-                    <span className="text-[9px] sm:text-[10px] font-mono text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-900/60">
-                      Float Deducted
-                    </span>
-                  </div>
-                  <div className="text-lg sm:text-2xl font-bold font-mono text-amber-400 tabular-nums">
+                <div className="p-3.5 rounded-xl bg-[#0D1117] border border-slate-800">
+                  <span className="text-[10px] text-slate-400 font-sans uppercase block">Net Cash in Drawer</span>
+                  <div className="text-lg font-bold font-mono text-slate-200 mt-0.5">
                     KES {shiftNetCash.toLocaleString()}
-                  </div>
-                  <div className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">
-                    Drawer - KES {targetShift.openingCashFloat.toLocaleString()} float
                   </div>
                 </div>
               </div>
