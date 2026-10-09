@@ -11,8 +11,10 @@ import {
   RefreshCw,
   Database,
   CloudOff,
+  User as UserIcon,
 } from 'lucide-react';
 import { BusinessIdentityBadge } from './BusinessIdentityBadge';
+import { EditProfileModal } from './EditProfileModal';
 
 interface TopBarProps {
   currentUser: User | null;
@@ -20,6 +22,7 @@ interface TopBarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   pendingDiscrepanciesCount: number;
+  onUpdateProfile?: (updatedUser: User) => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -27,9 +30,11 @@ export const TopBar: React.FC<TopBarProps> = ({
   onLogout,
   activeTab,
   setActiveTab,
+  onUpdateProfile,
 }) => {
   const [neonState, setNeonState] = useState<NeonState>(neonService.getStatus());
   const [isManualSyncing, setIsManualSyncing] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   useEffect(() => {
     return neonService.subscribeStatus((st) => setNeonState(st));
@@ -100,13 +105,25 @@ export const TopBar: React.FC<TopBarProps> = ({
         </nav>
 
         {/* Zone 3: Account & Session Action */}
-        <div className="flex items-center gap-3 shrink-0">
-          {/* User Identifier */}
-          <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400">
-            <span className="font-medium text-slate-200">{currentUser?.name || 'Staff'}</span>
-            <span className="text-slate-600">·</span>
-            <span className="text-[11px] text-slate-500">{isOwner ? 'Owner' : 'Attendant'}</span>
-          </div>
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* User Profile Button / Edit Credentials Trigger */}
+          {currentUser && (
+            <button
+              type="button"
+              onClick={() => setIsProfileModalOpen(true)}
+              title="Click to edit name, username, and password/PIN credentials"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs bg-[#121824] hover:bg-[#161F30] border border-[#1E2638] hover:border-slate-700 text-slate-300 transition-colors cursor-pointer group"
+            >
+              <UserIcon className="w-3.5 h-3.5 text-emerald-400 group-hover:text-emerald-300 shrink-0" />
+              <span className="font-medium text-slate-200 max-w-[110px] sm:max-w-[150px] truncate">
+                {currentUser?.name || 'Staff'}
+              </span>
+              <span className="text-slate-600 hidden sm:inline">·</span>
+              <span className="text-[10px] text-slate-400 hidden sm:inline uppercase font-mono">
+                {isOwner ? 'Owner' : 'Attendant'}
+              </span>
+            </button>
+          )}
 
           {/* Quiet Sync Indicator for Owner */}
           {isOwner && (
@@ -143,6 +160,20 @@ export const TopBar: React.FC<TopBarProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Edit Profile Modal */}
+      {currentUser && (
+        <EditProfileModal
+          currentUser={currentUser}
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+          onSuccess={(updated) => {
+            if (onUpdateProfile) {
+              onUpdateProfile(updated);
+            }
+          }}
+        />
+      )}
     </header>
   );
 };

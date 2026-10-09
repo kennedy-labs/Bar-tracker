@@ -68,7 +68,25 @@ export default function App() {
     try {
       if (typeof window !== 'undefined') {
         const savedTab = sessionStorage.getItem('bartrack_active_tab');
-        if (savedTab && ['start', 'counter', 'end_shift', 'history', 'overview', 'shifts', 'stock', 'settings', 'catalog', 'mpesa', 'partners', 'staff'].includes(savedTab)) {
+        if (
+          savedTab &&
+          [
+            'start',
+            'counter',
+            'end_shift',
+            'history',
+            'overview',
+            'shifts',
+            'stock',
+            'settings',
+            'catalog',
+            'mpesa',
+            'partners',
+            'staff',
+            'database',
+            'profile',
+          ].includes(savedTab)
+        ) {
           return savedTab;
         }
       }
@@ -98,7 +116,18 @@ export default function App() {
   // Strict route/tab authorization guard: prevent cross-role tab penetration
   useEffect(() => {
     if (!currentUser) return;
-    const ownerTabs = ['overview', 'shifts', 'stock', 'settings', 'catalog', 'mpesa', 'partners', 'staff'];
+    const ownerTabs = [
+      'overview',
+      'shifts',
+      'stock',
+      'settings',
+      'catalog',
+      'mpesa',
+      'partners',
+      'staff',
+      'database',
+      'profile',
+    ];
     const workerTabs = ['counter', 'history'];
 
     if (currentUser.role === 'WORKER' && !workerTabs.includes(activeTab)) {
@@ -173,6 +202,16 @@ export default function App() {
     setActiveTab('start');
   };
 
+  const handleUpdateProfile = (updatedUser: User) => {
+    setCurrentUser(updatedUser);
+    authService.createSession(updatedUser);
+    try {
+      localStorage.setItem('bartracker_session_user', JSON.stringify(sanitizeSessionUser(updatedUser)));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const discrepancies = store.getDiscrepancies({ status: 'FLAGGED' });
 
   // If not logged in, show production Authentication Screen
@@ -189,6 +228,7 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         pendingDiscrepanciesCount={discrepancies.length}
+        onUpdateProfile={handleUpdateProfile}
       />
 
       {/* Main Workspace Body */}
@@ -198,6 +238,7 @@ export default function App() {
             currentUser={currentUser}
             activeTab={activeTab}
             setActiveTab={setActiveTab}
+            onUpdateProfile={handleUpdateProfile}
           />
         ) : (
           <WorkerTerminal

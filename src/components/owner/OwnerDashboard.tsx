@@ -16,6 +16,7 @@ import { CatalogManager } from './CatalogManager';
 import { MpesaConfigManager } from './MpesaConfigManager';
 import { RestockAuditManager } from './RestockAuditManager';
 import { NeonDatabaseManager } from './NeonDatabaseManager';
+import { ProfileManager } from './ProfileManager';
 import {
   TrendingUp,
   AlertTriangle,
@@ -47,33 +48,36 @@ import {
   Store,
   FileText,
   Database,
+  UserCheck,
 } from 'lucide-react';
 
 interface OwnerDashboardProps {
   currentUser: User;
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  onUpdateProfile?: (updatedUser: User) => void;
 }
 
 export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   currentUser,
   activeTab,
   setActiveTab,
+  onUpdateProfile,
 }) => {
   const [selectedShiftForAudit, setSelectedShiftForAudit] = useState<Shift | null>(null);
   const [selectedDiscrepancy, setSelectedDiscrepancy] = useState<Discrepancy | null>(null);
   const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
 
   // Settings Sub-tab State
-  const [settingsSubTab, setSettingsSubTab] = useState<'catalog' | 'mpesa' | 'staff' | 'partners' | 'database'>(() => {
-    if (['catalog', 'mpesa', 'staff', 'partners', 'database'].includes(activeTab)) {
+  const [settingsSubTab, setSettingsSubTab] = useState<'catalog' | 'mpesa' | 'staff' | 'partners' | 'database' | 'profile'>(() => {
+    if (['catalog', 'mpesa', 'staff', 'partners', 'database', 'profile'].includes(activeTab)) {
       return activeTab as any;
     }
     return 'catalog';
   });
 
   useEffect(() => {
-    if (['catalog', 'mpesa', 'staff', 'partners', 'database'].includes(activeTab)) {
+    if (['catalog', 'mpesa', 'staff', 'partners', 'database', 'profile'].includes(activeTab)) {
       setSettingsSubTab(activeTab as any);
     }
   }, [activeTab]);
@@ -996,14 +1000,14 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
       {/* 6. UNIFIED BAR SETUP & SETTINGS TAB */}
       {(activeTab === 'settings' ||
-        ['catalog', 'mpesa', 'partners', 'staff'].includes(activeTab)) && (
+        ['catalog', 'mpesa', 'partners', 'staff', 'database', 'profile'].includes(activeTab)) && (
         <div className="space-y-4 sm:space-y-5">
           {/* Sub-navigation Segment Switcher */}
           <div className="p-2 sm:p-3 rounded-2xl sm:rounded-3xl bg-[#121824] border border-[#1E293B] shadow-lg">
             <div className="text-[11px] font-mono text-slate-400 uppercase tracking-wider px-2 pt-1 pb-2">
               Bar Settings & Configuration
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5">
               <button
                 type="button"
                 onClick={() => {
@@ -1083,6 +1087,22 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                 <Database className="w-4 h-4 shrink-0 text-cyan-400" />
                 <span className="truncate">Neon Database</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSettingsSubTab('profile');
+                  setActiveTab('profile');
+                }}
+                className={`py-3 px-3 rounded-xl sm:rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  settingsSubTab === 'profile'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md font-black'
+                    : 'bg-[#0E1420] text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
+                }`}
+              >
+                <UserCheck className="w-4 h-4 shrink-0" />
+                <span className="truncate">My Profile</span>
+              </button>
             </div>
           </div>
 
@@ -1093,6 +1113,12 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
             {settingsSubTab === 'staff' && <StaffManager currentUser={currentUser} />}
             {settingsSubTab === 'partners' && <PartnerBarsManager />}
             {settingsSubTab === 'database' && <NeonDatabaseManager />}
+            {settingsSubTab === 'profile' && (
+              <ProfileManager
+                currentUser={currentUser}
+                onUpdateProfile={onUpdateProfile}
+              />
+            )}
           </div>
         </div>
       )}

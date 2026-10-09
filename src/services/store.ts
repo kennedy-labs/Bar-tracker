@@ -1265,7 +1265,33 @@ class StoreService {
     return newUser;
   }
 
-  public async updateUser(userId: string, updates: Partial<User>) {
+  public async verifyUserCredential(userId: string, credentialInput: string): Promise<boolean> {
+    const users = this.getUsers();
+    const user = users.find((u) => u.id === userId);
+    if (!user) return false;
+    const cleanCredential = credentialInput.trim();
+    if (!cleanCredential) return false;
+
+    // Check Password
+    if (user.password && user.passwordSalt) {
+      const match = await authService.verifyCredential(cleanCredential, user.password, user.passwordSalt);
+      if (match) return true;
+    } else if (user.password && user.password === cleanCredential) {
+      return true;
+    }
+
+    // Check PIN
+    if (user.pinCode && user.pinSalt) {
+      const match = await authService.verifyCredential(cleanCredential, user.pinCode, user.pinSalt);
+      if (match) return true;
+    } else if (user.pinCode && user.pinCode === cleanCredential) {
+      return true;
+    }
+
+    return false;
+  }
+
+  public async updateUser(userId: string, updates: Partial<User>): Promise<User> {
     const users = this.getUsers();
     const user = users.find((u) => u.id === userId);
     if (!user) throw new Error('User not found.');
@@ -1310,6 +1336,7 @@ class StoreService {
     this.set(STORAGE_KEYS.USERS, users);
     this.triggerNeonSync();
     this.notify();
+    return user;
   }
 
   public deleteUser(userId: string) {

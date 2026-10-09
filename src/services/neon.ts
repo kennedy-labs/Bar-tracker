@@ -755,6 +755,7 @@ class NeonService {
             NOW()
           )
           ON CONFLICT (id) DO UPDATE SET
+            username = EXCLUDED.username,
             name = EXCLUDED.name,
             role = EXCLUDED.role,
             password = EXCLUDED.password,
