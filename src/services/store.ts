@@ -144,42 +144,28 @@ class StoreService {
     this.isAutoSyncing = true;
     try {
       const currentBiz = this.getCurrentBusiness();
-      const hasLocalProducts = this.getProducts().length > 0;
 
-      // Safe pull-first strategy for clean browser tabs or initial sync
-      if (!this.hasInitialCloudSynced || !hasLocalProducts) {
-        // 1. Pull businesses and users from Neon
-        const pullRes = await neonService.pullAllBusinessesAndUsers();
-        if (pullRes.success && pullRes.businesses && pullRes.businesses.length > 0) {
-          this.mergeCloudBusinessesAndUsers(pullRes.businesses, pullRes.users || []);
+      // If we have pending local mutations or offline changes, push them to Neon first
+      if (currentBiz && currentBiz.id && (this.pendingAutoSync || this.getOfflineQueueCount() > 0)) {
+        try {
+          await this.uploadAllToNeon(currentBiz.id);
+        } catch (uploadErr) {
+          console.warn('Pending mutations upload to Neon notice:', uploadErr);
         }
+      }
 
-        // 2. Pull authoritative establishment data for the current business
-        const bizToPull = this.getCurrentBusiness();
-        if (bizToPull && bizToPull.id) {
-          const fullBizRes = await neonService.pullBusinessFromNeon(bizToPull.id);
-          if (fullBizRes.success && fullBizRes.data) {
-            this.mergeCloudBusinessData(fullBizRes.data);
-          }
-        }
-      } else {
-        // If there are pending local offline mutations, upload first
-        if (currentBiz && currentBiz.id && (this.pendingAutoSync || this.getOfflineQueueCount() > 0)) {
-          await this.uploadAllToNeon();
-        }
+      // Always pull latest businesses and users from Neon for cross-device synchronization
+      const pullRes = await neonService.pullAllBusinessesAndUsers();
+      if (pullRes.success && pullRes.businesses && pullRes.businesses.length > 0) {
+        this.mergeCloudBusinessesAndUsers(pullRes.businesses, pullRes.users || []);
+      }
 
-        // Pull businesses and users
-        const pullRes = await neonService.pullAllBusinessesAndUsers();
-        if (pullRes.success && pullRes.businesses && pullRes.businesses.length > 0) {
-          this.mergeCloudBusinessesAndUsers(pullRes.businesses, pullRes.users || []);
-        }
-
-        // Pull full business data to capture any remote edits
-        if (currentBiz && currentBiz.id) {
-          const fullBizRes = await neonService.pullBusinessFromNeon(currentBiz.id);
-          if (fullBizRes.success && fullBizRes.data) {
-            this.mergeCloudBusinessData(fullBizRes.data);
-          }
+      // Pull authoritative establishment data for the current active business
+      const bizToPull = this.getCurrentBusiness();
+      if (bizToPull && bizToPull.id) {
+        const fullBizRes = await neonService.pullBusinessFromNeon(bizToPull.id);
+        if (fullBizRes.success && fullBizRes.data) {
+          this.mergeCloudBusinessData(fullBizRes.data);
         }
       }
 
@@ -586,7 +572,31 @@ class StoreService {
       severity: 'SUCCESS',
     });
 
-    this.triggerNeonSync();
+    // Immediate authoritative cloud persistence to Neon PostgreSQL
+    // Ensures owner account and business are immediately live across all devices and browsers!
+    try {
+      await neonService.syncPayloadToNeon({
+        business: newBusiness,
+        users: [newUser],
+        products: this.getProducts(true, newBizId),
+        inventory: inventoryMap[newBizId] || [],
+        shifts: [],
+        expenses: [],
+        mpesaAccounts: mpesaMap[newBizId] || [],
+        events: this.getEvents(40, newBizId),
+        stockAdditions: [],
+        deletedStockAdditionIds: [],
+        discrepancies: [],
+        interTransfers: [],
+        partners: [],
+        shiftStockItems: [],
+      });
+      this.hasInitialCloudSynced = true;
+    } catch (neonErr) {
+      console.warn('Initial cloud sync for new business notice:', neonErr);
+      this.triggerNeonSync();
+    }
+
     this.notify();
 
     return { business: newBusiness, user: newUser };
@@ -1042,8 +1052,8 @@ class StoreService {
   }
 
   // --- Events and Live Ticker ---
-  public getEvents(limit = 40): OperationalEvent[] {
-    const bizId = this.getCurrentBusinessId();
+  public getEvents(limit = 40, specificBizId?: string): OperationalEvent[] {
+    const bizId = specificBizId || this.getCurrentBusinessId();
     const eventsMap = this.get<Record<string, OperationalEvent[]>>(STORAGE_KEYS.EVENTS_MAP, {});
     const events = eventsMap[bizId] || [];
     return events.slice(0, limit);
@@ -1093,86 +1103,54 @@ class StoreService {
       throw new Error(`Account temporarily locked due to repeated failed attempts. Please wait ${lockout.secondsRemaining} seconds.`);
     }
 
-    // Normalize input
     const normalizedInput = rawInput.replace(/[_.-]/g, ' ').replace(/\s+/g, ' ').trim();
     const compactInput = rawInput.replace(/[\s_.-]/g, '');
 
-    const users = this.getUsers();
-    const user = users.find((u) => {
-      if (u.isArchived) return false;
+    const findCandidates = (userPool: User[]): User[] => {
+      return userPool.filter((u) => {
+        if (u.isArchived) return false;
 
-      const userUName = u.username.toLowerCase();
-      const userName = u.name.toLowerCase().replace(/\s*\(.*?\)\s*/g, '').trim();
+        const userUName = (u.username || '').toLowerCase();
+        const userName = (u.name || '').toLowerCase().replace(/\s*\(.*?\)\s*/g, '').trim();
 
-      const normUName = userUName.replace(/[_.-]/g, ' ').replace(/\s+/g, ' ').trim();
-      const compactUName = userUName.replace(/[\s_.-]/g, '');
+        const normUName = userUName.replace(/[_.-]/g, ' ').replace(/\s+/g, ' ').trim();
+        const compactUName = userUName.replace(/[\s_.-]/g, '');
 
-      const normName = userName.replace(/[_.-]/g, ' ').replace(/\s+/g, ' ').trim();
-      const compactName = userName.replace(/[\s_.-]/g, '');
+        const normName = userName.replace(/[_.-]/g, ' ').replace(/\s+/g, ' ').trim();
+        const compactName = userName.replace(/[\s_.-]/g, '');
 
-      return (
-        userUName === rawInput ||
-        userName === rawInput ||
-        normUName === normalizedInput ||
-        compactUName === compactInput ||
-        normName === normalizedInput ||
-        compactName === compactInput
-      );
-    });
+        return (
+          userUName === rawInput ||
+          userName === rawInput ||
+          normUName === normalizedInput ||
+          compactUName === compactInput ||
+          normName === normalizedInput ||
+          compactName === compactInput
+        );
+      });
+    };
 
-    let targetUser = user;
-    if (!targetUser && typeof navigator !== 'undefined' && navigator.onLine) {
-      try {
-        const pullRes = await neonService.pullAllBusinessesAndUsers();
-        if (pullRes.success && pullRes.users && pullRes.users.length > 0) {
-          this.mergeCloudBusinessesAndUsers(pullRes.businesses || [], pullRes.users);
-          const freshUsers = this.getUsers();
-          targetUser = freshUsers.find((u) => {
-            if (u.isArchived) return false;
-            const uU = u.username.toLowerCase();
-            const uN = u.name.toLowerCase().replace(/\s*\(.*?\)\s*/g, '').trim();
-            return (
-              uU === rawInput ||
-              uN === rawInput ||
-              uU.replace(/[_.-]/g, ' ').replace(/\s+/g, ' ').trim() === normalizedInput ||
-              uN.replace(/[_.-]/g, ' ').replace(/\s+/g, ' ').trim() === normalizedInput ||
-              uU.replace(/[\s_.-]/g, '') === compactInput ||
-              uN.replace(/[\s_.-]/g, '') === compactInput
-            );
-          });
-        }
-      } catch (e) {
-        // network error fallback
+    const verifyCandidate = async (activeUser: User): Promise<boolean> => {
+      // 1. Verify Password
+      if (activeUser.password && activeUser.passwordSalt) {
+        const match = await authService.verifyCredential(cleanCredential, activeUser.password, activeUser.passwordSalt);
+        if (match) return true;
+      } else if (activeUser.password && activeUser.password === cleanCredential) {
+        // Auto-migrate plaintext to salt+hash
+        const salt = authService.generateSalt();
+        activeUser.passwordSalt = salt;
+        activeUser.password = await authService.hashCredential(cleanCredential, salt);
+        const allUsers = this.getUsers();
+        const idx = allUsers.findIndex((u) => u.id === activeUser.id);
+        if (idx >= 0) allUsers[idx] = activeUser;
+        this.set(STORAGE_KEYS.USERS, allUsers);
+        return true;
       }
-    }
 
-    if (!targetUser) {
-      authService.recordFailedAttempt(rawInput);
-      return null;
-    }
-
-    const activeUser = targetUser;
-
-    // Verify Password
-    let matched = false;
-    if (activeUser.password && activeUser.passwordSalt) {
-      matched = await authService.verifyCredential(cleanCredential, activeUser.password, activeUser.passwordSalt);
-    } else if (activeUser.password && activeUser.password === cleanCredential) {
-      // Auto-migrate plaintext to salt+hash
-      const salt = authService.generateSalt();
-      activeUser.passwordSalt = salt;
-      activeUser.password = await authService.hashCredential(cleanCredential, salt);
-      const allUsers = this.getUsers();
-      const idx = allUsers.findIndex((u) => u.id === activeUser.id);
-      if (idx >= 0) allUsers[idx] = activeUser;
-      this.set(STORAGE_KEYS.USERS, allUsers);
-      matched = true;
-    }
-
-    // Verify PIN
-    if (!matched) {
+      // 2. Verify PIN
       if (activeUser.pinCode && activeUser.pinSalt) {
-        matched = await authService.verifyCredential(cleanCredential, activeUser.pinCode, activeUser.pinSalt);
+        const match = await authService.verifyCredential(cleanCredential, activeUser.pinCode, activeUser.pinSalt);
+        if (match) return true;
       } else if (activeUser.pinCode && activeUser.pinCode === cleanCredential) {
         // Auto-migrate plaintext to salt+hash
         const salt = authService.generateSalt();
@@ -1182,14 +1160,54 @@ class StoreService {
         const idx = allUsers.findIndex((u) => u.id === activeUser.id);
         if (idx >= 0) allUsers[idx] = activeUser;
         this.set(STORAGE_KEYS.USERS, allUsers);
-        matched = true;
+        return true;
+      }
+
+      return false;
+    };
+
+    // First attempt: Check local storage candidates
+    const localCandidates = findCandidates(this.getUsers());
+    for (const cand of localCandidates) {
+      if (await verifyCandidate(cand)) {
+        authService.clearFailedAttempts(rawInput);
+        authService.createSession(cand);
+        if (cand.businessId) {
+          this.setCurrentBusiness(cand.businessId);
+        }
+        return cand;
       }
     }
 
-    if (matched) {
-      authService.clearFailedAttempts(rawInput);
-      authService.createSession(activeUser);
-      return activeUser;
+    // Second attempt: If local check didn't match or local candidates pool was empty,
+    // query Neon PostgreSQL live to fetch updated credentials or newly registered businesses
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      try {
+        const pullRes = await neonService.pullAllBusinessesAndUsers();
+        if (pullRes.success && pullRes.users && pullRes.users.length > 0) {
+          this.mergeCloudBusinessesAndUsers(pullRes.businesses || [], pullRes.users);
+          const freshCandidates = findCandidates(this.getUsers());
+          for (const cand of freshCandidates) {
+            if (await verifyCandidate(cand)) {
+              authService.clearFailedAttempts(rawInput);
+              authService.createSession(cand);
+              if (cand.businessId) {
+                this.setCurrentBusiness(cand.businessId);
+                // Also pull business-specific data immediately
+                neonService.pullBusinessFromNeon(cand.businessId).then((res) => {
+                  if (res.success && res.data) {
+                    this.mergeCloudBusinessData(res.data);
+                    this.notify();
+                  }
+                }).catch(() => {});
+              }
+              return cand;
+            }
+          }
+        }
+      } catch (e) {
+        // network error fallback
+      }
     }
 
     authService.recordFailedAttempt(rawInput);
@@ -1260,7 +1278,14 @@ class StoreService {
       severity: 'INFO',
     });
 
-    this.triggerNeonSync();
+    // Immediate authoritative cloud persistence to Neon
+    try {
+      await this.uploadAllToNeon(bizId);
+    } catch (neonErr) {
+      console.warn('Neon push on addUser notice:', neonErr);
+      this.triggerNeonSync();
+    }
+
     this.notify();
     return newUser;
   }
@@ -1334,7 +1359,15 @@ class StoreService {
     }
 
     this.set(STORAGE_KEYS.USERS, users);
-    this.triggerNeonSync();
+
+    // Immediate authoritative cloud persistence to Neon
+    try {
+      await this.uploadAllToNeon(user.businessId);
+    } catch (neonErr) {
+      console.warn('Neon push on updateUser notice:', neonErr);
+      this.triggerNeonSync();
+    }
+
     this.notify();
     return user;
   }
@@ -3156,21 +3189,23 @@ class StoreService {
     this.notify();
   }
 
-  public async uploadAllToNeon() {
-    const business = this.getCurrentBusiness();
+  public async uploadAllToNeon(targetBizId?: string) {
+    const bizId = targetBizId || this.getCurrentBusinessId();
+    const businesses = this.get<BusinessProfile[]>(STORAGE_KEYS.BUSINESSES, []);
+    const business = businesses.find((b) => b.id === bizId) || this.getCurrentBusiness();
     if (!business || !business.id) {
       return { success: false, message: 'No active business selected to sync.' };
     }
-    const bizId = business.id;
+    const targetId = business.id;
     return neonService.syncPayloadToNeon({
       business,
-      users: this.getUsers().filter((u) => u.businessId === bizId),
-      products: this.getProducts(true, bizId),
+      users: this.getUsers().filter((u) => !u.businessId || u.businessId === targetId),
+      products: this.getProducts(true, targetId),
       inventory: this.getInventory(),
       shifts: this.getShifts(),
       expenses: this.getExpenses(),
       mpesaAccounts: this.getMpesaAccounts(true),
-      events: this.getEvents(),
+      events: this.getEvents(40, targetId),
       stockAdditions: this.getStockAdditions(),
       deletedStockAdditionIds: this.get<string[]>(STORAGE_KEYS.DELETED_STOCK_ADDITIONS, []),
       discrepancies: this.getDiscrepancies(),

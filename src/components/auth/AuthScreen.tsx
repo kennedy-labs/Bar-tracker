@@ -28,21 +28,25 @@ interface AuthScreenProps {
 }
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
- const hasExistingBusiness = store.hasAnyBusiness();
+  const [hasExistingBusiness, setHasExistingBusiness] = useState<boolean>(() => store.hasAnyBusiness());
 
- // If no businesses exist in the system, automatically default to the clean Register/Onboarding view
- const [viewMode, setViewMode] = useState<'SIGN_IN' | 'REGISTER'>(() => {
- if (!hasExistingBusiness) return 'REGISTER';
- if (typeof window !== 'undefined') {
- const hash = window.location.hash.toLowerCase();
- if (hash.includes('signup') || hash.includes('register')) {
- return 'REGISTER';
- }
- }
- return 'SIGN_IN';
- });
+  useEffect(() => {
+    return store.subscribe(() => {
+      setHasExistingBusiness(store.hasAnyBusiness());
+    });
+  }, []);
 
- const [authMode, setAuthMode] = useState<'CREDENTIALS' | 'KEYPAD'>('CREDENTIALS');
+  const [viewMode, setViewMode] = useState<'SIGN_IN' | 'REGISTER'>(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.toLowerCase();
+      if (hash.includes('signup') || hash.includes('register')) {
+        return 'REGISTER';
+      }
+    }
+    return 'SIGN_IN';
+  });
+
+  const [authMode, setAuthMode] = useState<'CREDENTIALS' | 'KEYPAD'>('CREDENTIALS');
 
  // Sign In Form State
  const [username, setUsername] = useState<string>(() => {
@@ -117,21 +121,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
  });
  }, []);
 
- const switchMode = (mode: 'SIGN_IN' | 'REGISTER') => {
- if (mode === 'SIGN_IN' && !store.hasAnyBusiness()) {
- triggerError('Please set up your establishment first.');
- return;
- }
- setViewMode(mode);
- setErrorMsg('');
- if (typeof window !== 'undefined') {
- try {
- window.location.hash = mode === 'REGISTER' ? 'signup' : 'signin';
- } catch {
- // ignore
- }
- }
- };
+  const switchMode = (mode: 'SIGN_IN' | 'REGISTER') => {
+    setViewMode(mode);
+    setErrorMsg('');
+    if (typeof window !== 'undefined') {
+      try {
+        window.location.hash = mode === 'REGISTER' ? 'signup' : 'signin';
+      } catch {
+        // ignore
+      }
+    }
+  };
 
  const triggerError = (msg: string) => {
  setShake(true);
@@ -206,11 +206,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
  setIsAuthenticating(true);
  const user = await store.authenticateUser(staffUsername, pin);
  if (user) {
- if (user.role === 'OWNER') {
- triggerError('Proprietor executive accounts must authenticate via Username & Password.');
- setKeypadPin('');
- return;
- }
  if (user.businessId) {
  store.setCurrentBusiness(user.businessId);
  }
@@ -296,16 +291,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
  Operations, Stock Audit & Reconciliation System
  </p>
 
- {!hasExistingBusiness && (
+ {!hasExistingBusiness && viewMode === 'REGISTER' && (
  <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-600/40 text-emerald-300 text-xs font-medium">
  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
- <span>Clean Start: Create Your Establishment</span>
+ <span>Create Your Establishment</span>
  </div>
  )}
  </div>
 
- {/* View Switcher Tabs (Only if business exists) */}
- {hasExistingBusiness && (
+ {/* View Switcher Tabs: Available on all browsers so owners and staff can sign in immediately */}
  <div className="flex bg-[#0E1420] p-1 rounded-2xl border border-slate-800 mb-6 shadow-inner">
  <button
  onClick={() => switchMode('SIGN_IN')}
@@ -328,7 +322,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
  Register New Business
  </button>
  </div>
- )}
 
  {/* Error / Lockout Banner */}
  {errorMsg && (
