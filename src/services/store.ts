@@ -1661,6 +1661,43 @@ class StoreService {
     return this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
   }
 
+  /**
+   * Single canonical constructor for a ShiftStockItem row.
+   * Every code path that needs to materialise a missing counter row must go
+   * through here, otherwise the auto-heal path and the explicit-edit paths
+   * drift apart on opening counts (the root cause of owner/worker desync).
+   */
+  private buildShiftStockItem(
+    shiftId: string,
+    product: Product,
+    quantity: number,
+    options?: { additions?: number; closingPhysicalCount?: number }
+  ): ShiftStockItem {
+    const qty = Number(quantity) || 0;
+    return {
+      id: `ssi-${shiftId}-${product.id}`,
+      shiftId,
+      productId: product.id,
+      productName: product.name,
+      unit: product.unit || 'BOTTLE',
+      sellingPrice: product.sellingPrice || 0,
+      costPrice: product.costPrice || 0,
+      openingSystemCount: qty,
+      openingPhysicalCount: qty,
+      openingVerified: true,
+      additions: options?.additions !== undefined ? options.additions : 0,
+      recordedSales: 0,
+      transfersIn: 0,
+      transfersOut: 0,
+      damages: 0,
+      closingPhysicalCount: options?.closingPhysicalCount,
+      isMeasured: product.isMeasured,
+      measurementType: product.measurementType,
+      measureUnitLabel: product.measureUnitLabel,
+      totalMeasuredValueKes: product.totalMeasuredValueKes,
+    };
+  }
+
   public getShiftStockItems(shiftId: string): ShiftStockItem[] {
     const items = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
     let shiftItems = items.filter((i) => i.shiftId === shiftId);
@@ -1678,27 +1715,7 @@ class StoreService {
         if (!shiftItems.some((si) => si.productId === p.id)) {
           const invItem = inventory.find((inv) => inv.productId === p.id);
           const initialQty = invItem ? Number(invItem.quantityOnHand || 0) : 0;
-          const healedItem: ShiftStockItem = {
-            id: `ssi-${shiftId}-${p.id}`,
-            shiftId,
-            productId: p.id,
-            productName: p.name,
-            unit: p.unit || 'BOTTLE',
-            sellingPrice: p.sellingPrice || 0,
-            costPrice: p.costPrice || 0,
-            openingSystemCount: initialQty,
-            openingPhysicalCount: initialQty,
-            openingVerified: true,
-            additions: 0,
-            recordedSales: 0,
-            transfersIn: 0,
-            transfersOut: 0,
-            damages: 0,
-            isMeasured: p.isMeasured,
-            measurementType: p.measurementType,
-            measureUnitLabel: p.measureUnitLabel,
-            totalMeasuredValueKes: p.totalMeasuredValueKes,
-          };
+          const healedItem = this.buildShiftStockItem(shiftId, p, initialQty);
           shiftItems.push(healedItem);
           items.push(healedItem);
           modified = true;
@@ -1765,28 +1782,15 @@ class StoreService {
       const openCount = params.openingPhysicalCount !== undefined 
         ? params.openingPhysicalCount 
         : (inv ? Number(inv.quantityOnHand || 0) : 0);
-      ssi = {
-        id: `ssi-${params.shiftId}-${params.productId}`,
-        shiftId: params.shiftId,
-        productId: params.productId,
-        productName: product.name,
-        unit: product.unit || 'BOTTLE',
-        sellingPrice: product.sellingPrice || 0,
-        costPrice: product.costPrice || 0,
-        openingSystemCount: openCount,
-        openingPhysicalCount: openCount,
-        openingVerified: true,
+      ssi = this.buildShiftStockItem(params.shiftId, product, openCount, {
         additions: params.additions !== undefined ? params.additions : 0,
-        recordedSales: 0,
-        transfersIn: 0,
-        transfersOut: 0,
-        damages: 0,
         closingPhysicalCount: params.closingPhysicalCount,
-        isMeasured: product.isMeasured,
-        measurementType: product.measurementType,
-        measureUnitLabel: product.measureUnitLabel,
-        totalMeasuredValueKes: product.totalMeasuredValueKes,
-      };
+      });
+      // Honour an explicitly supplied opening count even when the caller also
+      // omitted/derived it from inventory.
+      ssi.openingSystemCount = openCount;
+      ssi.openingPhysicalCount =
+        params.openingPhysicalCount !== undefined ? params.openingPhysicalCount : openCount;
       allSSIs.push(ssi);
     } else {
       if (params.openingPhysicalCount !== undefined) {
@@ -1870,28 +1874,10 @@ class StoreService {
 
       if (!ssi) {
         const openVal = vals.opening !== undefined ? vals.opening : defaultOpen;
-        ssi = {
-          id: `ssi-${shiftId}-${productId}`,
-          shiftId,
-          productId,
-          productName: product.name,
-          unit: product.unit || 'BOTTLE',
-          sellingPrice: product.sellingPrice || 0,
-          costPrice: product.costPrice || 0,
-          openingSystemCount: openVal,
-          openingPhysicalCount: openVal,
-          openingVerified: true,
+        ssi = this.buildShiftStockItem(shiftId, product, openVal, {
           additions: vals.added !== undefined ? vals.added : 0,
-          recordedSales: 0,
-          transfersIn: 0,
-          transfersOut: 0,
-          damages: 0,
           closingPhysicalCount: vals.closing,
-          isMeasured: product.isMeasured,
-          measurementType: product.measurementType,
-          measureUnitLabel: product.measureUnitLabel,
-          totalMeasuredValueKes: product.totalMeasuredValueKes,
-        };
+        });
         allSSIs.push(ssi);
       } else {
         if (vals.opening !== undefined) ssi.openingPhysicalCount = Math.max(0, vals.opening);
@@ -2164,27 +2150,7 @@ class StoreService {
     const openingCount = invItem ? Number(invItem.quantityOnHand || 0) : 0;
 
     if (!ssi) {
-      ssi = {
-        id: `ssi-${params.shiftId}-${params.productId}`,
-        shiftId: params.shiftId,
-        productId: params.productId,
-        productName: product.name,
-        unit: product.unit || 'BOTTLE',
-        sellingPrice: product.sellingPrice || 0,
-        costPrice: product.costPrice || 0,
-        openingSystemCount: openingCount,
-        openingPhysicalCount: openingCount,
-        openingVerified: true,
-        additions: 0,
-        recordedSales: 0,
-        transfersIn: 0,
-        transfersOut: 0,
-        damages: 0,
-        isMeasured: product.isMeasured,
-        measurementType: product.measurementType,
-        measureUnitLabel: product.measureUnitLabel,
-        totalMeasuredValueKes: product.totalMeasuredValueKes,
-      };
+      ssi = this.buildShiftStockItem(params.shiftId, product, openingCount);
       allSSIs.push(ssi);
     }
 
@@ -2705,35 +2671,46 @@ class StoreService {
       });
     }
     this.saveCurrentInventory(inv);
-    this.uploadAllToNeon().catch((e) => console.warn('Instant neon sync notice:', e));
 
-    // If an active shift exists and stock changed, keep active shift in balance
+    // If an active shift exists and stock changed, keep the shift ledger in balance.
+    // The SSI row is materialised on demand (mirroring getShiftStockItems' heal
+    // logic) so an owner adjustment can never be dropped just because the counter
+    // row had not been created yet on this device/browser.
     const activeShift = this.getActiveShift();
-    if (activeShift && delta !== 0) {
-      const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
-      const ssi = allSSIs.find(
-        (s) => s.shiftId === activeShift.id && s.productId === productId
-      );
-      if (ssi) {
-        if (delta > 0) {
-          ssi.additions = (ssi.additions || 0) + delta;
-        } else {
-          const absDelta = Math.abs(delta);
-          if ((ssi.additions || 0) >= absDelta) {
-            ssi.additions = (ssi.additions || 0) - absDelta;
-          } else {
-            const remaining = absDelta - (ssi.additions || 0);
-            ssi.additions = 0;
-            ssi.openingPhysicalCount = Math.max(0, (ssi.openingPhysicalCount || 0) - remaining);
-          }
-        }
-        this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
-      }
-    }
-
     const products = this.getProducts(true);
     const product = products.find((p) => p.id === productId);
     const productName = product ? product.name : 'Drink';
+
+    if (activeShift && product && delta !== 0) {
+      const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
+      let ssi = allSSIs.find(
+        (s) => s.shiftId === activeShift.id && s.productId === productId
+      );
+
+      if (!ssi) {
+        // Heal: create the counter row from current inventory, then apply delta below.
+        ssi = this.buildShiftStockItem(activeShift.id, product, prevQty, {
+          additions: delta > 0 ? delta : 0,
+        });
+        if (delta < 0) {
+          ssi.openingPhysicalCount = Math.max(0, prevQty + delta);
+        }
+        allSSIs.push(ssi);
+      } else if (delta > 0) {
+        ssi.additions = (ssi.additions || 0) + delta;
+      } else {
+        const absDelta = Math.abs(delta);
+        if ((ssi.additions || 0) >= absDelta) {
+          ssi.additions = (ssi.additions || 0) - absDelta;
+        } else {
+          const remaining = absDelta - (ssi.additions || 0);
+          ssi.additions = 0;
+          ssi.openingPhysicalCount = Math.max(0, (ssi.openingPhysicalCount || 0) - remaining);
+        }
+      }
+      this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
+    }
+
     this.addEvent({
       type: 'INFO',
       title: `Stock Count Adjusted: ${productName}`,
@@ -2741,6 +2718,16 @@ class StoreService {
       actorName: 'Owner Audit Desk',
       severity: 'INFO',
     });
+
+    // Mark a mutation as pending and push synchronously *before* the periodic
+    // syncWithCloud pull can run, otherwise the 3.5s poll could immediately
+    // re-merge a stale cloud inventory row over the value we just wrote.
+    this.pendingAutoSync = true;
+    this.uploadAllToNeon()
+      .catch((e) => console.warn('Instant neon sync notice:', e))
+      .finally(() => {
+        this.pendingAutoSync = false;
+      });
 
     this.notify();
     return true;
@@ -3248,12 +3235,27 @@ class StoreService {
     const bizId = data.business.id;
 
     // 1. Authoritative Merge for Products
+    // Only rows belonging to the business being merged are considered, so a
+    // multi-establishment database cannot leak foreign catalog entries into
+    // this business's product list (which then desyncs its inventory rows).
     if (data.products && data.products.length > 0) {
+      // (ownership filter applied below)
+      const bizProducts = data.products.filter(
+        (cp) => !cp.businessId || cp.businessId === bizId
+      );
+      const cloudIds = new Set(bizProducts.map((cp) => cp.id));
       const localProducts = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
       const mergedMap = new Map<string, Product>();
-      data.products.forEach((cp) => mergedMap.set(cp.id, cp));
+      bizProducts.forEach((cp) => mergedMap.set(cp.id, cp));
       localProducts.forEach((lp) => {
-        if (!mergedMap.has(lp.id)) {
+        const belongsHere = !lp.businessId || lp.businessId === bizId;
+        if (belongsHere && !mergedMap.has(lp.id) && !cloudIds.has(lp.id)) {
+          mergedMap.set(lp.id, lp);
+        }
+      });
+      // Preserve products owned by other businesses untouched.
+      localProducts.forEach((lp) => {
+        if (lp.businessId && lp.businessId !== bizId) {
           mergedMap.set(lp.id, lp);
         }
       });
@@ -3267,16 +3269,32 @@ class StoreService {
       this.set(STORAGE_KEYS.SHIFTS_MAP, shiftMap);
     }
 
-    // 3. Authoritative Merge for Inventory (Direct Live Quantities with Local Restock Preservation)
+    // 3. Authoritative Merge for Inventory (Cloud is the source of truth)
+    // The cloud row wins for quantityOnHand. A local row is only preserved when
+    // there is no cloud counterpart at all, or when a local mutation is still
+    // pending upload (otherwise a stale higher local count would silently
+    // overwrite a remote owner adjustment).
     if (data.inventory && data.inventory.length > 0) {
       const invMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
       const localInv = invMap[bizId] || [];
       const localMap = new Map<string, InventoryItem>();
       localInv.forEach((i) => localMap.set(i.productId, i));
+      const localMutationPending = this.pendingAutoSync || this.getOfflineQueueCount() > 0;
 
-      const mergedInv = data.inventory.map((ci) => {
+      // Restrict the merge to products that actually belong to this business,
+      // so foreign inventory rows cannot be pulled in alongside foreign catalog rows.
+      const businessProductIds = new Set(
+        this.get<Product[]>(STORAGE_KEYS.PRODUCTS, [])
+          .filter((p) => !p.businessId || p.businessId === bizId)
+          .map((p) => p.id)
+      );
+      const cloudInventory = data.inventory.filter(
+        (ci) => businessProductIds.has(ci.productId)
+      );
+
+      const mergedInv = cloudInventory.map((ci) => {
         const li = localMap.get(ci.productId);
-        if (li && Number(li.quantityOnHand || 0) > Number(ci.quantityOnHand || 0)) {
+        if (li && localMutationPending) {
           return li;
         }
         return ci;
@@ -3290,24 +3308,19 @@ class StoreService {
       this.set(STORAGE_KEYS.INVENTORY_MAP, invMap);
     }
 
-    // 4. Authoritative Merge for Shift Stock Items (Preserve Local Additions across Refreshes)
+    // 4. Authoritative Merge for Shift Stock Items (Cloud wins unless a local
+    // mutation is still pending upload). Records are matched by their
+    // shiftId/productId identity so the cloud opening count is not frozen out.
     if (data.shiftStockItems && data.shiftStockItems.length > 0) {
       const localSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
       const localMap = new Map<string, ShiftStockItem>();
       localSSIs.forEach((i) => localMap.set(`${i.shiftId}-${i.productId}`, i));
+      const localMutationPending = this.pendingAutoSync || this.getOfflineQueueCount() > 0;
 
       const mergedSSIs = data.shiftStockItems.map((ci) => {
         const li = localMap.get(`${ci.shiftId}-${ci.productId}`);
-        if (li) {
-          const additions = Math.max(Number(li.additions || 0), Number(ci.additions || 0));
-          const sales = Math.max(Number(li.recordedSales || 0), Number(ci.recordedSales || 0));
-          return {
-            ...ci,
-            ...li,
-            additions,
-            recordedSales: sales,
-            openingPhysicalCount: li.openingPhysicalCount !== undefined ? li.openingPhysicalCount : ci.openingPhysicalCount,
-          };
+        if (li && localMutationPending) {
+          return li;
         }
         return ci;
       });

@@ -105,14 +105,17 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  const rowDataList = useMemo(() => {
  return products.map((product) => {
  const ssi = shiftStockItems.find((s) => s.productId === product.id);
- const invItem = inventory.find((i) => i.productId === product.id);
  const draft = localDrafts[product.id];
 
  // 1. Opening stock
- const defaultOpening = invItem ? Number(invItem.quantityOnHand || 0) : 0;
+ // The shift ledger (SSI) is the single source of truth here.
+ // getShiftStockItems() already auto-heals missing SSIs from inventory
+ // (store.ts), so reading ssi.openingPhysicalCount directly keeps the worker
+ // page in lockstep with owner-side stock adjustments instead of masking
+ // them behind a stale inventory snapshot.
  const openingStock = draft?.opening !== undefined
  ? draft.opening
- : (ssi?.openingPhysicalCount !== undefined ? ssi.openingPhysicalCount : defaultOpening);
+ : (ssi?.openingPhysicalCount !== undefined ? ssi.openingPhysicalCount : 0);
 
  // 2. Added stock
  const addedStock = draft?.added !== undefined
