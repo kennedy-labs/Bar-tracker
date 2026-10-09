@@ -84,8 +84,8 @@ export const TopBar: React.FC<TopBarProps> = ({
         {/* Zone 2: Navigation Links */}
         <nav className="flex items-center gap-1 sm:gap-2">
           {navItems.map((item) => {
-            const isSettingsCategory = ['settings', 'catalog', 'mpesa', 'partners', 'staff'].includes(activeTab);
-            const isActive = item.id === 'settings' ? isSettingsCategory : activeTab === item.id;
+            const isSettingsCategory = ['settings', 'mpesa', 'partners', 'staff', 'database', 'profile'].includes(activeTab);
+            const isActive = item.id === 'settings' ? isSettingsCategory : (item.id === 'stock' ? (activeTab === 'stock' || activeTab === 'catalog') : activeTab === item.id);
 
             return (
               <button

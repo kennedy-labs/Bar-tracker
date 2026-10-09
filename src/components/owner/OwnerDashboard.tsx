@@ -69,27 +69,26 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
 
   // Settings Sub-tab State
-  const [settingsSubTab, setSettingsSubTab] = useState<'catalog' | 'mpesa' | 'staff' | 'partners' | 'database' | 'profile'>(() => {
-    if (['catalog', 'mpesa', 'staff', 'partners', 'database', 'profile'].includes(activeTab)) {
+  const [settingsSubTab, setSettingsSubTab] = useState<'mpesa' | 'staff' | 'partners' | 'database' | 'profile'>(() => {
+    if (['mpesa', 'staff', 'partners', 'database', 'profile'].includes(activeTab)) {
       return activeTab as any;
     }
-    return 'catalog';
+    return 'mpesa';
   });
 
   useEffect(() => {
-    if (['catalog', 'mpesa', 'staff', 'partners', 'database', 'profile'].includes(activeTab)) {
+    if (activeTab === 'catalog') {
+      setActiveTab('stock');
+    } else if (['mpesa', 'staff', 'partners', 'database', 'profile'].includes(activeTab)) {
       setSettingsSubTab(activeTab as any);
     }
-  }, [activeTab]);
+  }, [activeTab, setActiveTab]);
 
   const currentBiz = store.getCurrentBusiness();
 
   // Filters
   const [discrepancyFilter, setDiscrepancyFilter] = useState<'ALL' | 'FLAGGED' | 'RESOLVED'>('ALL');
   const [eventSeverityFilter, setEventSeverityFilter] = useState<string>('ALL');
-  const [editingProductId, setEditingProductId] = useState<string | null>(null);
-  const [editSellingPrice, setEditSellingPrice] = useState<string>('');
-  const [editCostPrice, setEditCostPrice] = useState<string>('');
 
   const shifts = store.getShifts();
   const products = store.getProducts();
@@ -126,45 +125,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     (d) => d.status === 'FLAGGED' || d.status === 'INVESTIGATING'
   );
 
-  // Price Edit Handlers
-  const handleStartEditProduct = (prod: Product) => {
-    setEditingProductId(prod.id);
-    setEditSellingPrice(String(prod.sellingPrice));
-    setEditCostPrice(String(prod.costPrice));
-  };
-
-  const handleSaveProductPricing = (productId: string) => {
-    const sp = parseFloat(editSellingPrice);
-    const cp = parseFloat(editCostPrice);
-    if (!isNaN(sp) && !isNaN(cp)) {
-      store.updateProductPricing(productId, sp, cp);
-    }
-    setEditingProductId(null);
-  };
-
-  // Direct Stock Input Handlers (Owner can type any number)
-  const [stockInputs, setStockInputs] = useState<Record<string, string>>({});
-  const [savedStockNotice, setSavedStockNotice] = useState<string | null>(null);
-
-  const handleStockChange = (productId: string, val: string) => {
-    setStockInputs((prev) => ({ ...prev, [productId]: val }));
-  };
-
-  const handleStockCommit = (productId: string, currentVal: number) => {
-    const rawVal = stockInputs[productId];
-    if (rawVal === undefined || rawVal.trim() === '') return;
-    const num = parseInt(rawVal, 10);
-    if (isNaN(num) || num < 0) {
-      setStockInputs((prev) => ({ ...prev, [productId]: String(currentVal) }));
-      return;
-    }
-    if (num !== currentVal) {
-      store.adjustProductStock(productId, num);
-      const prod = products.find((p) => p.id === productId);
-      setSavedStockNotice(`Updated ${prod?.name || 'drink'} stock to ${num}`);
-      setTimeout(() => setSavedStockNotice(null), 3500);
-    }
-  };
 
   const filteredDiscrepancies = discrepancies.filter((d) => {
     if (discrepancyFilter === 'ALL') return true;
@@ -303,7 +263,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   </p>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setActiveTab('catalog')}
+                      onClick={() => setActiveTab('stock')}
                       className="py-2 px-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-md"
                     >
                       <FileText className="w-3.5 h-3.5" />
@@ -831,199 +791,25 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
       )}
 
       {/* STOCK AUDIT TAB */}
-      {activeTab === 'stock' && (
+      {(activeTab === 'stock' || activeTab === 'catalog') && (
         <div className="space-y-6">
           <RestockAuditManager currentUser={currentUser} />
 
-          <div className="p-3.5 sm:p-5 md:p-6 rounded-2xl sm:rounded-3xl bg-[#121824] border border-[#1E293B] space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 sm:pb-4 border-b border-slate-800">
-              <div>
-                <h3 className="text-sm sm:text-base font-bold text-white tracking-tight flex items-center gap-2">
-                  <Wine className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 shrink-0" />
-                  <span>Real-Time Bar Inventory Balances</span>
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Current bottles on shelf. Type any number in the On Hand box to adjust stock directly.
-                </p>
-              </div>
-            </div>
-
-            {savedStockNotice && (
-              <div className="p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-700 text-emerald-300 text-xs font-medium flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>{savedStockNotice}</span>
-              </div>
-            )}
-
-            {/* Mobile Inventory Cards (for Phones) */}
-            <div className="md:hidden space-y-2.5">
-              {[...products].sort((a, b) => a.name.localeCompare(b.name)).map((p) => {
-                const inv = inventory.find((i) => i.productId === p.id);
-                const stockOnHand = inv ? inv.quantityOnHand : 0;
-                const reorderThreshold = p.reorderLevel ?? 5;
-                const isLow = stockOnHand <= reorderThreshold;
-
-                return (
-                  <div
-                    key={p.id}
-                    className="p-3.5 rounded-xl bg-[#0E1420] border border-slate-800 space-y-2.5"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="text-sm font-bold text-white">{p.name}</div>
-                        <div className="text-[10px] text-slate-400 font-mono capitalize">
-                          Unit: {p.unit.toLowerCase()}
-                        </div>
-                      </div>
-                      <span
-                        className={`text-[10px] font-sans px-2 py-0.5 rounded font-bold shrink-0 ${
-                          isLow
-                            ? 'bg-amber-950 text-amber-300 border border-amber-800'
-                            : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                        }`}
-                      >
-                        {isLow ? 'Restock Needed' : 'Adequate'}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-1.5 text-xs font-mono">
-                      <div className="p-2 rounded-lg bg-[#151D2C]">
-                        <div className="text-[9px] text-slate-400 uppercase">On Hand</div>
-                        <div className="mt-1 flex items-center">
-                          <input
-                            type="number"
-                            min="0"
-                            value={stockInputs[p.id] !== undefined ? stockInputs[p.id] : stockOnHand}
-                            onChange={(e) => handleStockChange(p.id, e.target.value)}
-                            onBlur={() => handleStockCommit(p.id, stockOnHand)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                (e.target as HTMLInputElement).blur();
-                              }
-                            }}
-                            className={`w-16 px-1.5 py-0.5 bg-[#0E1420] text-center font-mono font-bold text-xs rounded-md border outline-none ${
-                              isLow
-                                ? 'text-amber-400 border-amber-800/80 focus:border-amber-500'
-                                : 'text-emerald-300 border-slate-700 focus:border-emerald-500'
-                            }`}
-                            title="Type new stock number and tap outside to save"
-                          />
-                        </div>
-                      </div>
-                      <div className="p-2 rounded-lg bg-[#151D2C]">
-                        <div className="text-[9px] text-slate-400 uppercase">Sell Price</div>
-                        <div className="text-white font-bold mt-1">
-                          KES {p.sellingPrice}
-                        </div>
-                      </div>
-                      <div className="p-2 rounded-lg bg-[#151D2C]">
-                        <div className="text-[9px] text-slate-400 uppercase">Cost Price</div>
-                        <div className="text-slate-400 font-bold mt-1">
-                          KES {p.costPrice}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Desktop Table (for Tablets & Desktops) */}
-            <div className="hidden md:block overflow-x-auto border border-slate-800 rounded-2xl bg-[#0E1420]">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-[#151D2C] text-slate-400 font-mono text-[10px] uppercase border-b border-slate-800">
-                  <tr>
-                    <th className="p-3">Product Name</th>
-                    <th className="p-3 text-center">Selling Price</th>
-                    <th className="p-3 text-center">Cost Price</th>
-                    <th className="p-3 text-center text-emerald-400">Stock On Hand (Editable)</th>
-                    <th className="p-3 text-center">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800 font-mono">
-                  {[...products].sort((a, b) => a.name.localeCompare(b.name)).map((p) => {
-                    const inv = inventory.find((i) => i.productId === p.id);
-                    const stockOnHand = inv ? inv.quantityOnHand : 0;
-                    const reorderThreshold = p.reorderLevel ?? 5;
-                    const isLow = stockOnHand <= reorderThreshold;
-
-                    return (
-                      <tr key={p.id} className="hover:bg-slate-900/50">
-                        <td className="p-3 font-sans font-medium text-white">{p.name}</td>
-                        <td className="p-3 text-center text-slate-200">KES {p.sellingPrice}</td>
-                        <td className="p-3 text-center text-slate-400">KES {p.costPrice}</td>
-                        <td className="p-3 text-center">
-                          <div className="inline-flex items-center justify-center gap-1.5">
-                            <input
-                              type="number"
-                              min="0"
-                              value={stockInputs[p.id] !== undefined ? stockInputs[p.id] : stockOnHand}
-                              onChange={(e) => handleStockChange(p.id, e.target.value)}
-                              onBlur={() => handleStockCommit(p.id, stockOnHand)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  (e.target as HTMLInputElement).blur();
-                                }
-                              }}
-                              className={`w-20 px-2.5 py-1 bg-[#151D2C] hover:bg-[#1A2436] focus:bg-[#0E1420] text-center font-mono font-bold text-sm border rounded-lg outline-none transition-colors ${
-                                isLow
-                                  ? 'text-amber-400 border-amber-800/80 focus:border-amber-500'
-                                  : 'text-emerald-300 border-slate-700 focus:border-emerald-500'
-                              }`}
-                              title="Type a number and press Enter or click outside to save"
-                            />
-                            <span className="text-[11px] text-slate-500 font-mono">
-                              {p.unit.toLowerCase()}s
-                            </span>
-                          </div>
-                        </td>
-                        <td className="p-3 text-center">
-                          <span
-                            className={`text-[10px] font-sans px-2 py-0.5 rounded font-bold ${
-                              isLow
-                                ? 'bg-amber-950 text-amber-300 border border-amber-800'
-                                : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                            }`}
-                          >
-                            {isLow ? 'Restock Needed' : 'Adequate'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-      </div>
+          {/* Unified Drinks Catalog & Stock Audit Item List */}
+          <CatalogManager />
+        </div>
       )}
 
       {/* 6. UNIFIED BAR SETUP & SETTINGS TAB */}
       {(activeTab === 'settings' ||
-        ['catalog', 'mpesa', 'partners', 'staff', 'database', 'profile'].includes(activeTab)) && (
+        ['mpesa', 'partners', 'staff', 'database', 'profile'].includes(activeTab)) && (
         <div className="space-y-4 sm:space-y-5">
           {/* Sub-navigation Segment Switcher */}
           <div className="p-2 sm:p-3 rounded-2xl sm:rounded-3xl bg-[#121824] border border-[#1E293B] shadow-lg">
             <div className="text-[11px] font-mono text-slate-400 uppercase tracking-wider px-2 pt-1 pb-2">
               Bar Settings & Configuration
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setSettingsSubTab('catalog');
-                  setActiveTab('catalog');
-                }}
-                className={`py-3 px-3 rounded-xl sm:rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                  settingsSubTab === 'catalog'
-                    ? 'bg-emerald-500 text-slate-950 shadow-md font-black'
-                    : 'bg-[#0E1420] text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
-                }`}
-              >
-                <Wine className="w-4 h-4 shrink-0" />
-                <span className="truncate">Drinks & Prices</span>
-              </button>
-
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5">
               <button
                 type="button"
                 onClick={() => {
@@ -1108,7 +894,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
           {/* Sub-component Container */}
           <div className="animate-in fade-in duration-200">
-            {settingsSubTab === 'catalog' && <CatalogManager />}
             {settingsSubTab === 'mpesa' && <MpesaConfigManager />}
             {settingsSubTab === 'staff' && <StaffManager currentUser={currentUser} />}
             {settingsSubTab === 'partners' && <PartnerBarsManager />}
