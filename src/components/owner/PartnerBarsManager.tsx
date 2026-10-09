@@ -150,8 +150,8 @@ export const PartnerBarsManager: React.FC = () => {
               type="text"
               value={connectInput}
               onChange={(e) => setConnectInput(e.target.value)}
-              placeholder="Enter neighbor's 6-digit one-time shift code (e.g. 512784) or phone number"
-              className="flex-1 bg-[#0E1420] border border-slate-700 focus:border-emerald-500 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none"
+              
+              className="flex-1 bg-[#0E1420] border border-slate-700 focus:border-emerald-500 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none"
             />
             <button
               type="submit"
