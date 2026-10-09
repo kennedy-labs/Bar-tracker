@@ -16,6 +16,10 @@ import {
   Clock,
   Layers,
   ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  AlertCircle,
+  Info,
 } from 'lucide-react';
 
 interface UnifiedStockLedgerProps {
@@ -38,6 +42,9 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
   // New shift opening inputs if no active shift
   const [openingCashInput, setOpeningCashInput] = useState<string>('0');
   const [openingMpesaInput, setOpeningMpesaInput] = useState<string>('0');
+
+  // Selected / expanded row for viewing hidden details (Total, Sold, Sales, Profit, Cost)
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
 
   // Closing cash & M-pesa inputs for handover modal
   const [closingCashInput, setClosingCashInput] = useState<string>('');
@@ -567,143 +574,281 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
 
           {/* 4. THE CORE STOCK LEDGER TABLE (THE "ONE LIST") */}
           <div className="bg-[#111622] border border-[#1E2638] rounded-2xl overflow-hidden shadow-sm">
+            {/* Mobile Helpful Hint */}
+            <div className="px-3.5 py-2 bg-[#0D1117] border-b border-[#1E2638] flex items-center justify-between text-[11px] text-slate-400">
+              <div className="flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span>Tap any beverage row to inspect live sales, revenue & profit breakdown.</span>
+              </div>
+              <span className="hidden sm:inline-block text-[10px] font-mono text-slate-400 bg-[#161F30] px-2 py-0.5 rounded-md">
+                Editable: Opening · Add · Closing
+              </span>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-[#0D1117] text-slate-400 font-mono text-[11px] border-b border-[#1E2638]">
-                    <th className="py-2.5 px-3.5 font-semibold text-slate-300">Beverage</th>
-                    <th className="py-2.5 px-2 text-center font-semibold text-slate-300 w-20">Opening</th>
-                    <th className="py-2.5 px-2 text-center font-semibold text-slate-300 w-20">Added</th>
-                    <th className="py-2.5 px-2 text-center font-semibold text-slate-300 w-16">Total</th>
-                    <th className="py-2.5 px-2 text-center font-semibold text-slate-300 w-20">Closing</th>
-                    <th className="py-2.5 px-2 text-center font-semibold text-slate-300 w-16">Sold</th>
-                    <th className="py-2.5 px-3 text-right font-semibold text-slate-300 w-28">Sales (KES)</th>
-                    <th className="py-2.5 px-3 text-right font-semibold text-slate-300 w-28">Profit (KES)</th>
+                    <th className="py-2.5 px-3 sm:px-3.5 font-semibold text-slate-300">Beverage</th>
+                    <th className="py-2.5 px-1.5 sm:px-2 text-center font-semibold text-slate-300 w-20 sm:w-24">
+                      <div className="leading-tight">Opening</div>
+                      <div className="text-[9px] text-slate-400 font-normal hidden sm:block">Edit to reconcile</div>
+                    </th>
+                    <th className="py-2.5 px-1.5 sm:px-2 text-center font-semibold text-slate-300 w-16 sm:w-20">
+                      <div className="leading-tight">Add</div>
+                      <div className="text-[9px] text-slate-400 font-normal hidden sm:block">Stock in</div>
+                    </th>
+                    <th className="py-2.5 px-1.5 sm:px-2 text-center font-semibold text-slate-300 w-20 sm:w-24">
+                      <div className="leading-tight">Closing</div>
+                      <div className="text-[9px] text-slate-400 font-normal hidden sm:block">Final count</div>
+                    </th>
+                    <th className="py-2.5 px-2 text-center font-semibold text-slate-300 w-12 sm:w-14">
+                      <span className="sr-only sm:not-sr-only text-[10px]">Details</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 font-mono">
                   {filteredRows.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-10 text-center text-slate-500 font-sans text-xs">
+                      <td colSpan={5} className="py-10 text-center text-slate-500 font-sans text-xs">
                         No beverages found matching your filter.
                       </td>
                     </tr>
                   ) : (
                     filteredRows.map((row) => {
                       const p = row.product;
+                      const isExpanded = expandedItemId === p.id;
+                      const hasDiscrepancy = row.hasOverage;
+
                       return (
-                        <tr key={p.id} className="hover:bg-slate-900/40 transition-colors">
-                          {/* 1. Beverage Name & Unit Price */}
-                          <td className="py-2.5 px-3.5 font-sans">
-                            <div className="font-medium text-slate-100">{p.name}</div>
-                            <div className="text-[11px] text-slate-400 font-mono">
-                              KES {row.sellingPrice.toLocaleString()} · {p.category}
-                            </div>
-                          </td>
+                        <React.Fragment key={p.id}>
+                          {/* Compact 3-Input Row */}
+                          <tr
+                            onClick={() => setExpandedItemId(isExpanded ? null : p.id)}
+                            className={`transition-colors cursor-pointer select-none ${isExpanded ? "bg-[#161F30]/70" : "hover:bg-slate-900/40"}`}
+                          >
+                            {/* 1. Beverage Name & Meta */}
+                            <td className="py-2.5 px-3 sm:px-3.5 font-sans">
+                              <div className="flex items-center gap-2">
+                                <div className="min-w-0">
+                                  <div className="font-medium text-slate-100 truncate text-xs sm:text-sm">
+                                    {p.name}
+                                  </div>
+                                  <div className="text-[10px] sm:text-[11px] text-slate-400 font-mono flex items-center gap-1.5 flex-wrap">
+                                    <span>KES {row.sellingPrice.toLocaleString()}</span>
+                                    <span>·</span>
+                                    <span className="text-slate-400 truncate">{p.category}</span>
+                                    {row.salesUnits > 0 && !isExpanded && (
+                                      <span className="text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-800/60 px-1 rounded text-[9px]">
+                                        {row.salesUnits} sold
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
 
-                          {/* 2. Opening Stock */}
-                          <td className="py-2 px-2 text-center">
-                            <input
-                              type="number"
-                              min="0"
-                              value={row.openingStock !== undefined ? row.openingStock : ''}
-                              onFocus={(e) => e.target.select()}
-                              onChange={(e) => handleCellChange(p.id, 'opening', e.target.value)}
-                              placeholder="0"
-                              className="w-16 text-center py-1 px-1.5 rounded-lg bg-[#0D1117] border border-slate-800 text-slate-200 focus:outline-none focus:border-slate-600"
-                            />
-                          </td>
+                            {/* 2. Opening Stock Input */}
+                            <td
+                              className="py-2 px-1.5 sm:px-2 text-center"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <input
+                                type="number"
+                                min="0"
+                                value={row.openingStock !== undefined ? row.openingStock : ''}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => handleCellChange(p.id, 'opening', e.target.value)}
+                                placeholder="0"
+                                title="Opening stock count (edit to trigger reconciliation)"
+                                className="w-14 sm:w-16 text-center py-1.5 px-1 rounded-lg bg-[#0D1117] border border-slate-800 text-slate-200 text-xs sm:text-sm font-semibold focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
+                              />
+                            </td>
 
-                          {/* 3. Added Stock */}
-                          <td className="py-2 px-2 text-center">
-                            <input
-                              type="number"
-                              min="0"
-                              value={row.addedStock !== 0 ? row.addedStock : ''}
-                              onFocus={(e) => e.target.select()}
-                              onChange={(e) => handleCellChange(p.id, 'added', e.target.value)}
-                              placeholder="0"
-                              className={`w-16 text-center py-1 px-1.5 rounded-lg bg-[#0D1117] border focus:outline-none ${
-                                row.addedStock > 0
-                                  ? 'border-emerald-600/60 text-emerald-300 font-semibold focus:border-emerald-500'
-                                  : 'border-slate-800 text-slate-300 focus:border-slate-600'
-                              }`}
-                            />
-                          </td>
+                            {/* 3. Add Stock Input */}
+                            <td
+                              className="py-2 px-1.5 sm:px-2 text-center"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <input
+                                type="number"
+                                min="0"
+                                value={row.addedStock !== 0 ? row.addedStock : ''}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => handleCellChange(p.id, 'added', e.target.value)}
+                                placeholder="0"
+                                title="Added restock quantity"
+                                className={`w-12 sm:w-16 text-center py-1.5 px-1 rounded-lg bg-[#0D1117] border text-xs sm:text-sm font-semibold focus:outline-none ${row.addedStock > 0 ? "border-emerald-600/70 text-emerald-300 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" : "border-slate-800 text-slate-300 focus:border-slate-600"}`}
+                              />
+                            </td>
 
-                          {/* 4. Total Stock */}
-                          <td className="py-2 px-2 text-center font-bold text-slate-200">
-                            {row.totalStock}
-                          </td>
+                            {/* 4. Closing Stock Input */}
+                            <td
+                              className="py-2 px-1.5 sm:px-2 text-center"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <input
+                                type="number"
+                                min="0"
+                                value={row.closingStock !== undefined ? row.closingStock : ''}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => handleCellChange(p.id, 'closing', e.target.value)}
+                                placeholder="-"
+                                title="Closing stock count at shift handover"
+                                className={`w-14 sm:w-16 text-center py-1.5 px-1 rounded-lg bg-[#0D1117] border text-xs sm:text-sm font-semibold focus:outline-none ${row.hasClosingEntered ? "border-slate-500 text-white font-bold" : "border-slate-800 text-slate-400 focus:border-slate-600"}`}
+                              />
+                            </td>
 
-                          {/* 5. Closing Stock */}
-                          <td className="py-2 px-2 text-center">
-                            <input
-                              type="number"
-                              min="0"
-                              value={row.closingStock !== undefined ? row.closingStock : ''}
-                              onFocus={(e) => e.target.select()}
-                              onChange={(e) => handleCellChange(p.id, 'closing', e.target.value)}
-                              placeholder="-"
-                              className={`w-16 text-center py-1 px-1.5 rounded-lg bg-[#0D1117] border focus:outline-none ${
-                                row.hasClosingEntered
-                                  ? 'border-slate-600 text-white font-semibold'
-                                  : 'border-slate-800 text-slate-400 focus:border-slate-600'
-                              }`}
-                            />
-                          </td>
+                            {/* 5. Details Disclosure Trigger */}
+                            <td className="py-2 px-1.5 sm:px-2 text-center text-slate-400">
+                              <div className="flex items-center justify-center p-1 rounded-md hover:bg-slate-800 transition-colors">
+                                {isExpanded ? (
+                                  <ChevronUp className="w-4 h-4 text-emerald-400" />
+                                ) : (
+                                  <ChevronDown className="w-4 h-4 text-slate-400" />
+                                )}
+                              </div>
+                            </td>
+                          </tr>
 
-                          {/* 6. Sold */}
-                          <td className="py-2 px-2 text-center font-semibold">
-                            {row.hasOverage ? (
-                              <span className="text-amber-400 text-[10px]">Overage</span>
-                            ) : (
-                              <span className={row.salesUnits > 0 ? 'text-white' : 'text-slate-500'}>
-                                {row.salesUnits}
-                              </span>
-                            )}
-                          </td>
+                          {/* Expanded Full-Column Breakdown Drawer */}
+                          {isExpanded && (
+                            <tr className="bg-[#0B0F17] border-b border-[#1E2638]">
+                              <td colSpan={5} className="p-3 sm:p-4">
+                                <div className="bg-[#111622] rounded-xl border border-[#1E2638] p-3 sm:p-4 space-y-3 font-sans shadow-inner">
+                                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                                    <div>
+                                      <span className="text-xs font-bold text-white uppercase tracking-wider">
+                                        Full Stock & Financial Details
+                                      </span>
+                                      <p className="text-[11px] text-slate-400">
+                                        Complete breakdown for {p.name}
+                                      </p>
+                                    </div>
+                                    <span className="text-[11px] font-mono text-slate-400 bg-[#0D1117] px-2 py-0.5 rounded border border-slate-800">
+                                      Cost: KES {row.costPrice.toLocaleString()} · Price: KES {row.sellingPrice.toLocaleString()}
+                                    </span>
+                                  </div>
 
-                          {/* 7. Sales Amount (KES) */}
-                          <td className="py-2 px-3 text-right font-medium text-slate-200">
-                            {row.amountKes > 0 ? `KES ${row.amountKes.toLocaleString()}` : '-'}
-                          </td>
+                                  {/* Grid of all remaining columns: Total | Sold | Sales | Profit */}
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono text-xs">
+                                    {/* Column: Total Available */}
+                                    <div className="bg-[#0D1117] p-2.5 rounded-lg border border-slate-800/80">
+                                      <div className="text-[10px] text-slate-400 uppercase font-sans mb-1 flex items-center justify-between">
+                                        <span>Total Stock</span>
+                                        <span className="text-[9px] text-slate-400">(Open + Add)</span>
+                                      </div>
+                                      <div className="text-sm sm:text-base font-bold text-white">
+                                        {row.totalStock} <span className="text-[10px] text-slate-400 font-normal">units</span>
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 mt-0.5">
+                                        {row.openingStock || 0} + {row.addedStock || 0}
+                                      </div>
+                                    </div>
 
-                          {/* 8. Profit (KES) */}
-                          <td className="py-2 px-3 text-right font-medium text-slate-400">
-                            {row.profitKes > 0 ? `KES ${row.profitKes.toLocaleString()}` : '-'}
-                          </td>
-                        </tr>
+                                    {/* Column: Sold Units */}
+                                    <div className="bg-[#0D1117] p-2.5 rounded-lg border border-slate-800/80">
+                                      <div className="text-[10px] text-slate-400 uppercase font-sans mb-1 flex items-center justify-between">
+                                        <span>Sold / Dispatched</span>
+                                        <span className="text-[9px] text-slate-400">(Total - Close)</span>
+                                      </div>
+                                      <div className="text-sm sm:text-base font-bold">
+                                        {row.hasOverage ? (
+                                          <span className="text-amber-400 text-xs font-semibold flex items-center gap-1">
+                                            <AlertCircle className="w-3 h-3" /> Overage Count
+                                          </span>
+                                        ) : row.hasClosingEntered ? (
+                                          <span className={row.salesUnits > 0 ? 'text-white' : 'text-slate-400'}>
+                                            {row.salesUnits} <span className="text-[10px] text-slate-400 font-normal">units</span>
+                                          </span>
+                                        ) : (
+                                          <span className="text-slate-400 text-xs">Enter closing</span>
+                                        )}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 mt-0.5">
+                                        {(row.closingStock !== undefined ? "Closing: " + row.closingStock : "Closing pending")}
+                                      </div>
+                                    </div>
+
+                                    {/* Column: Sales Revenue (KES) */}
+                                    <div className="bg-[#0D1117] p-2.5 rounded-lg border border-slate-800/80">
+                                      <div className="text-[10px] text-slate-400 uppercase font-sans mb-1">
+                                        Sales Amount
+                                      </div>
+                                      <div className="text-sm sm:text-base font-bold text-emerald-400">
+                                        {(row.amountKes > 0 ? "KES " + row.amountKes.toLocaleString() : "KES 0")}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 mt-0.5">
+                                        {row.salesUnits} × KES {row.sellingPrice.toLocaleString()}
+                                      </div>
+                                    </div>
+
+                                    {/* Column: Profit (KES) */}
+                                    <div className="bg-[#0D1117] p-2.5 rounded-lg border border-slate-800/80">
+                                      <div className="text-[10px] text-slate-400 uppercase font-sans mb-1">
+                                        Gross Profit
+                                      </div>
+                                      <div className="text-sm sm:text-base font-bold text-slate-200">
+                                        {(row.profitKes > 0 ? "KES " + row.profitKes.toLocaleString() : "KES 0")}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 mt-0.5">
+                                        Margin: KES {Math.max(0, row.sellingPrice - row.costPrice).toLocaleString()}/unit
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Explanation / Status footer */}
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-slate-400 pt-1 gap-1">
+                                    <div>
+                                      {row.hasClosingEntered ? (
+                                        <span className="text-emerald-400/90 flex items-center gap-1">
+                                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                          Closing stock accounted for ({row.closingStock} remaining).
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-400">
+                                          Tip: Type the closing count into the Closing input above to tally sales and cash due.
+                                        </span>
+                                      )}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => setExpandedItemId(null)}
+                                      className="text-slate-400 hover:text-slate-200 text-[11px] self-end sm:self-auto cursor-pointer underline"
+                                    >
+                                      Collapse details
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       );
                     })
                   )}
                 </tbody>
+
                 {/* Grand Totals Footer */}
                 <tfoot className="bg-[#0D1117] font-mono text-xs font-bold border-t border-[#1E2638]">
                   <tr>
-                    <td className="py-3 px-3.5 text-white">
+                    <td className="py-3 px-3 sm:px-3.5 text-white">
                       TOTAL ({rowDataList.length} items)
                     </td>
-                    <td className="py-3 px-2 text-center text-slate-300">
+                    <td className="py-3 px-1.5 sm:px-2 text-center text-slate-300">
                       {summaryTotals.totalOpening}
                     </td>
-                    <td className="py-3 px-2 text-center text-emerald-400">
+                    <td className="py-3 px-1.5 sm:px-2 text-center text-emerald-400">
                       +{summaryTotals.totalAdded}
                     </td>
-                    <td className="py-3 px-2 text-center text-slate-200">
-                      {summaryTotals.totalOpening + summaryTotals.totalAdded}
-                    </td>
-                    <td className="py-3 px-2 text-center text-slate-300">
+                    <td className="py-3 px-1.5 sm:px-2 text-center text-slate-300">
                       {summaryTotals.totalClosing > 0 ? summaryTotals.totalClosing : '-'}
                     </td>
-                    <td className="py-3 px-2 text-center text-white">
-                      {summaryTotals.totalSold}
-                    </td>
-                    <td className="py-3 px-3 text-right text-emerald-400">
-                      KES {summaryTotals.totalAmount.toLocaleString()}
-                    </td>
-                    <td className="py-3 px-3 text-right text-slate-300">
-                      KES {summaryTotals.totalProfit.toLocaleString()}
+                    <td className="py-3 px-2 text-center text-slate-400">
+                      {/* Summary expand badge */}
+                      <span className="text-[10px] text-emerald-400 font-bold block sm:hidden">
+                        KES {summaryTotals.totalAmount.toLocaleString()}
+                      </span>
                     </td>
                   </tr>
                 </tfoot>
