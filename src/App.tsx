@@ -220,7 +220,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0B0F17] text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-ink text-content flex flex-col font-sans">
       {/* Universal Top Bar adhering to Top Bar Contract */}
       <TopBar
         currentUser={currentUser}

@@ -74,7 +74,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   const navItems = isOwner ? ownerNavItems : workerNavItems;
 
   return (
-    <header className="sticky top-0 z-40 bg-[#0B0F17]/95 backdrop-blur-md border-b border-[#1E2638] px-4 md:px-6 py-2.5">
+    <header className="sticky top-0 z-40 bg-ink/95 backdrop-blur-md border-b border-line px-4 md:px-6 py-2.5">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
         {/* Zone 1: Brand Wordmark */}
         <div className="flex items-center shrink-0">
@@ -93,11 +93,11 @@ export const TopBar: React.FC<TopBarProps> = ({
                 onClick={() => setActiveTab(item.id)}
                 className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
                   isActive
-                    ? 'bg-[#161F30] text-white font-semibold'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#121824]'
+                    ? 'bg-brand-tint text-content font-semibold'
+                    : 'text-muted hover:text-content hover:bg-surface'
                 }`}
               >
-                <item.icon className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-slate-500'}`} />
+                <item.icon className={`w-3.5 h-3.5 ${isActive ? 'text-brand-strong' : 'text-faint'}`} />
                 <span>{item.label}</span>
               </button>
             );
@@ -112,14 +112,14 @@ export const TopBar: React.FC<TopBarProps> = ({
               type="button"
               onClick={() => setIsProfileModalOpen(true)}
               title="Click to edit name, username, and password/PIN credentials"
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs bg-[#121824] hover:bg-[#161F30] border border-[#1E2638] hover:border-slate-700 text-slate-300 transition-colors cursor-pointer group"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs bg-surface hover:bg-surface-2 border border-line hover:border-line-strong text-muted transition-colors cursor-pointer group"
             >
-              <UserIcon className="w-3.5 h-3.5 text-emerald-400 group-hover:text-emerald-300 shrink-0" />
-              <span className="font-medium text-slate-200 max-w-[110px] sm:max-w-[150px] truncate">
+              <UserIcon className="w-3.5 h-3.5 text-brand-strong group-hover:text-brand shrink-0" />
+              <span className="font-medium text-content max-w-[110px] sm:max-w-[150px] truncate">
                 {currentUser?.name || 'Staff'}
               </span>
-              <span className="text-slate-600 hidden sm:inline">·</span>
-              <span className="text-[10px] text-slate-400 hidden sm:inline uppercase font-mono">
+              <span className="text-faint hidden sm:inline">·</span>
+              <span className="text-[10px] text-muted hidden sm:inline uppercase font-mono">
                 {isOwner ? 'Owner' : 'Attendant'}
               </span>
             </button>
@@ -135,14 +135,14 @@ export const TopBar: React.FC<TopBarProps> = ({
                   ? 'Cloud Synced with Neon PostgreSQL'
                   : 'Click to trigger cloud synchronization'
               }
-              className="text-[11px] font-mono text-slate-400 hover:text-slate-200 flex items-center gap-1 cursor-pointer transition-colors"
+              className="text-[11px] font-mono text-muted hover:text-content flex items-center gap-1 cursor-pointer transition-colors"
             >
               {isManualSyncing ? (
-                <RefreshCw className="w-3 h-3 text-cyan-400 animate-spin" />
+                <RefreshCw className="w-3 h-3 text-info animate-spin" />
               ) : neonState.status === 'CONNECTED' ? (
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span className="w-1.5 h-1.5 rounded-full bg-success" />
               ) : (
-                <CloudOff className="w-3 h-3 text-amber-400" />
+                <CloudOff className="w-3 h-3 text-warn" />
               )}
               <span className="hidden md:inline">
                 {isManualSyncing ? 'Syncing...' : 'Synced'}
@@ -154,7 +154,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           <button
             onClick={onLogout}
             title="Sign out of system"
-            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-[#151D2C] rounded-lg transition-colors cursor-pointer"
+            className="p-1.5 text-muted hover:text-danger hover:bg-surface-2 rounded-lg transition-colors cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
           </button>
