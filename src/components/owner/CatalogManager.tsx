@@ -50,8 +50,8 @@ export const CatalogManager: React.FC = () => {
   const handleStockCommit = (productId: string, currentVal: number) => {
     const rawVal = stockInputs[productId];
     if (rawVal === undefined || rawVal.trim() === '') return;
-    const num = parseInt(rawVal, 10);
-    if (isNaN(num) || num < 0) {
+    const parsed = parseFloat(rawVal);
+    if (isNaN(parsed) || parsed < 0) {
       setStockInputs((prev) => {
         const copy = { ...prev };
         delete copy[productId];
@@ -59,6 +59,7 @@ export const CatalogManager: React.FC = () => {
       });
       return;
     }
+    const num = Math.round(parsed * 100) / 100;
     if (num !== currentVal) {
       store.adjustProductStock(productId, num);
       const prod = allProducts.find((p) => p.id === productId);
@@ -73,7 +74,7 @@ export const CatalogManager: React.FC = () => {
   };
 
   const handleStockStep = (productId: string, currentVal: number, delta: number) => {
-    const nextVal = Math.max(0, currentVal + delta);
+    const nextVal = Math.max(0, Math.round((currentVal + delta) * 100) / 100);
     if (nextVal !== currentVal) {
       store.adjustProductStock(productId, nextVal);
       const prod = allProducts.find((p) => p.id === productId);
@@ -237,8 +238,8 @@ export const CatalogManager: React.FC = () => {
    setFormError(null);
 
    const sell = parseFloat(sellingPrice);
-   const reorder = parseInt(reorderLevel, 10) || 5;
-   const stock = parseInt(initialStock, 10) || 0;
+   const reorder = parseFloat(reorderLevel) || 5;
+   const stock = parseFloat(initialStock) || 0;
    const vol = volumeMl ? parseInt(volumeMl, 10) : undefined;
 
    if (!name.trim()) {
@@ -710,6 +711,7 @@ export const CatalogManager: React.FC = () => {
 
                             <input
                               type="number"
+                              step="any"
                               min="0"
                               disabled={p.isArchived}
                               value={stockInputs[p.id] !== undefined ? stockInputs[p.id] : stockOnHand}
@@ -727,7 +729,7 @@ export const CatalogManager: React.FC = () => {
                                   ? 'text-amber-400 border-amber-800/80 focus:border-amber-500'
                                   : 'text-emerald-300 border-slate-700 focus:border-emerald-500'
                               }`}
-                              title="Type count and press Enter or click outside to save"
+                              title="Type count (e.g. 9.5 for half bottle) and press Enter or click outside to save"
                             />
 
                             <button
@@ -967,6 +969,7 @@ export const CatalogManager: React.FC = () => {
 
                         <input
                           type="number"
+                          step="any"
                           min="0"
                           disabled={p.isArchived}
                           value={stockInputs[p.id] !== undefined ? stockInputs[p.id] : stockOnHand}
@@ -984,7 +987,7 @@ export const CatalogManager: React.FC = () => {
                               ? 'text-amber-400 border-amber-800 focus:border-amber-500'
                               : 'text-emerald-300 border-slate-700 focus:border-emerald-500'
                           }`}
-                          title="Type stock number and tap outside or press Enter to save"
+                          title="Type stock number (e.g. 9.5 for half bottle) and tap outside or press Enter to save"
                         />
 
                         <button
@@ -1182,6 +1185,7 @@ export const CatalogManager: React.FC = () => {
  </label>
  <input
  type="number"
+ step="any"
  min="0"
  value={initialStock}
  onChange={(e) => setInitialStock(e.target.value)}
@@ -1196,7 +1200,8 @@ export const CatalogManager: React.FC = () => {
  </label>
  <input
  type="number"
- min="1"
+ step="any"
+ min="0.5"
  value={reorderLevel}
  onChange={(e) => setReorderLevel(e.target.value)}
  className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"

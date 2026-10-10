@@ -27,7 +27,8 @@ export const StockAdditionModal: React.FC<StockAdditionModalProps> = ({
 
  const handleSubmit = (e: React.FormEvent) => {
  e.preventDefault();
- const qty = parseInt(quantity) || 0;
+ const parsed = parseFloat(quantity);
+ const qty = isNaN(parsed) ? 0 : Math.round(parsed * 100) / 100;
  if (qty <= 0 || !selectedProductId) return;
  onConfirmAddition({
  productId: selectedProductId,
@@ -77,13 +78,22 @@ export const StockAdditionModal: React.FC<StockAdditionModalProps> = ({
  </label>
  <input
  type="number"
- min="1"
+ step="any"
+ min="0.1"
  required
+ placeholder="e.g. 9.5 for half bottle"
  value={quantity}
  onChange={(e) => setQuantity(e.target.value)}
  className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2.5 text-lg font-mono font-bold text-white focus:outline-none focus:border-emerald-500 tabular-nums"
  />
- <div className="flex gap-2 mt-2">
+ <div className="flex flex-wrap gap-2 mt-2">
+ <button
+ type="button"
+ onClick={() => setQuantity('0.5')}
+ className="px-2.5 py-1 rounded-lg border border-emerald-800/80 bg-emerald-950/40 text-xs font-mono text-emerald-300 hover:border-emerald-700 cursor-pointer"
+ >
+ +0.5 (½ btl)
+ </button>
  {[12, 24, 48].map((q) => (
  <button
  key={q}

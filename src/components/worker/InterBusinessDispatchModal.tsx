@@ -207,10 +207,11 @@ export const InterBusinessDispatchModal: React.FC<InterBusinessDispatchModalProp
 
  <input
  type="number"
- min="1"
+ step="any"
+ min="0.5"
  max={availableStock}
  value={quantity}
- onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+ onChange={(e) => setQuantity(Math.max(0.5, parseFloat(e.target.value) || 0.5))}
  className="flex-1 bg-[#151D2C] border border-slate-700 rounded-xl py-2 text-center text-lg font-mono font-bold text-white focus:outline-none focus:border-amber-500"
  />
 

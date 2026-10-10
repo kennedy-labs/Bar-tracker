@@ -1805,7 +1805,7 @@ class StoreService {
 
     const available = Number(ssi.openingPhysicalCount || 0) + Number(ssi.additions || 0) + Number(ssi.transfersIn || 0) - Number(ssi.transfersOut || 0) - Number(ssi.damages || 0);
     if (ssi.closingPhysicalCount !== undefined) {
-      ssi.recordedSales = Math.max(0, available - ssi.closingPhysicalCount);
+      ssi.recordedSales = Math.round(Math.max(0, available - ssi.closingPhysicalCount) * 100) / 100;
     }
 
     this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
@@ -1886,7 +1886,7 @@ class StoreService {
 
       const available = Number(ssi.openingPhysicalCount || 0) + Number(ssi.additions || 0) + Number(ssi.transfersIn || 0) - Number(ssi.transfersOut || 0) - Number(ssi.damages || 0);
       if (ssi.closingPhysicalCount !== undefined) {
-        ssi.recordedSales = Math.max(0, available - ssi.closingPhysicalCount);
+        ssi.recordedSales = Math.round(Math.max(0, available - ssi.closingPhysicalCount) * 100) / 100;
       }
 
       if (inv) {
@@ -2424,8 +2424,8 @@ class StoreService {
           ? params.closingPhysicalCounts[item.productId]
           : availableStock;
 
-      const calculatedSold = Math.max(0, availableStock - physicalClosing);
-      const overageCount = physicalClosing > availableStock ? physicalClosing - availableStock : 0;
+      const calculatedSold = Math.round(Math.max(0, availableStock - physicalClosing) * 100) / 100;
+      const overageCount = physicalClosing > availableStock ? Math.round((physicalClosing - availableStock) * 100) / 100 : 0;
       const discrepancyValue = isValue ? overageCount : overageCount * item.sellingPrice;
 
       if (isValue) {
@@ -2849,7 +2849,7 @@ class StoreService {
       const rawSell = parts[1] ? parseFloat(parts[1].replace(/[^0-9.]/g, '')) : 0;
       const rawCost = parts[2] ? parseFloat(parts[2].replace(/[^0-9.]/g, '')) : undefined;
       const rawCat = parts[3]?.toUpperCase();
-      const rawStock = parts[4] ? parseInt(parts[4].replace(/[^0-9]/g, ''), 10) : undefined;
+      const rawStock = parts[4] ? parseFloat(parts[4].replace(/[^0-9.]/g, '')) : undefined;
 
       // Smart category detection from drink keywords
       let guessedCat: import('../types').ProductCategory = 'BEER';

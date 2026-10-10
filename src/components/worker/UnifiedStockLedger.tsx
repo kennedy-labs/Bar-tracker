@@ -142,7 +142,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
          hasOverage = true;
          salesUnits = 0;
        } else {
-         salesUnits = Math.max(0, totalStock - closingStock);
+         salesUnits = Math.round(Math.max(0, totalStock - closingStock) * 100) / 100;
        }
      }
 

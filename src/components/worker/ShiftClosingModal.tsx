@@ -62,7 +62,7 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
  const current = prev[productId] !== undefined ? prev[productId] : 0;
  return {
  ...prev,
- [productId]: Math.max(0, current + delta),
+ [productId]: Math.max(0, Math.round((current + delta) * 100) / 100),
  };
  });
  };
@@ -225,15 +225,24 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
 
  {/* Stepper Buttons / Direct Input */}
  <div className="flex items-center gap-1.5 shrink-0">
+ {!isValue && (
+ <button
+ type="button"
+ onClick={() => adjustCount(item.productId, -0.5)}
+ className="px-1.5 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-slate-300 flex items-center justify-center font-mono text-xs cursor-pointer"
+ title="Decrease by half bottle (-0.5)"
+ >
+ -½
+ </button>
+ )}
  <button
  type="button"
  onClick={() => adjustCount(item.productId, -stepDelta)}
  className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
- title={isValue ? '-100 KES' : '-1'}
+ title={isValue ? '-100 KES' : '-1 bottle'}
  >
  <Minus className="w-3.5 h-3.5" />
  </button>
- {isValue ? (
  <input
  type="number"
  step="any"
@@ -241,23 +250,34 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
  value={count}
  onChange={(e) => {
  const val = Math.max(0, parseFloat(e.target.value) || 0);
- setClosingPhysicalCounts((prev) => ({ ...prev, [item.productId]: val }));
+ setClosingPhysicalCounts((prev) => ({ ...prev, [item.productId]: Math.round(val * 100) / 100 }));
  }}
- className="w-16 h-9 text-center font-mono font-bold text-xs bg-slate-900 border border-cyan-800/80 rounded-xl text-cyan-300 focus:outline-none"
+ className={`w-16 h-9 text-center font-mono font-bold text-sm rounded-xl focus:outline-none ${
+ isValue
+ ? 'bg-slate-900 border border-cyan-800/80 text-cyan-300'
+ : 'bg-slate-900 border border-slate-700 text-white focus:border-emerald-500'
+ }`}
+ placeholder="0"
+ title="Type count (e.g. 9.5 for half bottle)"
  />
- ) : (
- <span className="w-9 text-center font-mono font-bold text-base text-white">
- {count}
- </span>
- )}
  <button
  type="button"
  onClick={() => adjustCount(item.productId, stepDelta)}
  className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
- title={isValue ? '+100 KES' : '+1'}
+ title={isValue ? '+100 KES' : '+1 bottle'}
  >
  <Plus className="w-3.5 h-3.5" />
  </button>
+ {!isValue && (
+ <button
+ type="button"
+ onClick={() => adjustCount(item.productId, 0.5)}
+ className="px-1.5 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-emerald-400 flex items-center justify-center font-mono text-xs cursor-pointer"
+ title="Increase by half bottle (+0.5)"
+ >
+ +½
+ </button>
+ )}
  </div>
  </div>
  );
