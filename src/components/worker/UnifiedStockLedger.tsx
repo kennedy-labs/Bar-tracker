@@ -73,27 +73,13 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  ? store.getShiftStockItems(activeShift.id)
  : [];
  const expenses: Expense[] = activeShift ? store.getExpenses(activeShift.id) : [];
+  // Transient string values while attendant is actively typing in cells
+  const [cellInputStrings, setCellInputStrings] = useState<
+    Record<string, { opening?: string; added?: string; closing?: string }>
+  >({});
 
- // Local drafts for instant responsiveness
- const [localDrafts, setLocalDrafts] = useState<
- Record<string, { opening?: number; added?: number; closing?: number }>
- >({});
-
- useEffect(() => {
- if (!activeShift) {
- setLocalDrafts({});
- return;
- }
- const drafts: Record<string, { opening?: number; added?: number; closing?: number }> = {};
- shiftStockItems.forEach((ssi) => {
- drafts[ssi.productId] = {
- opening: ssi.openingPhysicalCount,
- added: ssi.additions || 0,
- closing: ssi.closingPhysicalCount,
- };
- });
- setLocalDrafts(drafts);
- }, [activeShift?.id, shiftStockItems.length]);
+  // Pre-shift custom starting counts when no active shift has started yet
+  const [preShiftStartingCounts, setPreShiftStartingCounts] = useState<Record<string, number>>({});
 
  // Extract categories for clean filter tabs
  const categories = useMemo(() => {
@@ -108,34 +94,36 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  const rowDataList = useMemo(() => {
    return products.map((product) => {
      const ssi = shiftStockItems.find((s) => s.productId === product.id);
-     const draft = localDrafts[product.id];
+     const inv = inventory.find((i) => i.productId === product.id);
 
      const isValue =
        (product.isMeasured && product.measurementType === 'VALUE') ||
        product.unit === 'VALUE_KES';
 
-     // 1. Opening stock
-     // The shift ledger (SSI) is the single source of truth here.
-     // getShiftStockItems() already auto-heals missing SSIs from inventory
-     // (store.ts), so reading ssi.openingPhysicalCount directly keeps the worker
-     // page in lockstep with owner-side stock adjustments instead of masking
-     // them behind a stale inventory snapshot.
-     const openingStock = draft?.opening !== undefined
-       ? draft.opening
-       : (ssi?.openingPhysicalCount !== undefined ? ssi.openingPhysicalCount : 0);
+     // 1. Opening stock:
+      // When shift is active, ssi.openingPhysicalCount is the authoritative count.
+      // Owner stock adjustments directly update this count, keeping attendant in lockstep.
+      let openingStock = 0;
+      if (activeShift) {
+        openingStock = ssi?.openingPhysicalCount !== undefined
+          ? ssi.openingPhysicalCount
+          : (inv ? Number(inv.quantityOnHand || 0) : 0);
+      } else {
+        openingStock = preShiftStartingCounts[product.id] !== undefined
+          ? preShiftStartingCounts[product.id]
+          : (inv ? Number(inv.quantityOnHand || 0) : 0);
+      }
 
-     // 2. Added stock
-     const addedStock = draft?.added !== undefined
-       ? draft.added
-       : (ssi?.additions !== undefined ? ssi.additions : 0);
+      // 2. Added stock
+      const addedStock = ssi?.additions !== undefined ? ssi.additions : 0;
 
-     // 3. Total stock = Opening + Added
-     const totalStock = Number(openingStock || 0) + Number(addedStock || 0);
+      // 3. Total stock = Opening + Added
+      const totalStock = Number(openingStock || 0) + Number(addedStock || 0);
 
-     // 4. Closing stock
-     const closingStock = draft?.closing !== undefined
-       ? draft.closing
-       : (ssi?.closingPhysicalCount !== undefined ? ssi.closingPhysicalCount : undefined);
+      // 4. Closing stock
+      const closingStock = ssi?.closingPhysicalCount !== undefined
+        ? ssi.closingPhysicalCount
+        : undefined;
 
      // 5. Sales = Total - Closing (if entered)
      let salesUnits = 0;
@@ -182,7 +170,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
        sellingPrice,
      };
    });
- }, [products, shiftStockItems, inventory, localDrafts]);
+ }, [products, shiftStockItems, inventory, activeShift, preShiftStartingCounts]);
 
  // Filtered rows
  const filteredRows = useMemo(() => {
@@ -228,83 +216,108 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  }, [rowDataList]);
 
  // Handle cell edit commit to store & Neon
- const handleCellChange = (
- productId: string,
- field: 'opening' | 'added' | 'closing',
- valueStr: string
- ) => {
- const trimmed = valueStr.trim();
- const parsed = trimmed === '' ? undefined : Math.max(0, parseFloat(trimmed));
- const num = parsed !== undefined && !isNaN(parsed) ? parsed : undefined;
+  const handleCellChange = (
+    productId: string,
+    field: 'opening' | 'added' | 'closing',
+    valueStr: string
+  ) => {
+    setCellInputStrings((prev) => ({
+      ...prev,
+      [productId]: {
+        ...prev[productId],
+        [field]: valueStr,
+      },
+    }));
 
- setLocalDrafts((prev) => ({
- ...prev,
- [productId]: {
- ...prev[productId],
- [field]: num,
- },
- }));
+    const trimmed = valueStr.trim();
+    const parsed = trimmed === '' ? undefined : Math.max(0, parseFloat(trimmed));
+    const num = parsed !== undefined && !isNaN(parsed) ? parsed : undefined;
 
- if (!activeShift) return;
+    if (!activeShift) {
+      if (field === 'opening') {
+        setPreShiftStartingCounts((prev) => ({
+          ...prev,
+          [productId]: num !== undefined ? num : 0,
+        }));
+      }
+      return;
+    }
 
- if (field === 'opening') {
- store.updateShiftStockItemRow({
- shiftId: activeShift.id,
- productId,
- openingPhysicalCount: num !== undefined ? num : 0,
- });
- } else if (field === 'added') {
- store.updateShiftStockItemRow({
- shiftId: activeShift.id,
- productId,
- additions: num !== undefined ? num : 0,
- });
- } else if (field === 'closing') {
- store.updateShiftStockItemRow({
- shiftId: activeShift.id,
- productId,
- closingPhysicalCount: num,
- });
- }
- };
+    if (field === 'opening') {
+      store.updateShiftStockItemRow({
+        shiftId: activeShift.id,
+        productId,
+        openingPhysicalCount: num !== undefined ? num : 0,
+      });
+    } else if (field === 'added') {
+      store.updateShiftStockItemRow({
+        shiftId: activeShift.id,
+        productId,
+        additions: num !== undefined ? num : 0,
+      });
+    } else if (field === 'closing') {
+      store.updateShiftStockItemRow({
+        shiftId: activeShift.id,
+        productId,
+        closingPhysicalCount: num,
+      });
+    }
+  };
 
- // 1-Tap "Verify All Opening Stock"
- const handleVerifyAllOpening = () => {
- if (!activeShift) return;
- const updates: Record<string, { opening?: number }> = {};
- products.forEach((p) => {
- const inv = inventory.find((i) => i.productId === p.id);
- const qty = inv ? Number(inv.quantityOnHand || 0) : 0;
- updates[p.id] = { opening: qty };
- });
- store.batchUpdateShiftStockItems(activeShift.id, updates);
- showToast('All opening counts confirmed.');
- };
+  const handleCellBlur = (productId: string, field: 'opening' | 'added' | 'closing') => {
+    setCellInputStrings((prev) => {
+      if (!prev[productId]) return prev;
+      const copy = { ...prev };
+      const prodCopy = { ...copy[productId] };
+      delete prodCopy[field];
+      if (Object.keys(prodCopy).length === 0) {
+        delete copy[productId];
+      } else {
+        copy[productId] = prodCopy;
+      }
+      return copy;
+    });
+  };
 
- // Open a new shift
- const handleStartShiftNow = () => {
- const cashFloat = Math.max(0, parseFloat(openingCashInput) || 0);
- const mpesaFloat = Math.max(0, parseFloat(openingMpesaInput) || 0);
+  // 1-Tap "Verify All Opening Stock"
+  const handleVerifyAllOpening = () => {
+    if (!activeShift) return;
+    const updates: Record<string, { opening?: number }> = {};
+    products.forEach((p) => {
+      const inv = inventory.find((i) => i.productId === p.id);
+      const qty = inv ? Number(inv.quantityOnHand || 0) : 0;
+      updates[p.id] = { opening: qty };
+    });
+    store.batchUpdateShiftStockItems(activeShift.id, updates);
+    showToast('All opening counts confirmed.');
+  };
 
- const physicalCounts: Record<string, number> = {};
- products.forEach((p) => {
- const draft = localDrafts[p.id];
- const inv = inventory.find((i) => i.productId === p.id);
- physicalCounts[p.id] = draft?.opening !== undefined
- ? draft.opening
- : (inv ? Number(inv.quantityOnHand || 0) : 0);
- });
+  // Open a new shift
+  const handleStartShiftNow = () => {
+    const cashFloat = Math.max(0, parseFloat(openingCashInput) || 0);
+    const mpesaFloat = Math.max(0, parseFloat(openingMpesaInput) || 0);
 
- const shift = store.openShift({
- workerId: currentUser.id,
- workerName: currentUser.name,
- openingCashFloat: cashFloat,
- openingMpesaBalance: mpesaFloat,
- physicalCounts,
- });
+    const physicalCounts: Record<string, number> = {};
+    products.forEach((p) => {
+      const customOpen = preShiftStartingCounts[p.id];
+      const inv = inventory.find((i) => i.productId === p.id);
+      physicalCounts[p.id] = customOpen !== undefined
+        ? customOpen
+        : (inv ? Number(inv.quantityOnHand || 0) : 0);
+    });
 
- showToast(`Shift #${shift.shiftNumber} started.`);
- };
+    const shift = store.openShift({
+      workerId: currentUser.id,
+      workerName: currentUser.name,
+      openingCashFloat: cashFloat,
+      openingMpesaBalance: mpesaFloat,
+      physicalCounts,
+    });
+
+    setPreShiftStartingCounts({});
+    setCellInputStrings({});
+    showToast(`Shift #${shift.shiftNumber} started.`);
+  };
 
  // Financial reconciliation math
  const cashFloat = activeShift?.openingCashFloat || 0;
@@ -455,8 +468,9 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  <input
  type="number" step="any"
  min="0"
- value={row.openingStock !== undefined ? row.openingStock : ''}
+ value={cellInputStrings[row.product.id]?.opening !== undefined ? cellInputStrings[row.product.id]?.opening : (row.openingStock !== undefined ? row.openingStock : '')}
  onFocus={(e) => e.target.select()}
+ onBlur={() => handleCellBlur(row.product.id, 'opening')}
  onChange={(e) => handleCellChange(row.product.id, 'opening', e.target.value)}
  className="w-20 mx-auto text-center font-mono font-semibold text-xs py-1 px-2 rounded-lg bg-[#0D1117] border border-slate-800 text-white focus:outline-none focus:border-slate-600"
  />
@@ -678,8 +692,9 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  <input
  type="number" step="any"
  min="0"
- value={row.openingStock !== undefined ? row.openingStock : ''}
+ value={cellInputStrings[p.id]?.opening !== undefined ? cellInputStrings[p.id]?.opening : (row.openingStock !== undefined ? row.openingStock : '')}
  onFocus={(e) => e.target.select()}
+ onBlur={() => handleCellBlur(p.id, 'opening')}
  onChange={(e) => handleCellChange(p.id, 'opening', e.target.value)}
  title="Opening stock count (edit to trigger reconciliation)"
  className="w-14 sm:w-16 text-center py-1.5 px-1 rounded-lg bg-[#0D1117] border border-slate-800 text-slate-200 text-xs sm:text-sm font-semibold focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
@@ -695,8 +710,9 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                                 type="number"
                                 step="any"
                                 min="0"
-                                value={row.addedStock !== undefined && row.addedStock > 0 ? row.addedStock : ''}
+                                value={cellInputStrings[p.id]?.added !== undefined ? cellInputStrings[p.id]?.added : (row.addedStock !== undefined && row.addedStock > 0 ? row.addedStock : '')}
  onFocus={(e) => e.target.select()}
+ onBlur={() => handleCellBlur(p.id, 'added')}
  onChange={(e) => handleCellChange(p.id, 'added', e.target.value)}
  title="Added restock quantity"
  className={`w-12 sm:w-16 text-center py-1.5 px-1 rounded-lg bg-[#0D1117] border text-xs sm:text-sm font-semibold focus:outline-none ${row.addedStock > 0 ? "border-emerald-600/70 text-emerald-300 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" : "border-slate-800 text-slate-300 focus:border-slate-600"}`}
@@ -711,8 +727,9 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  <input
  type="number" step="any"
  min="0"
- value={row.closingStock !== undefined ? row.closingStock : ''}
+ value={cellInputStrings[p.id]?.closing !== undefined ? cellInputStrings[p.id]?.closing : (row.closingStock !== undefined ? row.closingStock : '')}
  onFocus={(e) => e.target.select()}
+ onBlur={() => handleCellBlur(p.id, 'closing')}
  onChange={(e) => handleCellChange(p.id, 'closing', e.target.value)}
  title="Closing stock count at shift handover"
  className={`w-14 sm:w-16 text-center py-1.5 px-1 rounded-lg bg-[#0D1117] border text-xs sm:text-sm font-semibold focus:outline-none ${row.hasClosingEntered ? "border-slate-500 text-white font-bold" : "border-slate-800 text-slate-400 focus:border-slate-600"}`}

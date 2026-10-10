@@ -1179,6 +1179,7 @@ class NeonService {
           )
           ON CONFLICT (id) DO UPDATE SET
             opening_physical_count = EXCLUDED.opening_physical_count,
+            opening_system_count = EXCLUDED.opening_system_count,
             additions = EXCLUDED.additions,
             recorded_sales = EXCLUDED.recorded_sales,
             transfers_in = EXCLUDED.transfers_in,

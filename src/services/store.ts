@@ -1836,14 +1836,19 @@ class StoreService {
       if (params.additions !== undefined) {
         ssi.additions = Math.max(0, params.additions);
       }
-      if (params.closingPhysicalCount !== undefined) {
-        ssi.closingPhysicalCount = Math.max(0, params.closingPhysicalCount);
+      if ('closingPhysicalCount' in params) {
+        ssi.closingPhysicalCount =
+          params.closingPhysicalCount !== undefined
+            ? Math.max(0, params.closingPhysicalCount)
+            : undefined;
       }
     }
 
     const available = Number(ssi.openingPhysicalCount || 0) + Number(ssi.additions || 0) + Number(ssi.transfersIn || 0) - Number(ssi.transfersOut || 0) - Number(ssi.damages || 0);
     if (ssi.closingPhysicalCount !== undefined) {
       ssi.recordedSales = Math.round(Math.max(0, available - ssi.closingPhysicalCount) * 100) / 100;
+    } else {
+      ssi.recordedSales = 0;
     }
 
     this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
@@ -2738,40 +2743,39 @@ class StoreService {
     }
     this.saveCurrentInventory(inv);
 
-    // If an active shift exists and stock changed, keep the shift ledger in balance.
-    // The SSI row is materialised on demand (mirroring getShiftStockItems' heal
-    // logic) so an owner adjustment can never be dropped just because the counter
-    // row had not been created yet on this device/browser.
+    // If an active shift exists, synchronize the active shift stock item directly
+    // so the attendant's opening shift reflects the owner's authoritative stock count.
     const activeShift = this.getActiveShift();
     const products = this.getProducts(true);
     const product = products.find((p) => p.id === productId);
     const productName = product ? product.name : 'Drink';
 
-    if (activeShift && product && delta !== 0) {
+    if (activeShift && product) {
       const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
       let ssi = allSSIs.find(
         (s) => s.shiftId === activeShift.id && s.productId === productId
       );
 
       if (!ssi) {
-        // Heal: create the counter row from current inventory, then apply delta below.
-        ssi = this.buildShiftStockItem(activeShift.id, product, prevQty, {
-          additions: delta > 0 ? delta : 0,
-        });
-        if (delta < 0) {
-          ssi.openingPhysicalCount = Math.max(0, prevQty + delta);
-        }
+        ssi = this.buildShiftStockItem(activeShift.id, product, cleanQty);
         allSSIs.push(ssi);
-      } else if (delta > 0) {
-        ssi.additions = (ssi.additions || 0) + delta;
       } else {
-        const absDelta = Math.abs(delta);
-        if ((ssi.additions || 0) >= absDelta) {
-          ssi.additions = (ssi.additions || 0) - absDelta;
+        // Owner adjusted stock count on owner page:
+        // Update the shift opening count directly to match the owner's adjustment
+        ssi.openingPhysicalCount = cleanQty;
+        ssi.openingSystemCount = cleanQty;
+
+        // Recalculate sales only if a closing count has been entered
+        const available = Number(ssi.openingPhysicalCount || 0) +
+          Number(ssi.additions || 0) +
+          Number(ssi.transfersIn || 0) -
+          Number(ssi.transfersOut || 0) -
+          Number(ssi.damages || 0);
+
+        if (ssi.closingPhysicalCount !== undefined) {
+          ssi.recordedSales = Math.round(Math.max(0, available - ssi.closingPhysicalCount) * 100) / 100;
         } else {
-          const remaining = absDelta - (ssi.additions || 0);
-          ssi.additions = 0;
-          ssi.openingPhysicalCount = Math.max(0, (ssi.openingPhysicalCount || 0) - remaining);
+          ssi.recordedSales = 0;
         }
       }
       this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
@@ -2785,10 +2789,10 @@ class StoreService {
       severity: 'INFO',
     });
 
-    // Mark a mutation as pending and push synchronously *before* the periodic
-    // syncWithCloud pull can run, otherwise the 3.5s poll could immediately
-    // re-merge a stale cloud inventory row over the value we just wrote.
+    // Mark a mutation as pending and push synchronously before the periodic
+    // syncWithCloud pull can run, ensuring database and attendant stay in lockstep.
     this.pendingAutoSync = true;
+    this.hasLocalMutationsToPush = true;
     this.uploadAllToNeon()
       .catch((e) => console.warn('Instant neon sync notice:', e))
       .finally(() => {
