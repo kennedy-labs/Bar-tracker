@@ -14,55 +14,56 @@
 
 @theme {
   /* --- Base canvas ------------------------------------------------------- */
-  --color-ink: #0a0a0f;          /* app background, deepest layer            */
-  --color-ink-soft: #0f0f16;     /* page backdrop / recessed wells           */
+  --color-ink: #0a0a0f; /* app background, deepest layer            */
+  --color-ink-soft: #0f0f16; /* page backdrop / recessed wells           */
 
   /* --- Surfaces (elevation ladder) --------------------------------------- */
-  --color-surface: #14141d;      /* primary card / panel                     */
-  --color-surface-2: #1a1a25;    /* raised: inputs, table headers, chips     */
-  --color-surface-3: #22222f;    /* hover / active raised states             */
+  --color-surface: #14141d; /* primary card / panel                     */
+  --color-surface-2: #1a1a25; /* raised: inputs, table headers, chips     */
+  --color-surface-3: #22222f; /* hover / active raised states             */
 
   /* --- Borders & dividers ------------------------------------------------ */
-  --color-line: #262633;         /* default hairline border                  */
-  --color-line-soft: #1e1e29;    /* internal dividers inside a surface       */
-  --color-line-strong: #35354a;  /* emphasised borders, focus outlines       */
+  --color-line: #262633; /* default hairline border                  */
+  --color-line-soft: #1e1e29; /* internal dividers inside a surface       */
+  --color-line-strong: #35354a; /* emphasised borders, focus outlines       */
 
   /* --- Brand accent (primary action, positive state) --------------------- */
-  --color-brand: #8b5cf6;        /* violet-500  — buttons, active tabs       */
+  --color-brand: #8b5cf6; /* violet-500  — buttons, active tabs       */
   --color-brand-strong: #a78bfa; /* violet-400  — hover / emphasis text      */
-  --color-brand-soft: #7c3aed;   /* violet-600  — pressed state              */
-  --color-brand-tint: #1e1333;   /* deep violet wash panel                   */
-  --color-brand-line: #4c2d8f;   /* violet border for tinted panels          */
+  --color-brand-soft: #7c3aed; /* violet-600  — pressed state              */
+  --color-brand-tint: #1e1333; /* deep violet wash panel                   */
+  --color-brand-line: #4c2d8f; /* violet border for tinted panels          */
 
   /* --- Secondary accent (informational / measured goods) ----------------- */
-  --color-info: #22d3ee;         /* cyan-400                                 */
-  --color-info-tint: #083344;    /* deep cyan wash panel                     */
-  --color-info-line: #155e75;    /* cyan border for tinted panels            */
+  --color-info: #22d3ee; /* cyan-400                                 */
+  --color-info-tint: #083344; /* deep cyan wash panel                     */
+  --color-info-line: #155e75; /* cyan border for tinted panels            */
 
   /* --- Status: warning --------------------------------------------------- */
-  --color-warn: #fbbf24;         /* amber-400                                */
-  --color-warn-tint: #3a2a08;    /* deep amber wash panel                    */
-  --color-warn-line: #92400e;    /* amber border for tinted panels           */
+  --color-warn: #fbbf24; /* amber-400                                */
+  --color-warn-tint: #3a2a08; /* deep amber wash panel                    */
+  --color-warn-line: #92400e; /* amber border for tinted panels           */
 
   /* --- Status: danger / shortage ---------------------------------------- */
-  --color-danger: #fb7185;       /* rose-400                                 */
-  --color-danger-tint: #3b0d1a;  /* deep rose wash panel                     */
-  --color-danger-line: #9f1239;  /* rose border for tinted panels            */
+  --color-danger: #fb7185; /* rose-400                                 */
+  --color-danger-tint: #3b0d1a; /* deep rose wash panel                     */
+  --color-danger-line: #9f1239; /* rose border for tinted panels            */
 
   /* --- Status: success --------------------------------------------------- */
-  --color-success: #4ade80;      /* green-400                                */
+  --color-success: #4ade80; /* green-400                                */
   --color-success-tint: #0b2e1a; /* deep green wash panel                    */
   --color-success-line: #166534; /* green border for tinted panels           */
 
   /* --- Typography -------------------------------------------------------- */
-  --color-content: #ececf3;      /* primary text                             */
-  --color-muted: #9a9aae;        /* secondary / label text                   */
-  --color-faint: #62627a;        /* tertiary / placeholder text              */
+  --color-content: #ececf3; /* primary text                             */
+  --color-muted: #9a9aae; /* secondary / label text                   */
+  --color-faint: #62627a; /* tertiary / placeholder text              */
 
   /* --- Typography scale -------------------------------------------------- */
-  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont,
-    'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans:
+    "Plus Jakarta Sans", system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* --- Radii ------------------------------------------------------------- */
   --radius-card: 1rem;
@@ -70,7 +71,8 @@
   --radius-control: 0.625rem;
 
   /* --- Elevation --------------------------------------------------------- */
-  --shadow-panel: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 8px 24px -8px rgb(0 0 0 / 0.5);
+  --shadow-panel:
+    0 1px 2px 0 rgb(0 0 0 / 0.4), 0 8px 24px -8px rgb(0 0 0 / 0.5);
   --shadow-pop: 0 8px 32px -8px rgb(0 0 0 / 0.65);
 }
 
