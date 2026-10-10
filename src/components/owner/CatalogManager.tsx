@@ -104,7 +104,6 @@ export const CatalogManager: React.FC = () => {
   const [measuredName, setMeasuredName] = useState('');
   const [measuredCategory, setMeasuredCategory] = useState<ProductCategory>('TRADITIONAL_BREW');
   const [measuredStock, setMeasuredStock] = useState('1500');
-  const [measuredSell, setMeasuredSell] = useState('1500');
   const [measuredError, setMeasuredError] = useState<string | null>(null);
 
   // Quick Inline Price Editing
@@ -151,7 +150,9 @@ export const CatalogManager: React.FC = () => {
   }).length;
   const totalRetailValue = activeProducts.reduce((sum, p) => {
     const inv = inventory.find((i) => i.productId === p.id);
-    return sum + (inv ? inv.quantityOnHand * p.sellingPrice : 0);
+    const qty = inv ? inv.quantityOnHand : 0;
+    const val = (p.isMeasured || p.unit === 'VALUE_KES') ? qty : qty * p.sellingPrice;
+    return sum + val;
   }, 0);
 
  // Categories list
@@ -201,7 +202,6 @@ export const CatalogManager: React.FC = () => {
    setMeasuredName('');
    setMeasuredCategory('TRADITIONAL_BREW');
    setMeasuredStock('1500');
-   setMeasuredSell('1500');
    setMeasuredError(null);
    setShowMeasuredModal(true);
  };
@@ -213,8 +213,7 @@ export const CatalogManager: React.FC = () => {
      setMeasuredName(p.name);
      setMeasuredCategory(p.category);
      const invItem = inventory.find((i) => i.productId === p.id);
-     setMeasuredStock(String(invItem?.quantityOnHand ?? p.totalMeasuredValueKes ?? p.sellingPrice ?? 0));
-     setMeasuredSell(String(p.sellingPrice));
+     setMeasuredStock(String(invItem?.quantityOnHand ?? p.totalMeasuredValueKes ?? 0));
      setMeasuredError(null);
      setShowMeasuredModal(true);
      return;
@@ -289,26 +288,24 @@ export const CatalogManager: React.FC = () => {
      return;
    }
 
-   const sell = parseFloat(measuredSell);
    const stock = parseFloat(measuredStock);
-
-   if (isNaN(sell) || sell <= 0) {
-     setMeasuredError('Please enter a valid price.');
+   if (isNaN(stock) || stock < 0) {
+     setMeasuredError('Please enter a valid counter stock value in KES.');
      return;
    }
 
-   const cleanStock = isNaN(stock) || stock < 0 ? 0 : stock;
+   const cleanStock = Math.round(stock * 100) / 100;
 
    if (measuredEditingProduct) {
      store.updateProduct(measuredEditingProduct.id, {
        name: measuredName.trim(),
        category: measuredCategory,
        unit: 'VALUE_KES',
-       sellingPrice: sell,
+       sellingPrice: 1,
        isMeasured: true,
        measurementType: 'VALUE',
        measureUnitLabel: 'KES Value',
-       totalMeasuredValueKes: sell,
+       totalMeasuredValueKes: cleanStock,
      });
 
      // Update on-shelf inventory
@@ -318,13 +315,13 @@ export const CatalogManager: React.FC = () => {
        name: measuredName.trim(),
        category: measuredCategory,
        unit: 'VALUE_KES',
-       sellingPrice: sell,
+       sellingPrice: 1,
        initialStock: cleanStock,
-       reorderLevel: 5,
+       reorderLevel: 200,
        isMeasured: true,
        measurementType: 'VALUE',
        measureUnitLabel: 'KES Value',
-       totalMeasuredValueKes: sell,
+       totalMeasuredValueKes: cleanStock,
      });
    }
 
@@ -679,7 +676,11 @@ export const CatalogManager: React.FC = () => {
 
                         {/* Selling Price */}
                         <td className="p-3.5 text-center">
-                          {isInline ? (
+                          {p.isMeasured ? (
+                            <span className="text-cyan-400 font-mono text-[11px] font-semibold px-2 py-0.5 rounded-md bg-cyan-950/60 border border-cyan-800/60" title="Stock value on counter directly equals selling price">
+                              Value-based
+                            </span>
+                          ) : isInline ? (
                             <div className="inline-flex items-center gap-1">
                               <span className="text-emerald-500 text-[10px]">KES</span>
                               <input
@@ -796,7 +797,7 @@ export const CatalogManager: React.FC = () => {
                               </div>
                             ) : (
                               <>
-                                {!p.isArchived && (
+                                {!p.isArchived && !p.isMeasured && (
                                   <button
                                     onClick={() => {
                                       setInlineEditId(p.id);
@@ -1009,59 +1010,68 @@ export const CatalogManager: React.FC = () => {
                   </div>
 
                   {/* Price Matrix */}
-                  {!isInline ? (
+                  {!p.isMeasured ? (
+                    !isInline ? (
+                      <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between font-mono text-xs">
+                        <div className="space-y-0.5">
+                          <div className="text-[10px] text-slate-500 uppercase font-sans">
+                            Selling Price
+                          </div>
+                          <div className="text-emerald-400 font-black text-sm">
+                            KES {p.sellingPrice.toLocaleString()}
+                          </div>
+                        </div>
+
+                        {!p.isArchived && (
+                          <button
+                            onClick={() => {
+                              setInlineEditId(p.id);
+                              setInlineSell(String(p.sellingPrice));
+                            }}
+                            className="py-1 px-2.5 rounded-lg bg-[#0E1420] hover:bg-slate-800 text-[10px] text-slate-400 hover:text-white border border-slate-800 cursor-pointer"
+                          >
+                            Quick Price
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      /* Inline Price Editor */
+                      <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 text-xs font-mono">
+                        <div className="flex-1">
+                          <span className="text-[10px] text-slate-400 block font-sans">Selling Price (KES)</span>
+                          <input
+                            type="number"
+                            value={inlineSell}
+                            onChange={(e) => setInlineSell(e.target.value)}
+                            className="w-full bg-[#0E1420] border border-emerald-500 rounded-xl px-2 py-1.5 text-white font-bold"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1 pt-4">
+                          <button
+                            onClick={() => handleSaveInline(p.id)}
+                            className="p-1.5 rounded-xl bg-emerald-500 text-slate-950 font-bold hover:bg-emerald-400 cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setInlineEditId(null)}
+                            className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  ) : (
                     <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between font-mono text-xs">
                       <div className="space-y-0.5">
-                        <div className="text-[10px] text-slate-500 uppercase font-sans">
-                          {p.isMeasured && (p.measurementType === 'VALUE' || p.unit === 'VALUE_KES')
-                            ? 'Selling Value'
-                            : 'Selling Price'}
+                        <div className="text-[10px] text-cyan-400 uppercase font-sans font-semibold flex items-center gap-1">
+                          <Scale className="w-3 h-3" />
+                          <span>Direct Value Tracking</span>
                         </div>
-                        <div className="text-emerald-400 font-black text-sm">
-                          KES {p.sellingPrice.toLocaleString()}
-                          {p.isMeasured && p.measurementType === 'VOLUME' && (
-                            <span className="text-[10px] text-slate-400 font-normal"> / {p.measureUnitLabel || 'unit'}</span>
-                          )}
+                        <div className="text-slate-400 text-[11px]">
+                          Counter stock value directly represents selling worth
                         </div>
-                      </div>
-
-                      {!p.isArchived && (
-                        <button
-                          onClick={() => {
-                            setInlineEditId(p.id);
-                            setInlineSell(String(p.sellingPrice));
-                          }}
-                          className="py-1 px-2.5 rounded-lg bg-[#0E1420] hover:bg-slate-800 text-[10px] text-slate-400 hover:text-white border border-slate-800 cursor-pointer"
-                        >
-                          Quick Price
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    /* Inline Price Editor */
-                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 text-xs font-mono">
-                      <div className="flex-1">
-                        <span className="text-[10px] text-slate-400 block font-sans">Selling Price (KES)</span>
-                        <input
-                          type="number"
-                          value={inlineSell}
-                          onChange={(e) => setInlineSell(e.target.value)}
-                          className="w-full bg-[#0E1420] border border-emerald-500 rounded-xl px-2 py-1.5 text-white font-bold"
-                        />
-                      </div>
-                      <div className="flex items-center gap-1 pt-4">
-                        <button
-                          onClick={() => handleSaveInline(p.id)}
-                          className="p-1.5 rounded-xl bg-emerald-500 text-slate-950 font-bold hover:bg-emerald-400 cursor-pointer"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setInlineEditId(null)}
-                          className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
                       </div>
                     </div>
                   )}
@@ -1373,7 +1383,6 @@ export const CatalogManager: React.FC = () => {
            type="button"
            onClick={() => {
              setMeasuredName(preset.name);
-             setMeasuredSell(preset.price);
              setMeasuredStock(preset.price);
            }}
            className="py-1 px-2.5 rounded-lg bg-[#0E1420] hover:bg-cyan-950 border border-slate-800 hover:border-cyan-700 text-xs text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
@@ -1418,33 +1427,16 @@ export const CatalogManager: React.FC = () => {
  </select>
  </div>
 
- {/* Pricing & Stock Fields (Pure Value) */}
+ {/* Stock & Valuation (Pure Value Measurement - Value IS Selling Price) */}
  <div className="space-y-3 p-3.5 rounded-2xl bg-[#0E1420] border border-cyan-900/60">
    <div>
-     <label className="block text-xs font-semibold text-slate-300 mb-1">
-       Retail Value / Price (KES)
-     </label>
-     <input
-       type="number"
-       step="any"
-       min="1"
-       required
-       value={measuredSell}
-       onChange={(e) => {
-         setMeasuredSell(e.target.value);
-         if (!measuredEditingProduct && measuredStock === measuredSell) {
-           setMeasuredStock(e.target.value);
-         }
-       }}
-       className="w-full bg-[#121824] border border-cyan-500 rounded-xl px-3 py-2 text-sm font-mono font-bold text-cyan-300 focus:outline-none"
-     />
-     <span className="text-[10px] text-slate-500">Total batch selling value in KES</span>
-   </div>
-
-   <div>
-     <label className="block text-xs font-semibold text-slate-300 mb-1">
-       Current Stock on Shelf (KES)
-     </label>
+     <div className="flex items-center justify-between mb-1">
+       <label className="text-xs font-semibold text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
+         <Scale className="w-3.5 h-3.5 text-cyan-400" />
+         <span>Current Stock on Shelf (KES Value)</span>
+       </label>
+       <span className="text-[10px] text-cyan-400 font-mono font-semibold">1 KES Stock = 1 KES Selling Worth</span>
+     </div>
      <input
        type="number"
        step="any"
@@ -1452,10 +1444,11 @@ export const CatalogManager: React.FC = () => {
        required
        value={measuredStock}
        onChange={(e) => setMeasuredStock(e.target.value)}
-       className="w-full bg-[#121824] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
+       className="w-full bg-[#121824] border border-cyan-500/80 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-400"
+       placeholder="e.g. 1500"
      />
-     <span className="text-[10px] text-slate-400">
-       KES worth of drink currently remaining on the counter
+     <span className="text-[10px] text-slate-400 mt-1 block">
+       Total KES worth of drink currently remaining on the counter. Value directly equals selling price.
      </span>
    </div>
  </div>

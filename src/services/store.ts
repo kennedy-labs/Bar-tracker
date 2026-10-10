@@ -1966,10 +1966,11 @@ class StoreService {
       if (diff !== 0) {
         hasOpeningInconsistency = true;
 
+        const isVal = product.isMeasured && (product.measurementType === 'VALUE' || product.unit === 'VALUE_KES');
         if (diff < 0) {
           // Shortage: previous attendant held accountable
           const shortageQty = Math.abs(diff);
-          const moneyVal = shortageQty * product.sellingPrice;
+          const moneyVal = isVal ? shortageQty : shortageQty * product.sellingPrice;
           discrepancies.unshift({
             id: `disc-${Date.now()}-${product.id}`,
             shiftId,
@@ -1984,15 +1985,17 @@ class StoreService {
             actual: physicalCount,
             variance: diff, // negative e.g. -2
             monetaryValue: moneyVal,
-            severity: shortageQty >= 3 ? 'HIGH' : 'MEDIUM',
+            severity: (isVal ? shortageQty >= 300 : shortageQty >= 3) ? 'HIGH' : 'MEDIUM',
             status: 'FLAGGED',
-            ownerNotes: `Opening handover shortage: ${shortageQty} bottle(s) fewer than expected left by ${prevAttendant}. Reported by incoming attendant ${params.workerName}.`,
+            ownerNotes: isVal
+              ? `Opening handover shortage: KES ${shortageQty.toLocaleString()} value less than expected left by ${prevAttendant}. Reported by incoming attendant ${params.workerName}.`
+              : `Opening handover shortage: ${shortageQty} bottle(s) fewer than expected left by ${prevAttendant}. Reported by incoming attendant ${params.workerName}.`,
             timestamp: new Date().toISOString(),
           });
         } else {
           // Surplus: previous attendant credited to balance the scale!
           const surplusQty = diff;
-          const moneyVal = surplusQty * product.sellingPrice;
+          const moneyVal = isVal ? surplusQty : surplusQty * product.sellingPrice;
           discrepancies.unshift({
             id: `disc-${Date.now()}-${product.id}`,
             shiftId,
@@ -2009,7 +2012,9 @@ class StoreService {
             monetaryValue: moneyVal,
             severity: 'LOW',
             status: 'RESOLVED',
-            ownerNotes: `Opening handover surplus: +${surplusQty} extra bottle(s) found on shelf left by ${prevAttendant}. Credited to previous attendant to balance their scale fairly.`,
+            ownerNotes: isVal
+              ? `Opening handover surplus: +KES ${surplusQty.toLocaleString()} value found on shelf left by ${prevAttendant}. Credited to previous attendant to balance their scale fairly.`
+              : `Opening handover surplus: +${surplusQty} extra bottle(s) found on shelf left by ${prevAttendant}. Credited to previous attendant to balance their scale fairly.`,
             timestamp: new Date().toISOString(),
           });
         }

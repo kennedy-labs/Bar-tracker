@@ -178,7 +178,7 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({ shift, onClo
                       {item.closingPhysicalCount ?? '-'}
                     </td>
                     <td className="py-2 px-3 text-right text-emerald-400 font-medium">
-                      KES {(item.recordedSales * item.sellingPrice).toLocaleString()}
+                      KES {((item.isMeasured || item.unit === 'VALUE_KES') ? item.recordedSales : item.recordedSales * item.sellingPrice).toLocaleString()}
                     </td>
                   </tr>
                 ))}
