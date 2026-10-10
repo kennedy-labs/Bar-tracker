@@ -258,7 +258,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   </div>
                   <p className="text-xs text-slate-400 mb-3">
                     {products.length > 0
-                      ? `Your catalog has ${products.length} drink(s) configured with wholesale costs and retail prices.`
+                      ? `Your catalog has ${products.length} drink(s) configured with retail selling prices.`
                       : 'You chose a clean slate with zero test data. Add your real drinks and selling prices so attendants can record sales.'}
                   </p>
                   <div className="flex items-center gap-2">

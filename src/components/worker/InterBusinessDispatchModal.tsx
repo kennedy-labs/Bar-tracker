@@ -41,58 +41,58 @@ export const InterBusinessDispatchModal: React.FC<InterBusinessDispatchModalProp
  const inv = inventory.find((i) => i.productId === selectedProduct?.id);
  const availableStock = inv ? inv.quantityOnHand : 0;
 
- const totalCostValue = (selectedProduct?.costPrice || 0) * quantity;
+ const totalTransferValue = (selectedProduct?.sellingPrice || 0) * quantity;
 
  const handleSubmit = (e: React.FormEvent) => {
- e.preventDefault();
- setErrorMsg(null);
+   e.preventDefault();
+   setErrorMsg(null);
 
- let targetBusinessId = selectedPartnerId;
+   let targetBusinessId = selectedPartnerId;
 
- // If user typed in a custom connect code / phone
- if (!targetBusinessId && customConnectCode) {
- try {
- const newPartner = store.connectPartner(customConnectCode);
- targetBusinessId = newPartner.partnerBusinessId;
- } catch (err: any) {
- setErrorMsg(err.message || 'Could not find bar with that connect code');
- return;
- }
- }
+   // If user typed in a custom connect code / phone
+   if (!targetBusinessId && customConnectCode) {
+     try {
+       const newPartner = store.connectPartner(customConnectCode);
+       targetBusinessId = newPartner.partnerBusinessId;
+     } catch (err: any) {
+       setErrorMsg(err.message || 'Could not find bar with that connect code');
+       return;
+     }
+   }
 
- if (!targetBusinessId) {
- setErrorMsg('Please select or connect a partner bar first.');
- return;
- }
+   if (!targetBusinessId) {
+     setErrorMsg('Please select or connect a partner bar first.');
+     return;
+   }
 
- if (quantity <= 0) {
- setErrorMsg('Quantity must be at least 1.');
- return;
- }
+   if (quantity <= 0) {
+     setErrorMsg('Quantity must be at least 1.');
+     return;
+   }
 
- if (quantity > availableStock) {
- setErrorMsg(`Cannot send more than current stock on hand (${availableStock} ${selectedProduct.unit.toLowerCase()}s).`);
- return;
- }
+   if (quantity > availableStock) {
+     setErrorMsg(`Cannot send more than current stock on hand (${availableStock} ${selectedProduct.unit.toLowerCase()}s).`);
+     return;
+   }
 
- try {
- store.dispatchInterBusinessTransfer({
- toBusinessId: targetBusinessId,
- productId: selectedProduct.id,
- quantity,
- notes: notes || undefined,
- });
+   try {
+     store.dispatchInterBusinessTransfer({
+       toBusinessId: targetBusinessId,
+       productId: selectedProduct.id,
+       quantity,
+       notes: notes || undefined,
+     });
 
- const partner = store.getBusinesses().find((b) => b.id === targetBusinessId);
- onSuccess({
- partnerName: partner?.name || 'Partner Bar',
- productName: selectedProduct.name,
- quantity,
- cost: totalCostValue,
- });
- } catch (err: any) {
- setErrorMsg(err.message || 'Failed to dispatch stock transfer');
- }
+     const partner = store.getBusinesses().find((b) => b.id === targetBusinessId);
+     onSuccess({
+       partnerName: partner?.name || 'Partner Bar',
+       productName: selectedProduct.name,
+       quantity,
+       cost: totalTransferValue,
+     });
+   } catch (err: any) {
+     setErrorMsg(err.message || 'Failed to dispatch stock transfer');
+   }
  };
 
  return (
@@ -179,9 +179,9 @@ export const InterBusinessDispatchModal: React.FC<InterBusinessDispatchModalProp
  {[...products].sort((a, b) => a.name.localeCompare(b.name)).map((prod) => {
  const stock = inventory.find((i) => i.productId === prod.id)?.quantityOnHand || 0;
  return (
- <option key={prod.id} value={prod.id}>
- {prod.name} (In Stock: {stock} {prod.unit.toLowerCase()}s · Cost: KES {prod.costPrice})
- </option>
+   <option key={prod.id} value={prod.id}>
+     {prod.name} (In Stock: {stock} {prod.unit.toLowerCase()}s · Price: KES {prod.sellingPrice})
+   </option>
  );
  })}
  </select>
@@ -239,19 +239,19 @@ export const InterBusinessDispatchModal: React.FC<InterBusinessDispatchModalProp
  </div>
  </div>
 
- {/* 4. Cost Transfer Valuation Breakdown */}
+ {/* 4. Transfer Valuation Breakdown */}
  <div className="p-3.5 rounded-2xl bg-amber-950/20 border border-amber-800/40 space-y-1.5 font-mono">
- <div className="flex items-center justify-between text-slate-300 text-xs">
- <span>Unit Cost Price:</span>
- <span>KES {selectedProduct.costPrice.toLocaleString()}</span>
- </div>
- <div className="flex items-center justify-between text-amber-300 text-sm font-bold pt-1 border-t border-amber-900/40">
- <span>Total Cost Value to Transfer:</span>
- <span>KES {totalCostValue.toLocaleString()}</span>
- </div>
- <p className="text-[10px] text-slate-400 font-sans pt-0.5">
- 💡 <strong>Automatic Accounting:</strong> Once accepted by the partner, this cost (KES {totalCostValue.toLocaleString()}) is removed from your bar and debited to the receiving bar's ledger.
- </p>
+   <div className="flex items-center justify-between text-slate-300 text-xs">
+     <span>Selling Price:</span>
+     <span>KES {selectedProduct.sellingPrice.toLocaleString()}</span>
+   </div>
+   <div className="flex items-center justify-between text-amber-300 text-sm font-bold pt-1 border-t border-amber-900/40">
+     <span>Total Value to Transfer:</span>
+     <span>KES {totalTransferValue.toLocaleString()}</span>
+   </div>
+   <p className="text-[10px] text-slate-400 font-sans pt-0.5">
+     💡 <strong>Automatic Accounting:</strong> Once accepted by the partner, this stock value (KES {totalTransferValue.toLocaleString()}) is removed from your bar and added to the receiving bar's ledger.
+   </p>
  </div>
 
  {/* 5. Optional Note */}

@@ -714,7 +714,7 @@ class StoreService {
       partnerName: targetBiz.name,
       partnerPhone: targetBiz.phone,
       partnerConnectCode: targetBiz.activeShiftTransferCode || targetBiz.connectCode || 'LINKED',
-      netCostBalance: 0,
+      netTransferBalance: 0,
       connectedAt: new Date().toISOString(),
     };
 
@@ -725,7 +725,7 @@ class StoreService {
       partnerName: currentBiz.name,
       partnerPhone: currentBiz.phone,
       partnerConnectCode: currentBiz.activeShiftTransferCode || currentBiz.connectCode || 'LINKED',
-      netCostBalance: 0,
+      netTransferBalance: 0,
       connectedAt: new Date().toISOString(),
     };
 
@@ -821,14 +821,14 @@ class StoreService {
       productName: product.name,
       type: 'TRANSFER_OUT',
       quantity: qty,
-      unitPrice: product.costPrice,
+      unitPrice: product.sellingPrice,
       timestamp: new Date().toISOString(),
       note: `Dispatched ${qty} to partner bar ${targetBiz.name}. ${params.notes || ''}`,
     });
     this.set(STORAGE_KEYS.STOCK_MOVEMENTS, movements);
 
     // 4. Create InterBusinessTransfer record
-    const totalCostValue = qty * product.costPrice;
+    const totalTransferValue = qty * product.sellingPrice;
     const transfer: InterBusinessTransfer = {
       id: `trf-${Date.now()}`,
       fromBusinessId: currentBiz.id,
@@ -840,8 +840,8 @@ class StoreService {
       productId: product.id,
       productName: product.name,
       quantity: qty,
-      unitCost: product.costPrice,
-      totalCostValue,
+      unitPrice: product.sellingPrice,
+      totalTransferValue,
       status: 'PENDING',
       dispatchedAt: new Date().toISOString(),
       notes: params.notes,
@@ -854,10 +854,10 @@ class StoreService {
     this.addEvent({
       type: 'INTER_BAR_DISPATCH',
       title: `Transfer Sent: ${qty}x ${product.name}`,
-      description: `Dispatched to ${targetBiz.name}. Cost Value: KES ${totalCostValue.toLocaleString()}. Waiting for their acceptance.`,
+      description: `Dispatched to ${targetBiz.name}. Stock Value: KES ${totalTransferValue.toLocaleString()}. Waiting for their acceptance.`,
       actorName: activeShift.workerName,
       severity: 'WARNING',
-      amount: totalCostValue,
+      amount: totalTransferValue,
       currency: 'KES',
     });
 
@@ -917,15 +917,15 @@ class StoreService {
       }
     }
 
-    // 4. Update Partner Cost Ledger (CRITICAL RULE: Cost removed from giver and added to receiver)
+    // 4. Update Partner Stock Ledger (Stock value removed from giver and added to receiver)
     const allPartners = this.get<BusinessPartner[]>(STORAGE_KEYS.PARTNERS, []);
 
-    // For receiver: we owe the sender this cost value (netCostBalance decreases)
+    // For receiver: we owe the sender this stock value (netTransferBalance decreases)
     const receiverPartnerLink = allPartners.find(
       (p) => p.businessId === currentBiz.id && p.partnerBusinessId === transfer.fromBusinessId
     );
     if (receiverPartnerLink) {
-      receiverPartnerLink.netCostBalance -= transfer.totalCostValue;
+      receiverPartnerLink.netTransferBalance -= transfer.totalTransferValue;
     } else {
       allPartners.push({
         id: `partner-${currentBiz.id}-${transfer.fromBusinessId}`,
@@ -934,17 +934,17 @@ class StoreService {
         partnerName: transfer.fromBusinessName,
         partnerPhone: '',
         partnerConnectCode: '',
-        netCostBalance: -transfer.totalCostValue,
+        netTransferBalance: -transfer.totalTransferValue,
         connectedAt: new Date().toISOString(),
       });
     }
 
-    // For sender: sender is owed this cost value (netCostBalance increases)
+    // For sender: sender is owed this stock value (netTransferBalance increases)
     const senderPartnerLink = allPartners.find(
       (p) => p.businessId === transfer.fromBusinessId && p.partnerBusinessId === currentBiz.id
     );
     if (senderPartnerLink) {
-      senderPartnerLink.netCostBalance += transfer.totalCostValue;
+      senderPartnerLink.netTransferBalance += transfer.totalTransferValue;
     } else {
       allPartners.push({
         id: `partner-${transfer.fromBusinessId}-${currentBiz.id}`,
@@ -953,7 +953,7 @@ class StoreService {
         partnerName: currentBiz.name,
         partnerPhone: currentBiz.phone,
         partnerConnectCode: currentBiz.activeShiftTransferCode || currentBiz.connectCode || 'LINKED',
-        netCostBalance: transfer.totalCostValue,
+        netTransferBalance: transfer.totalTransferValue,
         connectedAt: new Date().toISOString(),
       });
     }
@@ -963,10 +963,10 @@ class StoreService {
     this.addEvent({
       type: 'INTER_BAR_ACCEPTED',
       title: `Transfer Received: ${transfer.quantity}x ${transfer.productName}`,
-      description: `Accepted from ${transfer.fromBusinessName}. Cost of KES ${transfer.totalCostValue.toLocaleString()} added to bar inventory.`,
+      description: `Accepted from ${transfer.fromBusinessName}. Stock of KES ${transfer.totalTransferValue.toLocaleString()} added to bar inventory.`,
       actorName: attendant,
       severity: 'SUCCESS',
-      amount: transfer.totalCostValue,
+      amount: transfer.totalTransferValue,
       currency: 'KES',
     });
 
@@ -1026,14 +1026,14 @@ class StoreService {
     );
     if (!partnerLink) return;
 
-    partnerLink.netCostBalance += amount; // paying off our debt brings negative balance towards 0
+    partnerLink.netTransferBalance += amount; // paying off our debt brings negative balance towards 0
 
     // Update reciprocal link
     const reciprocal = allPartners.find(
       (p) => p.businessId === partnerBusinessId && p.partnerBusinessId === currentBiz.id
     );
     if (reciprocal) {
-      reciprocal.netCostBalance -= amount;
+      reciprocal.netTransferBalance -= amount;
     }
 
     this.set(STORAGE_KEYS.PARTNERS, allPartners);
@@ -1681,7 +1681,6 @@ class StoreService {
       productName: product.name,
       unit: product.unit || 'BOTTLE',
       sellingPrice: product.sellingPrice || 0,
-      costPrice: product.costPrice || 0,
       openingSystemCount: qty,
       openingPhysicalCount: qty,
       openingVerified: true,
@@ -1779,8 +1778,8 @@ class StoreService {
 
     if (!ssi) {
       const inv = this.getInventory().find((i) => i.productId === params.productId);
-      const openCount = params.openingPhysicalCount !== undefined 
-        ? params.openingPhysicalCount 
+      const openCount = params.openingPhysicalCount !== undefined
+        ? params.openingPhysicalCount
         : (inv ? Number(inv.quantityOnHand || 0) : 0);
       ssi = this.buildShiftStockItem(params.shiftId, product, openCount, {
         additions: params.additions !== undefined ? params.additions : 0,
@@ -2023,7 +2022,6 @@ class StoreService {
         productName: product.name,
         unit: product.unit,
         sellingPrice: product.sellingPrice,
-        costPrice: product.costPrice,
         openingSystemCount: systemCount,
         openingPhysicalCount: physicalCount,
         openingVerified: true,
@@ -2185,7 +2183,7 @@ class StoreService {
       productName: product.name,
       type: isReduce ? 'REDUCTION' : 'ADDITION',
       quantity: effectiveQty,
-      unitPrice: product.costPrice,
+      unitPrice: product.sellingPrice,
       timestamp: new Date().toISOString(),
       note: isReduce
         ? `Reduced stock: -${rawQty} units (${params.reason || 'Returned / Recount'}).`
@@ -2408,9 +2406,12 @@ class StoreService {
     const totalIncomeReturned = calculatedCashIncome + calculatedMpesaIncome;
 
     let expectedSalesRevenue = 0;
-    let totalCostOfGoodsSold = 0;
 
     const reconciledStockItems = shiftStockItems.map((item) => {
+      const isValue =
+        (item.isMeasured && item.measurementType === 'VALUE') ||
+        item.unit === 'VALUE_KES';
+
       const availableStock =
         item.openingPhysicalCount +
         item.additions +
@@ -2425,9 +2426,16 @@ class StoreService {
 
       const calculatedSold = Math.max(0, availableStock - physicalClosing);
       const overageCount = physicalClosing > availableStock ? physicalClosing - availableStock : 0;
-      const discrepancyValue = overageCount * item.sellingPrice;
+      const discrepancyValue = isValue ? overageCount : overageCount * item.sellingPrice;
 
-      expectedSalesRevenue += calculatedSold * item.sellingPrice;
+      if (isValue) {
+        // Continuous/local drink measured by monetary value (e.g. Muratina left on counter)
+        // calculatedSold is already the KES money value
+        expectedSalesRevenue += calculatedSold;
+      } else {
+        // Discrete bottle count
+        expectedSalesRevenue += calculatedSold * item.sellingPrice;
+      }
 
       return {
         ...item,
@@ -2440,10 +2448,6 @@ class StoreService {
     });
 
     const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
-    // Profit calculations removed for v1 simplicity (will be added in future)
-    const grossProfit = 0;
-    const netProfit = 0;
-
     const financialVariance =
       totalIncomeReturned + totalExpenses - expectedSalesRevenue;
 
@@ -2457,10 +2461,7 @@ class StoreService {
       calculatedCashIncome,
       totalIncomeReturned,
       expectedSalesRevenue,
-      totalCostOfGoodsSold,
       totalExpenses,
-      grossProfit,
-      netProfit,
       financialVariance,
       reconciledStockItems,
     };
@@ -2489,9 +2490,6 @@ class StoreService {
     shift.totalIncomeReturned = recon.totalIncomeReturned;
     shift.expectedSalesRevenue = recon.expectedSalesRevenue;
     shift.totalExpenses = recon.totalExpenses;
-    shift.totalCostOfGoodsSold = recon.totalCostOfGoodsSold;
-    shift.grossProfit = recon.grossProfit;
-    shift.netProfit = recon.netProfit;
     shift.financialVariance = recon.financialVariance;
     shift.closingNotes = params.closingNotes;
     shift.recordedSalesCount = recon.reconciledStockItems.reduce(
@@ -2621,7 +2619,7 @@ class StoreService {
     return 'counter';
   }
 
-  public updateProductPricing(productId: string, sellingPrice: number, costPrice: number) {
+  public updateProductPricing(productId: string, sellingPrice: number) {
     const allProducts = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
     const product = allProducts.find((p) => p.id === productId);
     if (!product) return;
@@ -2631,7 +2629,6 @@ class StoreService {
     }
 
     product.sellingPrice = sellingPrice;
-    product.costPrice = costPrice;
     if (product.isMeasured) {
       product.totalMeasuredValueKes = sellingPrice;
     }
@@ -2640,7 +2637,7 @@ class StoreService {
     this.addEvent({
       type: 'INFO',
       title: `Price Updated: ${product.name}`,
-      description: `Price: KES ${sellingPrice.toLocaleString()} | Cost: KES ${costPrice.toLocaleString()}`,
+      description: `Selling Price: KES ${sellingPrice.toLocaleString()}`,
       actorName: 'Owner Audit Desk',
       severity: 'INFO',
     });
@@ -2737,7 +2734,6 @@ class StoreService {
     name: string;
     category: import('../types').ProductCategory;
     unit: import('../types').ProductUnit;
-    costPrice: number;
     sellingPrice: number;
     reorderLevel?: number;
     volumeMl?: number;
@@ -2756,7 +2752,6 @@ class StoreService {
       name: params.name.trim(),
       category: params.category,
       unit: params.unit,
-      costPrice: Number(params.costPrice) || 0,
       sellingPrice: Number(params.sellingPrice) || 0,
       reorderLevel: Number(params.reorderLevel) || 5,
       volumeMl: params.volumeMl ? Number(params.volumeMl) : undefined,
@@ -2794,7 +2789,6 @@ class StoreService {
         productName: newProduct.name,
         unit: newProduct.unit,
         sellingPrice: newProduct.sellingPrice,
-        costPrice: newProduct.costPrice,
         openingSystemCount: 0,
         openingPhysicalCount: 0,
         openingVerified: true,
@@ -2833,7 +2827,6 @@ class StoreService {
   ): Array<{
     name: string;
     sellingPrice: number;
-    costPrice?: number;
     category: import('../types').ProductCategory;
     unit: import('../types').ProductUnit;
     initialStock?: number;
@@ -2947,13 +2940,11 @@ class StoreService {
       const category: import('../types').ProductCategory = validCats.includes(rawCat as any) ? (rawCat as any) : guessedCat;
 
       const sellingPrice = isNaN(rawSell) ? 0 : rawSell;
-      const costPrice = rawCost !== undefined && !isNaN(rawCost) ? rawCost : Math.round(sellingPrice * 0.75);
       const stock = rawStock !== undefined && !isNaN(rawStock) ? rawStock : defaultStock;
 
       return {
         name: rawName,
         sellingPrice,
-        costPrice,
         category,
         unit: 'BOTTLE' as import('../types').ProductUnit,
         initialStock: stock,
@@ -2969,7 +2960,6 @@ class StoreService {
     items: Array<{
       name: string;
       sellingPrice: number;
-      costPrice?: number;
       category?: import('../types').ProductCategory;
       unit?: import('../types').ProductUnit;
       initialStock?: number;
@@ -2986,10 +2976,6 @@ class StoreService {
       if (!cleanName) return;
 
       const sellPrice = Number(item.sellingPrice) || 0;
-      const costPrice =
-        item.costPrice !== undefined && !isNaN(Number(item.costPrice))
-          ? Number(item.costPrice)
-          : Math.round(sellPrice * 0.75); // Realistic 25% bar margin default
 
       const newProduct: Product = {
         id: `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -2997,7 +2983,6 @@ class StoreService {
         name: cleanName,
         category: item.category || 'BEER',
         unit: item.unit || 'BOTTLE',
-        costPrice,
         sellingPrice: sellPrice,
         reorderLevel: Number(item.reorderLevel) || 5,
         isArchived: false,
@@ -3090,7 +3075,7 @@ class StoreService {
     this.addEvent({
       type: 'INFO',
       title: `Catalog Updated: ${product.name}`,
-      description: `Price: KES ${product.sellingPrice} | Cost: KES ${product.costPrice}`,
+      description: `Selling Price: KES ${product.sellingPrice}`,
       actorName: 'Owner Audit Desk',
       severity: 'INFO',
     });

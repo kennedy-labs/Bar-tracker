@@ -202,8 +202,8 @@ export const PartnerBarsManager: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {partners.map((p) => {
-              const owesUs = p.netCostBalance > 0;
-              const weOwe = p.netCostBalance < 0;
+              const owesUs = p.netTransferBalance > 0;
+              const weOwe = p.netTransferBalance < 0;
 
               return (
                 <div
@@ -227,7 +227,7 @@ export const PartnerBarsManager: React.FC = () => {
                     <button
                       onClick={() => {
                         setSettlingPartner(p);
-                        setSettleAmount(String(Math.abs(p.netCostBalance) || ''));
+                        setSettleAmount(String(Math.abs(p.netTransferBalance) || ''));
                       }}
                       className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium transition-colors cursor-pointer"
                     >
@@ -241,11 +241,11 @@ export const PartnerBarsManager: React.FC = () => {
                     <div>
                       {owesUs ? (
                         <span className="font-bold text-emerald-400">
-                          + KES {Math.abs(p.netCostBalance).toLocaleString()} (They owe us)
+                          + KES {Math.abs(p.netTransferBalance).toLocaleString()} (They owe us)
                         </span>
                       ) : weOwe ? (
                         <span className="font-bold text-amber-400">
-                          - KES {Math.abs(p.netCostBalance).toLocaleString()} (We owe them)
+                          - KES {Math.abs(p.netTransferBalance).toLocaleString()} (We owe them)
                         </span>
                       ) : (
                         <span className="font-bold text-slate-400">
@@ -290,7 +290,7 @@ export const PartnerBarsManager: React.FC = () => {
                   <th className="p-3">Direction</th>
                   <th className="p-3">Partner Bar</th>
                   <th className="p-3">Drink Transferred</th>
-                  <th className="p-3 text-right">Cost Value</th>
+                  <th className="p-3 text-right">Stock Value</th>
                   <th className="p-3 text-center">Status</th>
                 </tr>
               </thead>
@@ -323,7 +323,7 @@ export const PartnerBarsManager: React.FC = () => {
                         <span className="text-white font-bold">{t.quantity}x</span> {t.productName}
                       </td>
                       <td className="p-3 text-right font-bold text-slate-200">
-                        KES {t.totalCostValue.toLocaleString()}
+                        KES {t.totalTransferValue.toLocaleString()}
                       </td>
                       <td className="p-3 text-center font-sans">
                         <span

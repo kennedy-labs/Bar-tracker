@@ -91,7 +91,6 @@ export const CatalogManager: React.FC = () => {
   const [name, setName] = useState('');
   const [category, setCategory] = useState<ProductCategory>('BEER');
   const [unit, setUnit] = useState<ProductUnit>('BOTTLE');
-  const [costPrice, setCostPrice] = useState('');
   const [sellingPrice, setSellingPrice] = useState('');
   const [reorderLevel, setReorderLevel] = useState('5');
   const [initialStock, setInitialStock] = useState('');
@@ -104,13 +103,11 @@ export const CatalogManager: React.FC = () => {
   const [measuredName, setMeasuredName] = useState('');
   const [measuredCategory, setMeasuredCategory] = useState<ProductCategory>('TRADITIONAL_BREW');
   const [measuredStock, setMeasuredStock] = useState('1500');
-  const [measuredCost, setMeasuredCost] = useState('1000');
   const [measuredSell, setMeasuredSell] = useState('1500');
   const [measuredError, setMeasuredError] = useState<string | null>(null);
 
   // Quick Inline Price Editing
   const [inlineEditId, setInlineEditId] = useState<string | null>(null);
-  const [inlineCost, setInlineCost] = useState('');
   const [inlineSell, setInlineSell] = useState('');
 
   const allProducts = store.getProducts(true);
@@ -151,10 +148,6 @@ export const CatalogManager: React.FC = () => {
     const qty = inv ? inv.quantityOnHand : 0;
     return qty <= (p.reorderLevel ?? 5);
   }).length;
-  const totalWholesaleValue = activeProducts.reduce((sum, p) => {
-    const inv = inventory.find((i) => i.productId === p.id);
-    return sum + (inv ? inv.quantityOnHand * p.costPrice : 0);
-  }, 0);
   const totalRetailValue = activeProducts.reduce((sum, p) => {
     const inv = inventory.find((i) => i.productId === p.id);
     return sum + (inv ? inv.quantityOnHand * p.sellingPrice : 0);
@@ -189,179 +182,153 @@ export const CatalogManager: React.FC = () => {
 
  // Open Add Modal
  const handleOpenAdd = () => {
- setName('');
- setCategory('BEER');
- setUnit('BOTTLE');
- setCostPrice('');
- setSellingPrice('');
- setReorderLevel('5');
- setInitialStock('');
- setVolumeMl('');
- setFormError(null);
- setEditingProduct(null);
- setShowAddModal(true);
+   setName('');
+   setCategory('BEER');
+   setUnit('BOTTLE');
+   setSellingPrice('');
+   setReorderLevel('5');
+   setInitialStock('');
+   setVolumeMl('');
+   setFormError(null);
+   setEditingProduct(null);
+   setShowAddModal(true);
  };
 
  // Open Add Measured Modal
- // Open Add Measured Modal
  const handleOpenAddMeasured = () => {
- setMeasuredEditingProduct(null);
- setMeasuredName('');
- setMeasuredCategory('TRADITIONAL_BREW');
- setMeasuredStock('1500');
- setMeasuredCost('1000');
- setMeasuredSell('1500');
- setMeasuredError(null);
- setShowMeasuredModal(true);
+   setMeasuredEditingProduct(null);
+   setMeasuredName('');
+   setMeasuredCategory('TRADITIONAL_BREW');
+   setMeasuredStock('1500');
+   setMeasuredSell('1500');
+   setMeasuredError(null);
+   setShowMeasuredModal(true);
  };
 
  // Open Edit Modal (Auto-routes measured products to the measured modal)
  const handleOpenEdit = (p: Product) => {
- if (p.isMeasured) {
- setMeasuredEditingProduct(p);
- setMeasuredName(p.name);
- setMeasuredCategory(p.category);
- const invItem = inventory.find((i) => i.productId === p.id);
- setMeasuredStock(String(invItem?.quantityOnHand ?? p.totalMeasuredValueKes ?? p.sellingPrice ?? 0));
- setMeasuredCost(String(p.costPrice));
- setMeasuredSell(String(p.sellingPrice));
- setMeasuredError(null);
- setShowMeasuredModal(true);
- return;
- }
+   if (p.isMeasured) {
+     setMeasuredEditingProduct(p);
+     setMeasuredName(p.name);
+     setMeasuredCategory(p.category);
+     const invItem = inventory.find((i) => i.productId === p.id);
+     setMeasuredStock(String(invItem?.quantityOnHand ?? p.totalMeasuredValueKes ?? p.sellingPrice ?? 0));
+     setMeasuredSell(String(p.sellingPrice));
+     setMeasuredError(null);
+     setShowMeasuredModal(true);
+     return;
+   }
 
- setEditingProduct(p);
- setName(p.name);
- setCategory(p.category);
- setUnit(p.unit);
- setCostPrice(String(p.costPrice));
- setSellingPrice(String(p.sellingPrice));
- setReorderLevel(String(p.reorderLevel || 5));
- setInitialStock('0');
- setVolumeMl(p.volumeMl ? String(p.volumeMl) : '');
- setFormError(null);
- setShowAddModal(true);
+   setEditingProduct(p);
+   setName(p.name);
+   setCategory(p.category);
+   setUnit(p.unit);
+   setSellingPrice(String(p.sellingPrice));
+   setReorderLevel(String(p.reorderLevel || 5));
+   setInitialStock('0');
+   setVolumeMl(p.volumeMl ? String(p.volumeMl) : '');
+   setFormError(null);
+   setShowAddModal(true);
  };
 
  // Save Add or Edit
  const handleSubmitProduct = (e: React.FormEvent) => {
- e.preventDefault();
- setFormError(null);
+   e.preventDefault();
+   setFormError(null);
 
- const cost = parseFloat(costPrice);
- const sell = parseFloat(sellingPrice);
- const reorder = parseInt(reorderLevel, 10) || 5;
- const stock = parseInt(initialStock, 10) || 0;
- const vol = volumeMl ? parseInt(volumeMl, 10) : undefined;
+   const sell = parseFloat(sellingPrice);
+   const reorder = parseInt(reorderLevel, 10) || 5;
+   const stock = parseInt(initialStock, 10) || 0;
+   const vol = volumeMl ? parseInt(volumeMl, 10) : undefined;
 
- if (!name.trim()) {
- setFormError('Please enter a drink name.');
- return;
- }
+   if (!name.trim()) {
+     setFormError('Please enter a drink name.');
+     return;
+   }
 
- if (isNaN(cost) || cost < 0) {
- setFormError('Please enter a valid wholesale cost price.');
- return;
- }
+   if (isNaN(sell) || sell <= 0) {
+     setFormError('Please enter a valid retail selling price.');
+     return;
+   }
 
- if (isNaN(sell) || sell <= 0) {
- setFormError('Please enter a valid retail selling price.');
- return;
- }
+   if (editingProduct) {
+     // Updating existing product
+     store.updateProduct(editingProduct.id, {
+       name: name.trim(),
+       category,
+       unit,
+       sellingPrice: sell,
+       reorderLevel: reorder,
+       volumeMl: vol,
+     });
+   } else {
+     // Adding new product
+     store.addProduct({
+       name: name.trim(),
+       category,
+       unit,
+       sellingPrice: sell,
+       reorderLevel: reorder,
+       volumeMl: vol,
+       initialStock: stock,
+     });
+   }
 
- if (sell < cost) {
- setFormError('Selling price cannot be less than wholesale cost price.');
- return;
- }
-
- if (editingProduct) {
- // Updating existing product
- store.updateProduct(editingProduct.id, {
- name: name.trim(),
- category,
- unit,
- costPrice: cost,
- sellingPrice: sell,
- reorderLevel: reorder,
- volumeMl: vol,
- });
- } else {
- // Adding new product
- store.addProduct({
- name: name.trim(),
- category,
- unit,
- costPrice: cost,
- sellingPrice: sell,
- reorderLevel: reorder,
- volumeMl: vol,
- initialStock: stock,
- });
- }
-
- setShowAddModal(false);
- setEditingProduct(null);
+   setShowAddModal(false);
+   setEditingProduct(null);
  };
 
  // Save Add or Edit Measured Product (Pure Value Measurement)
  const handleSubmitMeasuredProduct = (e: React.FormEvent) => {
- e.preventDefault();
- setMeasuredError(null);
+   e.preventDefault();
+   setMeasuredError(null);
 
- if (!measuredName.trim()) {
- setMeasuredError('Please enter a drink name (e.g. Makali, Muratina).');
- return;
- }
+   if (!measuredName.trim()) {
+     setMeasuredError('Please enter a drink name (e.g. Makali, Muratina).');
+     return;
+   }
 
- const cost = parseFloat(measuredCost);
- const sell = parseFloat(measuredSell);
- const stock = parseFloat(measuredStock);
+   const sell = parseFloat(measuredSell);
+   const stock = parseFloat(measuredStock);
 
- if (isNaN(cost) || cost < 0) {
- setMeasuredError('Please enter a valid cost.');
- return;
- }
+   if (isNaN(sell) || sell <= 0) {
+     setMeasuredError('Please enter a valid price.');
+     return;
+   }
 
- if (isNaN(sell) || sell <= 0) {
- setMeasuredError('Please enter a valid price.');
- return;
- }
+   const cleanStock = isNaN(stock) || stock < 0 ? 0 : stock;
 
- const cleanStock = isNaN(stock) || stock < 0 ? 0 : stock;
+   if (measuredEditingProduct) {
+     store.updateProduct(measuredEditingProduct.id, {
+       name: measuredName.trim(),
+       category: measuredCategory,
+       unit: 'VALUE_KES',
+       sellingPrice: sell,
+       isMeasured: true,
+       measurementType: 'VALUE',
+       measureUnitLabel: 'KES Value',
+       totalMeasuredValueKes: sell,
+     });
 
- if (measuredEditingProduct) {
- store.updateProduct(measuredEditingProduct.id, {
- name: measuredName.trim(),
- category: measuredCategory,
- unit: 'VALUE_KES',
- costPrice: cost,
- sellingPrice: sell,
- isMeasured: true,
- measurementType: 'VALUE',
- measureUnitLabel: 'KES Value',
- totalMeasuredValueKes: sell,
- });
+     // Update on-shelf inventory
+     store.adjustProductStock(measuredEditingProduct.id, cleanStock);
+   } else {
+     store.addProduct({
+       name: measuredName.trim(),
+       category: measuredCategory,
+       unit: 'VALUE_KES',
+       sellingPrice: sell,
+       initialStock: cleanStock,
+       reorderLevel: 5,
+       isMeasured: true,
+       measurementType: 'VALUE',
+       measureUnitLabel: 'KES Value',
+       totalMeasuredValueKes: sell,
+     });
+   }
 
- // Update on-shelf inventory
- store.adjustProductStock(measuredEditingProduct.id, cleanStock);
- } else {
- store.addProduct({
- name: measuredName.trim(),
- category: measuredCategory,
- unit: 'VALUE_KES',
- costPrice: cost,
- sellingPrice: sell,
- initialStock: cleanStock,
- reorderLevel: 5,
- isMeasured: true,
- measurementType: 'VALUE',
- measureUnitLabel: 'KES Value',
- totalMeasuredValueKes: sell,
- });
- }
-
- setShowMeasuredModal(false);
- setMeasuredEditingProduct(null);
+   setShowMeasuredModal(false);
+   setMeasuredEditingProduct(null);
  };
 
  // Handle Archive or Delete
@@ -378,12 +345,11 @@ export const CatalogManager: React.FC = () => {
 
  // Save inline edit
  const handleSaveInline = (productId: string) => {
- const cost = parseFloat(inlineCost);
- const sell = parseFloat(inlineSell);
- if (!isNaN(cost) && !isNaN(sell) && sell >= 0 && cost >= 0) {
- store.updateProductPricing(productId, sell, cost);
- }
- setInlineEditId(null);
+   const sell = parseFloat(inlineSell);
+   if (!isNaN(sell) && sell >= 0) {
+     store.updateProductPricing(productId, sell);
+   }
+   setInlineEditId(null);
  };
 
  const handleRestoreTemplate = () => {
@@ -407,7 +373,7 @@ export const CatalogManager: React.FC = () => {
               </h2>
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              Unified catalog & stock audit. Manage menu drinks, wholesale costs & selling prices, and record physical on-hand stock balances directly.
+              Unified catalog & stock audit. Manage menu drinks, selling prices, and record physical on-hand stock balances directly.
             </p>
           </div>
 
@@ -536,7 +502,7 @@ export const CatalogManager: React.FC = () => {
               KES {totalRetailValue.toLocaleString()}
             </div>
             <div className="text-[10px] text-slate-400 font-mono">
-              Cost: KES {totalWholesaleValue.toLocaleString()}
+              Retail / Selling Worth
             </div>
           </div>
         </div>
@@ -657,7 +623,6 @@ export const CatalogManager: React.FC = () => {
                 <thead className="bg-[#151D2C] text-slate-400 font-mono text-[10px] uppercase border-b border-slate-800">
                   <tr>
                     <th className="p-3.5">Product Name & Category</th>
-                    <th className="p-3.5 text-center">Wholesale Cost</th>
                     <th className="p-3.5 text-center">Selling Price</th>
                     <th className="p-3.5 text-center text-emerald-400">Stock On Hand (Editable Audit)</th>
                     <th className="p-3.5 text-center">Status</th>
@@ -709,25 +674,6 @@ export const CatalogManager: React.FC = () => {
                               </>
                             )}
                           </div>
-                        </td>
-
-                        {/* Wholesale Cost */}
-                        <td className="p-3.5 text-center">
-                          {isInline ? (
-                            <div className="inline-flex items-center gap-1">
-                              <span className="text-slate-500 text-[10px]">KES</span>
-                              <input
-                                type="number"
-                                value={inlineCost}
-                                onChange={(e) => setInlineCost(e.target.value)}
-                                className="w-16 px-1.5 py-0.5 bg-[#151D2C] border border-slate-700 rounded text-center text-white"
-                              />
-                            </div>
-                          ) : (
-                            <span className="text-slate-400">
-                              KES {p.costPrice.toLocaleString()}
-                            </span>
-                          )}
                         </td>
 
                         {/* Selling Price */}
@@ -852,7 +798,6 @@ export const CatalogManager: React.FC = () => {
                                   <button
                                     onClick={() => {
                                       setInlineEditId(p.id);
-                                      setInlineCost(String(p.costPrice));
                                       setInlineSell(String(p.sellingPrice));
                                     }}
                                     className="px-2 py-1 rounded-lg bg-[#151D2C] hover:bg-slate-800 text-[10px] text-slate-300 hover:text-white border border-slate-700 cursor-pointer"
@@ -1065,15 +1010,6 @@ export const CatalogManager: React.FC = () => {
                     <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between font-mono text-xs">
                       <div className="space-y-0.5">
                         <div className="text-[10px] text-slate-500 uppercase font-sans">
-                          {p.isMeasured ? 'Batch / Unit Cost' : 'Wholesale Cost'}
-                        </div>
-                        <div className="text-slate-300 font-semibold">
-                          KES {p.costPrice.toLocaleString()}
-                        </div>
-                      </div>
-
-                      <div className="space-y-0.5 text-center">
-                        <div className="text-[10px] text-slate-500 uppercase font-sans">
                           {p.isMeasured && (p.measurementType === 'VALUE' || p.unit === 'VALUE_KES')
                             ? 'Selling Value'
                             : 'Selling Price'}
@@ -1090,7 +1026,6 @@ export const CatalogManager: React.FC = () => {
                         <button
                           onClick={() => {
                             setInlineEditId(p.id);
-                            setInlineCost(String(p.costPrice));
                             setInlineSell(String(p.sellingPrice));
                           }}
                           className="py-1 px-2.5 rounded-lg bg-[#0E1420] hover:bg-slate-800 text-[10px] text-slate-400 hover:text-white border border-slate-800 cursor-pointer"
@@ -1103,33 +1038,24 @@ export const CatalogManager: React.FC = () => {
                     /* Inline Price Editor */
                     <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 text-xs font-mono">
                       <div className="flex-1">
-                        <span className="text-[10px] text-slate-400 block font-sans">Cost (KES)</span>
-                        <input
-                          type="number"
-                          value={inlineCost}
-                          onChange={(e) => setInlineCost(e.target.value)}
-                          className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-2 py-1.5 text-white"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <span className="text-[10px] text-slate-400 block font-sans">Sell (KES)</span>
+                        <span className="text-[10px] text-slate-400 block font-sans">Selling Price (KES)</span>
                         <input
                           type="number"
                           value={inlineSell}
                           onChange={(e) => setInlineSell(e.target.value)}
-                          className="w-full bg-[#0E1420] border border-emerald-500 rounded-xl px-2 py-1.5 text-emerald-400 font-bold"
+                          className="w-full bg-[#0E1420] border border-emerald-500 rounded-xl px-2 py-1.5 text-white font-bold"
                         />
                       </div>
-                      <div className="flex items-center gap-1 pt-3.5">
+                      <div className="flex items-center gap-1 pt-4">
                         <button
                           onClick={() => handleSaveInline(p.id)}
-                          className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
+                          className="p-1.5 rounded-xl bg-emerald-500 text-slate-950 font-bold hover:bg-emerald-400 cursor-pointer"
                         >
                           <Check className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => setInlineEditId(null)}
-                          className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                          className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -1225,47 +1151,25 @@ export const CatalogManager: React.FC = () => {
  </div>
  </div>
 
- {/* Wholesale Cost & Retail Price */}
- <div className="grid grid-cols-2 gap-3">
+ {/* Selling Price */}
  <div>
- <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
- Wholesale Cost (KES)
- </label>
- <div className="relative">
- <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400">
- KES
- </span>
- <input
- type="number"
- step="any"
- min="0"
- required
- value={costPrice}
- onChange={(e) => setCostPrice(e.target.value)}
- className="w-full bg-[#0E1420] border border-slate-700 rounded-xl pl-12 pr-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-emerald-500"
- />
- </div>
- </div>
-
- <div>
- <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
- Selling Price (KES)
- </label>
- <div className="relative">
- <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-emerald-400">
- KES
- </span>
- <input
- type="number"
- step="any"
- min="1"
- required
- value={sellingPrice}
- onChange={(e) => setSellingPrice(e.target.value)}
- className="w-full bg-[#0E1420] border border-emerald-500/80 rounded-xl pl-12 pr-3 py-2 text-sm font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-400"
- />
- </div>
- </div>
+   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+     Selling Price (KES)
+   </label>
+   <div className="relative">
+     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-emerald-400">
+       KES
+     </span>
+     <input
+       type="number"
+       step="any"
+       min="1"
+       required
+       value={sellingPrice}
+       onChange={(e) => setSellingPrice(e.target.value)}
+       className="w-full bg-[#0E1420] border border-emerald-500/80 rounded-xl pl-12 pr-3 py-2 text-sm font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-400"
+     />
+   </div>
  </div>
 
 
@@ -1447,34 +1351,33 @@ export const CatalogManager: React.FC = () => {
  <form onSubmit={handleSubmitMeasuredProduct} className="space-y-4">
  {/* Quick Preset Staples */}
  {!measuredEditingProduct && (
- <div>
- <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
- Quick Staples
- </label>
- <div className="flex flex-wrap gap-1.5">
- {[
- { name: 'Makali', price: '1500', cost: '1000' },
- { name: 'Muratina', price: '1500', cost: '1000' },
- { name: 'Busaa / Local Brew', price: '1200', cost: '800' },
- { name: 'Keg Draught', price: '2000', cost: '1400' },
- { name: 'Palm Wine (Mnazi)', price: '1000', cost: '600' },
- ].map((preset) => (
- <button
- key={preset.name}
- type="button"
- onClick={() => {
- setMeasuredName(preset.name);
- setMeasuredSell(preset.price);
- setMeasuredCost(preset.cost);
- setMeasuredStock(preset.price);
- }}
- className="py-1 px-2.5 rounded-lg bg-[#0E1420] hover:bg-cyan-950 border border-slate-800 hover:border-cyan-700 text-xs text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
- >
- +{preset.name}
- </button>
- ))}
- </div>
- </div>
+   <div>
+     <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+       Quick Staples
+     </label>
+     <div className="flex flex-wrap gap-1.5">
+       {[
+         { name: 'Makali', price: '1500' },
+         { name: 'Muratina', price: '1500' },
+         { name: 'Busaa / Local Brew', price: '1200' },
+         { name: 'Keg Draught', price: '2000' },
+         { name: 'Palm Wine (Mnazi)', price: '1000' },
+       ].map((preset) => (
+         <button
+           key={preset.name}
+           type="button"
+           onClick={() => {
+             setMeasuredName(preset.name);
+             setMeasuredSell(preset.price);
+             setMeasuredStock(preset.price);
+           }}
+           className="py-1 px-2.5 rounded-lg bg-[#0E1420] hover:bg-cyan-950 border border-slate-800 hover:border-cyan-700 text-xs text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
+         >
+           +{preset.name}
+         </button>
+       ))}
+     </div>
+   </div>
  )}
 
  {/* Drink Name */}
@@ -1512,62 +1415,44 @@ export const CatalogManager: React.FC = () => {
 
  {/* Pricing & Stock Fields (Pure Value) */}
  <div className="space-y-3 p-3.5 rounded-2xl bg-[#0E1420] border border-cyan-900/60">
- <div className="grid grid-cols-2 gap-3">
- <div>
- <label className="block text-xs font-semibold text-slate-300 mb-1">
- Price (KES)
- </label>
- <input
- type="number"
- step="any"
- min="1"
- required
- value={measuredSell}
- onChange={(e) => {
- setMeasuredSell(e.target.value);
- if (!measuredEditingProduct && measuredStock === measuredSell) {
- setMeasuredStock(e.target.value);
- }
- }}
- className="w-full bg-[#121824] border border-cyan-500 rounded-xl px-3 py-2 text-sm font-mono font-bold text-cyan-300 focus:outline-none"
- />
- <span className="text-[10px] text-slate-500">Retail selling price</span>
- </div>
+   <div>
+     <label className="block text-xs font-semibold text-slate-300 mb-1">
+       Retail Value / Price (KES)
+     </label>
+     <input
+       type="number"
+       step="any"
+       min="1"
+       required
+       value={measuredSell}
+       onChange={(e) => {
+         setMeasuredSell(e.target.value);
+         if (!measuredEditingProduct && measuredStock === measuredSell) {
+           setMeasuredStock(e.target.value);
+         }
+       }}
+       className="w-full bg-[#121824] border border-cyan-500 rounded-xl px-3 py-2 text-sm font-mono font-bold text-cyan-300 focus:outline-none"
+     />
+     <span className="text-[10px] text-slate-500">Total batch selling value in KES</span>
+   </div>
 
- <div>
- <label className="block text-xs font-semibold text-slate-300 mb-1">
- Cost (KES)
- </label>
- <input
- type="number"
- step="any"
- min="0"
- required
- value={measuredCost}
- onChange={(e) => setMeasuredCost(e.target.value)}
- className="w-full bg-[#121824] border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono text-white focus:outline-none"
- />
- <span className="text-[10px] text-slate-500">Wholesale / brew cost</span>
- </div>
- </div>
-
- <div>
- <label className="block text-xs font-semibold text-slate-300 mb-1">
- Current Stock on Shelf (KES)
- </label>
- <input
- type="number"
- step="any"
- min="0"
- required
- value={measuredStock}
- onChange={(e) => setMeasuredStock(e.target.value)}
- className="w-full bg-[#121824] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
- />
- <span className="text-[10px] text-slate-400">
- KES worth of drink currently remaining on the counter
- </span>
- </div>
+   <div>
+     <label className="block text-xs font-semibold text-slate-300 mb-1">
+       Current Stock on Shelf (KES)
+     </label>
+     <input
+       type="number"
+       step="any"
+       min="0"
+       required
+       value={measuredStock}
+       onChange={(e) => setMeasuredStock(e.target.value)}
+       className="w-full bg-[#121824] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
+     />
+     <span className="text-[10px] text-slate-400">
+       KES worth of drink currently remaining on the counter
+     </span>
+   </div>
  </div>
 
 

@@ -784,7 +784,7 @@ class NeonService {
             ${p.name},
             ${p.category},
             ${p.unit},
-            ${p.costPrice || 0},
+            0,
             ${p.sellingPrice || 0},
             ${p.reorderLevel || 5},
             ${p.volumeMl || null},
@@ -859,9 +859,9 @@ class NeonService {
             ${s.calculatedCashIncome || null},
             ${s.expectedSalesRevenue || 0},
             ${s.totalExpenses || null},
-            ${s.totalCostOfGoodsSold || null},
-            ${s.grossProfit || 0},
-            ${s.netProfit || 0},
+            null,
+            0,
+            0,
             ${s.financialVariance || 0},
             ${s.closingNotes || ''},
             ${JSON.stringify({
@@ -1080,8 +1080,8 @@ class NeonService {
             ${t.productId},
             ${t.productName},
             ${t.quantity},
-            ${t.unitCost},
-            ${t.totalCostValue},
+            ${t.unitPrice || 0},
+            ${t.totalTransferValue || 0},
             ${t.status},
             ${t.dispatchedAt},
             ${t.acceptedAt || null},
@@ -1110,7 +1110,7 @@ class NeonService {
             ${p.partnerName},
             ${p.partnerPhone || ''},
             ${p.partnerConnectCode || ''},
-            ${p.netCostBalance || 0},
+            ${p.netTransferBalance || 0},
             ${p.connectedAt}
           )
           ON CONFLICT (id) DO UPDATE SET
@@ -1141,7 +1141,7 @@ class NeonService {
             ${item.productName},
             ${item.unit || 'BOTTLE'},
             ${item.sellingPrice || 0},
-            ${item.costPrice || 0},
+            0,
             ${item.openingSystemCount || 0},
             ${item.openingPhysicalCount || 0},
             ${item.openingVerified !== false},
@@ -1256,7 +1256,6 @@ class NeonService {
         name: p.name,
         category: p.category,
         unit: p.unit,
-        costPrice: Number(p.cost_price || 0),
         sellingPrice: Number(p.selling_price || 0),
         reorderLevel: Number(p.reorder_level || 5),
         volumeMl: p.volume_ml ? Number(p.volume_ml) : undefined,
@@ -1297,9 +1296,6 @@ class NeonService {
           calculatedCashIncome: s.calculated_cash_income ? Number(s.calculated_cash_income) : undefined,
           expectedSalesRevenue: Number(s.expected_sales_revenue || 0),
           totalExpenses: s.total_expenses ? Number(s.total_expenses) : undefined,
-          totalCostOfGoodsSold: s.total_cost_of_goods_sold ? Number(s.total_cost_of_goods_sold) : undefined,
-          grossProfit: Number(s.gross_profit || 0),
-          netProfit: Number(s.net_profit || 0),
           financialVariance: Number(s.financial_variance || 0),
           closingNotes: s.notes,
         };
@@ -1395,8 +1391,8 @@ class NeonService {
         productId: t.product_id,
         productName: t.product_name,
         quantity: Number(t.quantity),
-        unitCost: Number(t.unit_cost),
-        totalCostValue: Number(t.total_cost_value),
+        unitPrice: Number(t.unit_cost || 0),
+        totalTransferValue: Number(t.total_cost_value || 0),
         status: t.status,
         dispatchedAt: t.dispatched_at,
         acceptedAt: t.accepted_at,
@@ -1411,14 +1407,14 @@ class NeonService {
         partnerName: p.partner_name,
         partnerPhone: p.partner_phone,
         partnerConnectCode: p.partner_connect_code,
-        netCostBalance: Number(p.net_cost_balance || 0),
+        netTransferBalance: Number(p.net_cost_balance || 0),
         connectedAt: p.connected_at,
       }));
 
       // Pull shift stock items across active and historical shifts
       const ssiRows = await sql`
-        SELECT * FROM shift_stock_items 
-        WHERE business_id = ${businessId} 
+        SELECT * FROM shift_stock_items
+        WHERE business_id = ${businessId}
         ORDER BY updated_at DESC;
       `;
       const shiftStockItems: ShiftStockItem[] = ssiRows.map((row) => ({
@@ -1428,7 +1424,6 @@ class NeonService {
         productName: row.product_name,
         unit: row.unit || 'BOTTLE',
         sellingPrice: Number(row.selling_price || 0),
-        costPrice: Number(row.cost_price || 0),
         openingSystemCount: Number(row.opening_system_count || 0),
         openingPhysicalCount: Number(row.opening_physical_count || 0),
         openingVerified: Boolean(row.opening_verified),

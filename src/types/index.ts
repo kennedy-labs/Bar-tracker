@@ -39,8 +39,7 @@ export interface Product {
   name: string;
   category: ProductCategory;
   unit: ProductUnit;
-  costPrice: number; // in KES
-  sellingPrice: number; // in KES
+  sellingPrice: number; // in KES (retail / counter selling price)
   reorderLevel: number;
   volumeMl?: number;
   isArchived?: boolean;
@@ -94,7 +93,6 @@ export interface ShiftStockItem {
   productName: string;
   unit: ProductUnit;
   sellingPrice: number;
-  costPrice: number;
   openingSystemCount: number;
   openingPhysicalCount: number;
   openingVerified: boolean;
@@ -137,11 +135,8 @@ export interface Shift {
   calculatedMpesaIncome?: number; // closingMpesaBalance - openingMpesaBalance
   calculatedCashIncome?: number; // closingCashActual - openingCashFloat
   totalIncomeReturned?: number; // calculatedCashIncome + calculatedMpesaIncome
-  expectedSalesRevenue?: number; // sum(item.recordedSales * item.sellingPrice)
+  expectedSalesRevenue?: number; // sum(item.recordedSales * item.sellingPrice) or sum of sales value
   totalExpenses?: number; // Cash + Mpesa expenses
-  totalCostOfGoodsSold?: number; // sum(item.recordedSales * item.costPrice)
-  grossProfit?: number; // expectedSalesRevenue - totalCostOfGoodsSold
-  netProfit?: number; // grossProfit - totalExpenses
   financialVariance?: number; // (totalIncomeReturned + totalExpenses) - expectedSalesRevenue
 
   // Audit notes
@@ -322,7 +317,7 @@ export interface BusinessPartner {
   partnerName: string;
   partnerPhone: string;
   partnerConnectCode: string;
-  netCostBalance: number; // Positive = partner owes us cost value; Negative = we owe partner
+  netTransferBalance: number; // Positive = partner owes us stock value; Negative = we owe partner
   connectedAt: string;
 }
 
@@ -343,8 +338,8 @@ export interface InterBusinessTransfer {
   productId: string;
   productName: string;
   quantity: number;
-  unitCost: number;       // cost price per unit
-  totalCostValue: number; // quantity * unitCost
+  unitPrice: number;       // selling / retail price per unit
+  totalTransferValue: number; // quantity * unitPrice
 
   status: TransferStatus;
   dispatchedAt: string;
