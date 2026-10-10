@@ -1694,6 +1694,9 @@ class StoreService {
       measurementType: product.measurementType,
       measureUnitLabel: product.measureUnitLabel,
       totalMeasuredValueKes: product.totalMeasuredValueKes,
+      fullWeightKg: product.fullWeightKg,
+      emptyWeightKg: product.emptyWeightKg,
+      pricePerKg: product.pricePerKg || (product.measurementType === 'WEIGHT' ? product.sellingPrice : undefined),
     };
   }
 
@@ -1966,11 +1969,17 @@ class StoreService {
       if (diff !== 0) {
         hasOpeningInconsistency = true;
 
-        const isVal = product.isMeasured && (product.measurementType === 'VALUE' || product.unit === 'VALUE_KES');
+        const isWeight =
+          product.measurementType === 'WEIGHT' ||
+          product.unit === 'KG' ||
+          (product.isMeasured && (product.fullWeightKg || 0) > 0);
+        const isVal = !isWeight && product.isMeasured && (product.measurementType === 'VALUE' || product.unit === 'VALUE_KES');
+        const priceRate = isWeight ? (product.pricePerKg || product.sellingPrice || 150) : product.sellingPrice;
+
         if (diff < 0) {
           // Shortage: previous attendant held accountable
           const shortageQty = Math.abs(diff);
-          const moneyVal = isVal ? shortageQty : shortageQty * product.sellingPrice;
+          const moneyVal = isVal ? shortageQty : Math.round(shortageQty * priceRate * 100) / 100;
           discrepancies.unshift({
             id: `disc-${Date.now()}-${product.id}`,
             shiftId,
@@ -1985,17 +1994,19 @@ class StoreService {
             actual: physicalCount,
             variance: diff, // negative e.g. -2
             monetaryValue: moneyVal,
-            severity: (isVal ? shortageQty >= 300 : shortageQty >= 3) ? 'HIGH' : 'MEDIUM',
+            severity: (isVal ? shortageQty >= 300 : isWeight ? shortageQty >= 2 : shortageQty >= 3) ? 'HIGH' : 'MEDIUM',
             status: 'FLAGGED',
             ownerNotes: isVal
               ? `Opening handover shortage: KES ${shortageQty.toLocaleString()} value less than expected left by ${prevAttendant}. Reported by incoming attendant ${params.workerName}.`
+              : isWeight
+              ? `Opening handover shortage: ${shortageQty} kg (${shortageQty} kg × KES ${priceRate} = KES ${moneyVal.toLocaleString()}) less than expected left by ${prevAttendant}. Weighed on counter scale.`
               : `Opening handover shortage: ${shortageQty} bottle(s) fewer than expected left by ${prevAttendant}. Reported by incoming attendant ${params.workerName}.`,
             timestamp: new Date().toISOString(),
           });
         } else {
           // Surplus: previous attendant credited to balance the scale!
           const surplusQty = diff;
-          const moneyVal = isVal ? surplusQty : surplusQty * product.sellingPrice;
+          const moneyVal = isVal ? surplusQty : Math.round(surplusQty * priceRate * 100) / 100;
           discrepancies.unshift({
             id: `disc-${Date.now()}-${product.id}`,
             shiftId,
@@ -2014,6 +2025,8 @@ class StoreService {
             status: 'RESOLVED',
             ownerNotes: isVal
               ? `Opening handover surplus: +KES ${surplusQty.toLocaleString()} value found on shelf left by ${prevAttendant}. Credited to previous attendant to balance their scale fairly.`
+              : isWeight
+              ? `Opening handover surplus: +${surplusQty} kg (+KES ${moneyVal.toLocaleString()}) extra found on scale left by ${prevAttendant}. Credited to previous attendant to balance their scale fairly.`
               : `Opening handover surplus: +${surplusQty} extra bottle(s) found on shelf left by ${prevAttendant}. Credited to previous attendant to balance their scale fairly.`,
             timestamp: new Date().toISOString(),
           });
@@ -2039,6 +2052,9 @@ class StoreService {
         measurementType: product.measurementType,
         measureUnitLabel: product.measureUnitLabel,
         totalMeasuredValueKes: product.totalMeasuredValueKes,
+        fullWeightKg: product.fullWeightKg,
+        emptyWeightKg: product.emptyWeightKg,
+        pricePerKg: product.pricePerKg || (product.measurementType === 'WEIGHT' ? product.sellingPrice : undefined),
       };
       shiftStockItems.push(item);
 
@@ -2413,9 +2429,19 @@ class StoreService {
     let expectedSalesRevenue = 0;
 
     const reconciledStockItems = shiftStockItems.map((item) => {
+      const isWeight =
+        item.measurementType === 'WEIGHT' ||
+        item.unit === 'KG' ||
+        (item.isMeasured === true && (item.fullWeightKg || 0) > 0);
+
       const isValue =
-        (item.isMeasured && item.measurementType === 'VALUE') ||
-        item.unit === 'VALUE_KES';
+        !isWeight &&
+        ((item.isMeasured && item.measurementType === 'VALUE') ||
+        item.unit === 'VALUE_KES');
+
+      const ratePerUnit = isWeight
+        ? (item.pricePerKg || item.sellingPrice || 150)
+        : item.sellingPrice;
 
       const availableStock =
         item.openingPhysicalCount +
@@ -2431,12 +2457,15 @@ class StoreService {
 
       const calculatedSold = Math.round(Math.max(0, availableStock - physicalClosing) * 100) / 100;
       const overageCount = physicalClosing > availableStock ? Math.round((physicalClosing - availableStock) * 100) / 100 : 0;
-      const discrepancyValue = isValue ? overageCount : overageCount * item.sellingPrice;
+      const discrepancyValue = isValue ? overageCount : Math.round(overageCount * ratePerUnit * 100) / 100;
 
       if (isValue) {
         // Continuous/local drink measured by monetary value (e.g. Muratina left on counter)
         // calculatedSold is already the KES money value
         expectedSalesRevenue += calculatedSold;
+      } else if (isWeight) {
+        // Measured by weight on scale (e.g. 29 kg sold * KES 150/kg = KES 4,350)
+        expectedSalesRevenue += Math.round(calculatedSold * ratePerUnit * 100) / 100;
       } else {
         // Discrete bottle count
         expectedSalesRevenue += calculatedSold * item.sellingPrice;
@@ -2748,23 +2777,36 @@ class StoreService {
     measurementType?: import('../types').MeasurementType;
     measureUnitLabel?: string;
     totalMeasuredValueKes?: number;
+    fullWeightKg?: number;
+    emptyWeightKg?: number;
+    pricePerKg?: number;
   }): Product {
     const currentBizId = params.businessId || this.getCurrentBusinessId();
     const products = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+    const isWeight = params.measurementType === 'WEIGHT' || params.unit === 'KG';
+    const cleanPricePerKg = params.pricePerKg ? Number(params.pricePerKg) : (isWeight ? Number(params.sellingPrice) : undefined);
+    const cleanSellingPrice = isWeight && cleanPricePerKg ? cleanPricePerKg : (Number(params.sellingPrice) || 0);
+    const initialQty = Number(params.initialStock) || 0;
+
     const newProduct: Product = {
       id: `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       businessId: currentBizId,
       name: params.name.trim(),
       category: params.category,
       unit: params.unit,
-      sellingPrice: Number(params.sellingPrice) || 0,
+      sellingPrice: cleanSellingPrice,
       reorderLevel: Number(params.reorderLevel) || 5,
       volumeMl: params.volumeMl ? Number(params.volumeMl) : undefined,
       isArchived: false,
-      isMeasured: Boolean(params.isMeasured),
-      measurementType: params.measurementType || (params.isMeasured ? 'VALUE' : 'COUNT'),
-      measureUnitLabel: params.measureUnitLabel,
-      totalMeasuredValueKes: params.totalMeasuredValueKes ? Number(params.totalMeasuredValueKes) : undefined,
+      isMeasured: Boolean(params.isMeasured || isWeight),
+      measurementType: params.measurementType || (isWeight ? 'WEIGHT' : (params.isMeasured ? 'VALUE' : 'COUNT')),
+      measureUnitLabel: params.measureUnitLabel || (isWeight ? 'kg' : undefined),
+      totalMeasuredValueKes: isWeight
+        ? (initialQty * cleanSellingPrice)
+        : (params.totalMeasuredValueKes ? Number(params.totalMeasuredValueKes) : undefined),
+      fullWeightKg: params.fullWeightKg ? Number(params.fullWeightKg) : (isWeight ? 60 : undefined),
+      emptyWeightKg: params.emptyWeightKg !== undefined ? Number(params.emptyWeightKg) : (isWeight ? 0 : undefined),
+      pricePerKg: cleanPricePerKg,
     };
 
     products.push(newProduct);
@@ -2772,7 +2814,6 @@ class StoreService {
 
     // Initialize inventory for current business
     const inv = this.getInventory();
-    const initialQty = Number(params.initialStock) || 0;
     const existingInv = inv.find((i) => i.productId === newProduct.id);
     if (!existingInv) {
       inv.push({
@@ -2806,6 +2847,9 @@ class StoreService {
         measurementType: newProduct.measurementType,
         measureUnitLabel: newProduct.measureUnitLabel,
         totalMeasuredValueKes: newProduct.totalMeasuredValueKes,
+        fullWeightKg: newProduct.fullWeightKg,
+        emptyWeightKg: newProduct.emptyWeightKg,
+        pricePerKg: newProduct.pricePerKg,
       };
       allSSIs.push(newSSI);
       this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
@@ -3072,7 +3116,14 @@ class StoreService {
     }
 
     Object.assign(product, updates);
-    if (product.isMeasured && updates.sellingPrice !== undefined && updates.totalMeasuredValueKes === undefined) {
+    if (product.measurementType === 'WEIGHT') {
+      if (updates.pricePerKg !== undefined) {
+        product.pricePerKg = updates.pricePerKg;
+        product.sellingPrice = updates.pricePerKg;
+      } else if (updates.sellingPrice !== undefined) {
+        product.pricePerKg = updates.sellingPrice;
+      }
+    } else if (product.isMeasured && updates.sellingPrice !== undefined && updates.totalMeasuredValueKes === undefined) {
       product.totalMeasuredValueKes = updates.sellingPrice;
     }
     this.set(STORAGE_KEYS.PRODUCTS, allProducts);

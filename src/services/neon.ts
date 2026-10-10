@@ -358,6 +358,9 @@ class NeonService {
       await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS measurement_type TEXT DEFAULT 'COUNT';`;
       await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS measure_unit_label TEXT;`;
       await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS total_measured_value_kes NUMERIC(12,2);`;
+      await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS full_weight_kg NUMERIC(12,3);`;
+      await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS empty_weight_kg NUMERIC(12,3);`;
+      await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS price_per_kg NUMERIC(12,2);`;
       await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();`;
       await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();`;
 
@@ -616,6 +619,9 @@ class NeonService {
       `;
       await sql`CREATE INDEX IF NOT EXISTS idx_ssi_shift ON shift_stock_items(shift_id);`;
       await sql`CREATE INDEX IF NOT EXISTS idx_ssi_biz ON shift_stock_items(business_id);`;
+      await sql`ALTER TABLE shift_stock_items ADD COLUMN IF NOT EXISTS full_weight_kg NUMERIC(12,3);`;
+      await sql`ALTER TABLE shift_stock_items ADD COLUMN IF NOT EXISTS empty_weight_kg NUMERIC(12,3);`;
+      await sql`ALTER TABLE shift_stock_items ADD COLUMN IF NOT EXISTS price_per_kg NUMERIC(12,2);`;
 
       // Safe Foreign Key Constraints with ON DELETE CASCADE
       const ensureFkSql = [
@@ -776,6 +782,7 @@ class NeonService {
             id, business_id, name, category, unit,
             cost_price, selling_price, reorder_level, volume_ml, is_archived,
             is_measured, measurement_type, measure_unit_label, total_measured_value_kes,
+            full_weight_kg, empty_weight_kg, price_per_kg,
             updated_at
           )
           VALUES (
@@ -793,6 +800,9 @@ class NeonService {
             ${p.measurementType || (p.isMeasured ? 'VALUE' : 'COUNT')},
             ${p.measureUnitLabel || (p.isMeasured ? 'KES Value' : null)},
             ${p.totalMeasuredValueKes !== undefined ? p.totalMeasuredValueKes : (p.isMeasured ? (p.sellingPrice || 0) : null)},
+            ${p.fullWeightKg != null ? p.fullWeightKg : null},
+            ${p.emptyWeightKg != null ? p.emptyWeightKg : null},
+            ${p.pricePerKg != null ? p.pricePerKg : null},
             NOW()
           )
           ON CONFLICT (id) DO UPDATE SET
@@ -808,6 +818,9 @@ class NeonService {
             measurement_type = EXCLUDED.measurement_type,
             measure_unit_label = EXCLUDED.measure_unit_label,
             total_measured_value_kes = EXCLUDED.total_measured_value_kes,
+            full_weight_kg = EXCLUDED.full_weight_kg,
+            empty_weight_kg = EXCLUDED.empty_weight_kg,
+            price_per_kg = EXCLUDED.price_per_kg,
             updated_at = NOW();
         `;
       }
@@ -1131,6 +1144,7 @@ class NeonService {
             damages, closing_physical_count, expected_closing_count,
             discrepancy_count, discrepancy_value, is_measured,
             measurement_type, measure_unit_label, total_measured_value_kes,
+            full_weight_kg, empty_weight_kg, price_per_kg,
             updated_at
           )
           VALUES (
@@ -1158,6 +1172,9 @@ class NeonService {
             ${item.measurementType || (item.isMeasured ? 'VALUE' : 'COUNT')},
             ${item.measureUnitLabel || null},
             ${item.totalMeasuredValueKes != null ? item.totalMeasuredValueKes : null},
+            ${item.fullWeightKg != null ? item.fullWeightKg : null},
+            ${item.emptyWeightKg != null ? item.emptyWeightKg : null},
+            ${item.pricePerKg != null ? item.pricePerKg : null},
             NOW()
           )
           ON CONFLICT (id) DO UPDATE SET
@@ -1173,6 +1190,9 @@ class NeonService {
             discrepancy_value = EXCLUDED.discrepancy_value,
             selling_price = EXCLUDED.selling_price,
             cost_price = EXCLUDED.cost_price,
+            full_weight_kg = EXCLUDED.full_weight_kg,
+            empty_weight_kg = EXCLUDED.empty_weight_kg,
+            price_per_kg = EXCLUDED.price_per_kg,
             updated_at = NOW();
         `;
       }
@@ -1264,6 +1284,9 @@ class NeonService {
         measurementType: p.measurement_type || (p.is_measured ? 'VALUE' : 'COUNT'),
         measureUnitLabel: p.measure_unit_label || (p.is_measured ? 'KES Value' : undefined),
         totalMeasuredValueKes: p.total_measured_value_kes != null ? Number(p.total_measured_value_kes) : (p.is_measured ? Number(p.selling_price || 0) : undefined),
+        fullWeightKg: p.full_weight_kg != null ? Number(p.full_weight_kg) : undefined,
+        emptyWeightKg: p.empty_weight_kg != null ? Number(p.empty_weight_kg) : undefined,
+        pricePerKg: p.price_per_kg != null ? Number(p.price_per_kg) : undefined,
       }));
 
       const invRows = await sql`SELECT * FROM inventory WHERE business_id = ${businessId};`;
@@ -1440,6 +1463,9 @@ class NeonService {
         measurementType: row.measurement_type,
         measureUnitLabel: row.measure_unit_label,
         totalMeasuredValueKes: row.total_measured_value_kes != null ? Number(row.total_measured_value_kes) : undefined,
+        fullWeightKg: row.full_weight_kg != null ? Number(row.full_weight_kg) : undefined,
+        emptyWeightKg: row.empty_weight_kg != null ? Number(row.empty_weight_kg) : undefined,
+        pricePerKg: row.price_per_kg != null ? Number(row.price_per_kg) : undefined,
       }));
 
       // Double-resilience: also merge any stock items embedded in shift_data

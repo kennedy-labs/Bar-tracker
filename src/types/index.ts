@@ -27,11 +27,12 @@ export type ProductUnit =
   | 'JUG'
   | 'CUP'
   | 'KEG'
+  | 'KG'
   | 'PORTION'
   | 'VALUE_KES'
   | 'CUSTOM';
 
-export type MeasurementType = 'COUNT' | 'VALUE' | 'VOLUME' | 'BOTH';
+export type MeasurementType = 'COUNT' | 'VALUE' | 'VOLUME' | 'WEIGHT' | 'BOTH';
 
 export interface Product {
   id: string;
@@ -39,7 +40,7 @@ export interface Product {
   name: string;
   category: ProductCategory;
   unit: ProductUnit;
-  sellingPrice: number; // in KES (retail / counter selling price)
+  sellingPrice: number; // in KES (retail / counter selling price or price per kg)
   reorderLevel: number;
   volumeMl?: number;
   isArchived?: boolean;
@@ -47,6 +48,9 @@ export interface Product {
   measurementType?: MeasurementType;
   measureUnitLabel?: string;
   totalMeasuredValueKes?: number;
+  fullWeightKg?: number; // e.g. 60 kg full keg tank
+  emptyWeightKg?: number; // tare weight of container in kg (default 0)
+  pricePerKg?: number; // price per kg in KES (e.g. 150 KES)
 }
 
 export interface ProductCostHistory {
@@ -109,6 +113,9 @@ export interface ShiftStockItem {
   measurementType?: MeasurementType;
   measureUnitLabel?: string;
   totalMeasuredValueKes?: number;
+  fullWeightKg?: number;
+  emptyWeightKg?: number;
+  pricePerKg?: number;
 }
 
 export interface Shift {

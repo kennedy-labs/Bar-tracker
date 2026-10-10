@@ -84,8 +84,19 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
 
  shiftStockItems.forEach((item) => {
  const prod = products.find((p) => p.id === item.productId);
- const isMeasured = prod?.isMeasured || item.unit === 'VALUE_KES';
- const isValue = isMeasured && (prod?.measurementType === 'VALUE' || prod?.unit === 'VALUE_KES' || item.unit === 'VALUE_KES');
+ const isWeight =
+   item.measurementType === 'WEIGHT' ||
+   item.unit === 'KG' ||
+   prod?.measurementType === 'WEIGHT' ||
+   prod?.unit === 'KG' ||
+   (item.isMeasured && ((item.fullWeightKg || 0) > 0 || (prod?.fullWeightKg || 0) > 0));
+ const isValue =
+   !isWeight &&
+   (prod?.isMeasured || item.unit === 'VALUE_KES') &&
+   (prod?.measurementType === 'VALUE' || prod?.unit === 'VALUE_KES' || item.unit === 'VALUE_KES');
+ const priceRate = isWeight
+   ? (item.pricePerKg || prod?.pricePerKg || item.sellingPrice || prod?.sellingPrice || 150)
+   : item.sellingPrice;
 
  const availableStock =
  item.openingPhysicalCount +
@@ -100,11 +111,13 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
  : availableStock;
 
  const sold = Math.max(0, availableStock - leftOnCounter);
- if (!isValue) {
+ if (isValue) {
+ expectedSalesRevenue += sold; // sold is already in KES!
+ } else if (isWeight) {
+ expectedSalesRevenue += Math.round(sold * priceRate * 100) / 100;
+ } else {
  totalBottlesSold += sold;
  expectedSalesRevenue += sold * item.sellingPrice;
- } else {
- expectedSalesRevenue += sold; // sold is already in KES!
  }
  });
 
@@ -179,22 +192,43 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
  const sold = Math.max(0, available - count);
 
  const prod = products.find((p) => p.id === item.productId);
- const isMeasured = prod?.isMeasured || item.unit === 'VALUE_KES';
- const isValue = isMeasured && (prod?.measurementType === 'VALUE' || prod?.unit === 'VALUE_KES' || item.unit === 'VALUE_KES');
- const stepDelta = isValue ? 100 : 1;
- const unitLabel = isValue ? 'worth' : (prod?.measureUnitLabel || item.unit.toLowerCase());
+ const isMeasured = Boolean(item.isMeasured || prod?.isMeasured);
+ const isWeight =
+   item.measurementType === 'WEIGHT' ||
+   item.unit === 'KG' ||
+   prod?.measurementType === 'WEIGHT' ||
+   prod?.unit === 'KG' ||
+   (item.isMeasured && ((item.fullWeightKg || 0) > 0 || (prod?.fullWeightKg || 0) > 0));
+ const isValue =
+   !isWeight &&
+   (prod?.isMeasured || item.unit === 'VALUE_KES') &&
+   (prod?.measurementType === 'VALUE' || prod?.unit === 'VALUE_KES' || item.unit === 'VALUE_KES');
+ const priceRate = isWeight
+   ? (item.pricePerKg || prod?.pricePerKg || item.sellingPrice || prod?.sellingPrice || 150)
+   : item.sellingPrice;
+ const stepDelta = isValue ? 100 : (isWeight ? 1 : 1);
+ const unitLabel = isValue ? 'worth' : isWeight ? 'kg' : (prod?.measureUnitLabel || item.unit.toLowerCase());
 
  return (
  <div
  key={item.id}
  className={`flex items-center justify-between p-3 rounded-2xl bg-[#0E1420] border transition-colors ${
- isMeasured ? 'border-cyan-900/60 bg-gradient-to-r from-[#0E1420] to-cyan-950/20' : 'border-slate-800'
+ isWeight
+   ? 'border-cyan-800/80 bg-gradient-to-r from-[#0E1420] via-cyan-950/20 to-[#0E1420]'
+   : isMeasured
+   ? 'border-cyan-900/60 bg-gradient-to-r from-[#0E1420] to-cyan-950/20'
+   : 'border-slate-800'
  }`}
  >
  <div className="min-w-0 flex-1 mr-2">
  <div className="flex items-center gap-2">
  <span className="text-sm font-bold text-white truncate">{item.productName}</span>
- {isMeasured && (
+ {isWeight && (
+ <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-cyan-950 text-cyan-300 border border-cyan-600/70 shrink-0">
+ ⚖️ Scale (kg)
+ </span>
+ )}
+ {isMeasured && !isWeight && (
  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-cyan-950 text-cyan-400 border border-cyan-700/60 shrink-0">
  Measured
  </span>
@@ -210,22 +244,28 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
  </span>
  )}
  </div>
- <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
+ <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5 flex-wrap">
  <span>
  Start: {isValue ? `KES ${available.toLocaleString()}` : `${available} ${unitLabel}`}
+ {isWeight && ` (KES ${(available * priceRate).toLocaleString()})`}
  {item.additions > 0 && ` (+${item.additions} added)`}
  {item.additions < 0 && ` (${item.additions} reduced)`}
  </span>
  <span>·</span>
  <span className={sold > 0 ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
- Sold: {isValue ? `KES ${sold.toLocaleString()}` : sold}
+ Sold: {isValue ? `KES ${sold.toLocaleString()}` : isWeight ? `${sold} kg (KES ${(sold * priceRate).toLocaleString()})` : sold}
  </span>
+ {isWeight && (
+   <span className="text-cyan-300 font-mono font-semibold">
+     · Scale: {count}kg (KES {(count * priceRate).toLocaleString()})
+   </span>
+ )}
  </div>
  </div>
 
  {/* Stepper Buttons / Direct Input */}
  <div className="flex items-center gap-1.5 shrink-0">
- {!isValue && (
+ {!isValue && !isWeight && (
  <button
  type="button"
  onClick={() => adjustCount(item.productId, -0.5)}
@@ -235,11 +275,21 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
  -½
  </button>
  )}
+ {isWeight && (
+ <button
+ type="button"
+ onClick={() => adjustCount(item.productId, -5)}
+ className="px-1.5 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-slate-300 flex items-center justify-center font-mono text-xs cursor-pointer"
+ title="Decrease by 5 kg"
+ >
+ -5kg
+ </button>
+ )}
  <button
  type="button"
  onClick={() => adjustCount(item.productId, -stepDelta)}
  className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
- title={isValue ? '-100 KES' : '-1 bottle'}
+ title={isValue ? '-100 KES' : isWeight ? '-1 kg' : '-1 bottle'}
  >
  <Minus className="w-3.5 h-3.5" />
  </button>
@@ -253,22 +303,34 @@ export const ShiftClosingModal: React.FC<ShiftClosingModalProps> = ({
  setClosingPhysicalCounts((prev) => ({ ...prev, [item.productId]: Math.round(val * 100) / 100 }));
  }}
  className={`w-16 h-9 text-center font-mono font-bold text-sm rounded-xl focus:outline-none ${
- isValue
+ isWeight
+ ? 'bg-slate-900 border border-cyan-500 text-cyan-200'
+ : isValue
  ? 'bg-slate-900 border border-cyan-800/80 text-cyan-300'
  : 'bg-slate-900 border border-slate-700 text-white focus:border-emerald-500'
  }`}
  placeholder="0"
- title="Type count (e.g. 9.5 for half bottle)"
+ title={isWeight ? 'Scale weight in kg (e.g. 31)' : 'Type count'}
  />
  <button
  type="button"
  onClick={() => adjustCount(item.productId, stepDelta)}
  className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
- title={isValue ? '+100 KES' : '+1 bottle'}
+ title={isValue ? '+100 KES' : isWeight ? '+1 kg' : '+1 bottle'}
  >
  <Plus className="w-3.5 h-3.5" />
  </button>
- {!isValue && (
+ {isWeight && (
+ <button
+ type="button"
+ onClick={() => adjustCount(item.productId, 5)}
+ className="px-1.5 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-cyan-400 flex items-center justify-center font-mono text-xs cursor-pointer"
+ title="Increase by 5 kg"
+ >
+ +5kg
+ </button>
+ )}
+ {!isValue && !isWeight && (
  <button
  type="button"
  onClick={() => adjustCount(item.productId, 0.5)}

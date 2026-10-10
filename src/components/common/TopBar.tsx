@@ -12,9 +12,11 @@ import {
   Database,
   CloudOff,
   User as UserIcon,
+  Scale,
 } from 'lucide-react';
 import { BusinessIdentityBadge } from './BusinessIdentityBadge';
 import { EditProfileModal } from './EditProfileModal';
+import { WeightCalculatorModal } from './WeightCalculatorModal';
 
 interface TopBarProps {
   currentUser: User | null;
@@ -35,6 +37,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   const [neonState, setNeonState] = useState<NeonState>(neonService.getStatus());
   const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isWeightModalOpen, setIsWeightModalOpen] = useState(false);
 
   useEffect(() => {
     return neonService.subscribeStatus((st) => setNeonState(st));
@@ -106,6 +109,17 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         {/* Zone 3: Account & Session Action */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Quick Weight & Keg Scale Valuation Tool */}
+          <button
+            type="button"
+            onClick={() => setIsWeightModalOpen(true)}
+            title="Keg & Weight Calculator: Weigh tank on scale to calculate remaining value (e.g. 31kg × KES 150 = KES 4,650)"
+            className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-800/60 hover:border-cyan-600/80 text-cyan-300 transition-colors cursor-pointer"
+          >
+            <Scale className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span className="font-semibold hidden sm:inline">Scale (kg)</span>
+          </button>
+
           {/* User Profile Button / Edit Credentials Trigger */}
           {currentUser && (
             <button
@@ -174,6 +188,12 @@ export const TopBar: React.FC<TopBarProps> = ({
           }}
         />
       )}
+
+      {/* Weight & Keg Scale Valuation Modal */}
+      <WeightCalculatorModal
+        isOpen={isWeightModalOpen}
+        onClose={() => setIsWeightModalOpen(false)}
+      />
     </header>
   );
 };

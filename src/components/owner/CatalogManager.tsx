@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Product, ProductCategory, ProductUnit } from '../../types';
 import { store } from '../../services/store';
+import { weightMeasurementService } from '../../services/weightMeasurement';
+import { WeightCalculatorModal } from '../common/WeightCalculatorModal';
 import {
   Wine,
   Plus,
@@ -98,13 +100,21 @@ export const CatalogManager: React.FC = () => {
   const [volumeMl, setVolumeMl] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Measured Drink Modal States (Pure Value Measurement)
+  // Measured Drink Modal States (Weight-based or Value-based Measurement)
   const [showMeasuredModal, setShowMeasuredModal] = useState(false);
   const [measuredEditingProduct, setMeasuredEditingProduct] = useState<Product | null>(null);
+  const [measuredMode, setMeasuredMode] = useState<'WEIGHT' | 'VALUE'>('WEIGHT');
   const [measuredName, setMeasuredName] = useState('');
-  const [measuredCategory, setMeasuredCategory] = useState<ProductCategory>('TRADITIONAL_BREW');
-  const [measuredStock, setMeasuredStock] = useState('1500');
+  const [measuredCategory, setMeasuredCategory] = useState<ProductCategory>('BEER');
+  const [measuredFullWeight, setMeasuredFullWeight] = useState('60');
+  const [measuredTareWeight, setMeasuredTareWeight] = useState('0');
+  const [measuredPricePerKg, setMeasuredPricePerKg] = useState('150');
+  const [measuredStock, setMeasuredStock] = useState('60');
   const [measuredError, setMeasuredError] = useState<string | null>(null);
+
+  // Quick Keg Scale Calculator Modal
+  const [showWeightCalcModal, setShowWeightCalcModal] = useState(false);
+  const [weightCalcModalProductId, setWeightCalcModalProductId] = useState<string | undefined>(undefined);
 
   // Quick Inline Price Editing
   const [inlineEditId, setInlineEditId] = useState<string | null>(null);
@@ -199,9 +209,13 @@ export const CatalogManager: React.FC = () => {
  // Open Add Measured Modal
  const handleOpenAddMeasured = () => {
    setMeasuredEditingProduct(null);
-   setMeasuredName('');
-   setMeasuredCategory('TRADITIONAL_BREW');
-   setMeasuredStock('1500');
+   setMeasuredMode('WEIGHT');
+   setMeasuredName('Tusker Keg Draft');
+   setMeasuredCategory('BEER');
+   setMeasuredFullWeight('60');
+   setMeasuredTareWeight('0');
+   setMeasuredPricePerKg('150');
+   setMeasuredStock('60');
    setMeasuredError(null);
    setShowMeasuredModal(true);
  };
@@ -213,7 +227,18 @@ export const CatalogManager: React.FC = () => {
      setMeasuredName(p.name);
      setMeasuredCategory(p.category);
      const invItem = inventory.find((i) => i.productId === p.id);
-     setMeasuredStock(String(invItem?.quantityOnHand ?? p.totalMeasuredValueKes ?? 0));
+
+     if (p.measurementType === 'WEIGHT' || p.unit === 'KG') {
+       setMeasuredMode('WEIGHT');
+       setMeasuredFullWeight(String(p.fullWeightKg || 60));
+       setMeasuredTareWeight(String(p.emptyWeightKg || 0));
+       setMeasuredPricePerKg(String(p.pricePerKg || p.sellingPrice || 150));
+       setMeasuredStock(String(invItem?.quantityOnHand ?? p.fullWeightKg ?? 60));
+     } else {
+       setMeasuredMode('VALUE');
+       setMeasuredStock(String(invItem?.quantityOnHand ?? p.totalMeasuredValueKes ?? 0));
+     }
+
      setMeasuredError(null);
      setShowMeasuredModal(true);
      return;
@@ -278,13 +303,70 @@ export const CatalogManager: React.FC = () => {
    setEditingProduct(null);
  };
 
- // Save Add or Edit Measured Product (Pure Value Measurement)
+ // Save Add or Edit Measured Product (Weight-based or Value-based Measurement)
  const handleSubmitMeasuredProduct = (e: React.FormEvent) => {
    e.preventDefault();
    setMeasuredError(null);
 
    if (!measuredName.trim()) {
-     setMeasuredError('Please enter a drink name (e.g. Makali, Muratina).');
+     setMeasuredError('Please enter a drink name (e.g. Tusker Keg Draft, Makali, Muratina).');
+     return;
+   }
+
+   if (measuredMode === 'WEIGHT') {
+     const fullWeight = parseFloat(measuredFullWeight) || 60;
+     const tareWeight = parseFloat(measuredTareWeight) || 0;
+     const rate = parseFloat(measuredPricePerKg);
+     if (isNaN(rate) || rate <= 0) {
+       setMeasuredError('Please enter a valid price per kilogram (KES/kg).');
+       return;
+     }
+
+     const stockKg = parseFloat(measuredStock);
+     if (isNaN(stockKg) || stockKg < 0) {
+       setMeasuredError('Please enter a valid scale weight in kilograms (kg).');
+       return;
+     }
+
+     const cleanStockKg = Math.round(stockKg * 100) / 100;
+     const totalVal = Math.round(cleanStockKg * rate * 100) / 100;
+
+     if (measuredEditingProduct) {
+       store.updateProduct(measuredEditingProduct.id, {
+         name: measuredName.trim(),
+         category: measuredCategory,
+         unit: 'KG',
+         sellingPrice: rate,
+         pricePerKg: rate,
+         fullWeightKg: fullWeight,
+         emptyWeightKg: tareWeight,
+         isMeasured: true,
+         measurementType: 'WEIGHT',
+         measureUnitLabel: 'kg',
+         totalMeasuredValueKes: totalVal,
+       });
+
+       store.adjustProductStock(measuredEditingProduct.id, cleanStockKg);
+     } else {
+       store.addProduct({
+         name: measuredName.trim(),
+         category: measuredCategory,
+         unit: 'KG',
+         sellingPrice: rate,
+         pricePerKg: rate,
+         fullWeightKg: fullWeight,
+         emptyWeightKg: tareWeight,
+         initialStock: cleanStockKg,
+         reorderLevel: 10,
+         isMeasured: true,
+         measurementType: 'WEIGHT',
+         measureUnitLabel: 'kg',
+         totalMeasuredValueKes: totalVal,
+       });
+     }
+
+     setShowMeasuredModal(false);
+     setMeasuredEditingProduct(null);
      return;
    }
 
@@ -429,11 +511,25 @@ export const CatalogManager: React.FC = () => {
             <button
               onClick={handleOpenAddMeasured}
               className="py-2 px-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-950/60 transition-all active:scale-95 cursor-pointer shrink-0"
-              title="Add continuous or measured drinks like Muratina, traditional brew, kegs, or bulk wine"
+              title="Add continuous or measured drinks like Keg Draft tanks, Muratina, or bulk dispensers"
             >
               <Scale className="w-4 h-4 text-cyan-200" />
-              <span className="hidden sm:inline">Add Measured Drink</span>
+              <span className="hidden sm:inline">Add Measured / Keg</span>
               <span className="sm:hidden">Measured</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setWeightCalcModalProductId(undefined);
+                setShowWeightCalcModal(true);
+              }}
+              className="py-2 px-3 rounded-xl bg-[#0E1420] hover:bg-cyan-950/70 border border-cyan-800/80 text-cyan-300 hover:text-cyan-200 font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shrink-0"
+              title="Open Interactive Keg Scale Calculator (Weight to Value)"
+            >
+              <Scale className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden md:inline">Scale Calculator</span>
+              <span className="md:hidden">Scale</span>
             </button>
           </div>
         </div>
@@ -1323,8 +1419,7 @@ export const CatalogManager: React.FC = () => {
  </div>
  )}
 
- {/* 5. MODAL: BULK PASTE REAL DRINKS */}
- {/* 5. MODAL: ADD / EDIT MEASURED DRINK (VALUE-BASED) */}
+ {/* 5. MODAL: ADD / EDIT MEASURED DRINK (WEIGHT OR VALUE BASED) */}
  {showMeasuredModal && (
  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
  <div className="w-full max-w-lg bg-[#121824] border border-cyan-800/80 rounded-3xl p-5 sm:p-6 shadow-2xl max-h-[92vh] overflow-y-auto space-y-4">
@@ -1339,7 +1434,9 @@ export const CatalogManager: React.FC = () => {
  {measuredEditingProduct ? 'Edit Measured Drink' : 'Add Measured Drink'}
  </h3>
  <p className="text-[11px] text-cyan-300">
- Continuous drink measured by value (e.g. Makali, Muratina, local brew)
+ {measuredMode === 'WEIGHT'
+   ? 'Draft keg tank weighed on a scale (kg × price per kg)'
+   : 'Continuous drink measured by monetary value (e.g. Muratina, Makali)'}
  </p>
  </div>
  </div>
@@ -1356,6 +1453,49 @@ export const CatalogManager: React.FC = () => {
  </button>
  </div>
 
+ {/* Measurement Type Mode Selector */}
+ <div className="grid grid-cols-2 gap-2 p-1 bg-[#0E1420] rounded-2xl border border-slate-800">
+   <button
+     type="button"
+     onClick={() => {
+       setMeasuredMode('WEIGHT');
+       if (!measuredEditingProduct) {
+         setMeasuredName('Tusker Keg Draft');
+         setMeasuredCategory('BEER');
+         setMeasuredStock('60');
+       }
+     }}
+     className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+       measuredMode === 'WEIGHT'
+         ? 'bg-cyan-500/20 border border-cyan-500/60 text-cyan-300 shadow-sm'
+         : 'text-slate-400 hover:text-white border border-transparent'
+     }`}
+   >
+     <Scale className="w-3.5 h-3.5" />
+     <span>By Weight (Keg / kg)</span>
+   </button>
+
+   <button
+     type="button"
+     onClick={() => {
+       setMeasuredMode('VALUE');
+       if (!measuredEditingProduct) {
+         setMeasuredName('Muratina');
+         setMeasuredCategory('TRADITIONAL_BREW');
+         setMeasuredStock('1500');
+       }
+     }}
+     className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+       measuredMode === 'VALUE'
+         ? 'bg-cyan-500/20 border border-cyan-500/60 text-cyan-300 shadow-sm'
+         : 'text-slate-400 hover:text-white border border-transparent'
+     }`}
+   >
+     <TrendingUp className="w-3.5 h-3.5" />
+     <span>By Value (KES)</span>
+   </button>
+ </div>
+
  {measuredError && (
  <div className="p-3 rounded-2xl bg-red-950/80 border border-red-500/50 text-red-300 text-xs flex items-center gap-2">
  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
@@ -1368,28 +1508,52 @@ export const CatalogManager: React.FC = () => {
  {!measuredEditingProduct && (
    <div>
      <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-       Quick Staples
+       Quick Staples ({measuredMode === 'WEIGHT' ? 'Keg Tanks' : 'Traditional'})
      </label>
      <div className="flex flex-wrap gap-1.5">
-       {[
-         { name: 'Makali', price: '1500' },
-         { name: 'Muratina', price: '1500' },
-         { name: 'Busaa / Local Brew', price: '1200' },
-         { name: 'Keg Draught', price: '2000' },
-         { name: 'Palm Wine (Mnazi)', price: '1000' },
-       ].map((preset) => (
-         <button
-           key={preset.name}
-           type="button"
-           onClick={() => {
-             setMeasuredName(preset.name);
-             setMeasuredStock(preset.price);
-           }}
-           className="py-1 px-2.5 rounded-lg bg-[#0E1420] hover:bg-cyan-950 border border-slate-800 hover:border-cyan-700 text-xs text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
-         >
-           +{preset.name}
-         </button>
-       ))}
+       {measuredMode === 'WEIGHT' ? (
+         [
+           { name: 'Tusker Keg Draft', full: '60', price: '150', stock: '60' },
+           { name: 'Senator Keg Draft', full: '60', price: '120', stock: '60' },
+           { name: 'Guinness Draught', full: '30', price: '220', stock: '30' },
+           { name: 'Balozi Draft Keg', full: '50', price: '140', stock: '50' },
+           { name: 'WhiteCap Lager Keg', full: '50', price: '160', stock: '50' },
+         ].map((preset) => (
+           <button
+             key={preset.name}
+             type="button"
+             onClick={() => {
+               setMeasuredName(preset.name);
+               setMeasuredFullWeight(preset.full);
+               setMeasuredPricePerKg(preset.price);
+               setMeasuredStock(preset.stock);
+               setMeasuredCategory('BEER');
+             }}
+             className="py-1 px-2.5 rounded-lg bg-[#0E1420] hover:bg-cyan-950 border border-slate-800 hover:border-cyan-700 text-xs text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
+           >
+             +{preset.name} ({preset.full}kg @ KES {preset.price}/kg)
+           </button>
+         ))
+       ) : (
+         [
+           { name: 'Makali', price: '1500' },
+           { name: 'Muratina', price: '1500' },
+           { name: 'Busaa / Local Brew', price: '1200' },
+           { name: 'Palm Wine (Mnazi)', price: '1000' },
+         ].map((preset) => (
+           <button
+             key={preset.name}
+             type="button"
+             onClick={() => {
+               setMeasuredName(preset.name);
+               setMeasuredStock(preset.price);
+             }}
+             className="py-1 px-2.5 rounded-lg bg-[#0E1420] hover:bg-cyan-950 border border-slate-800 hover:border-cyan-700 text-xs text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
+           >
+             +{preset.name}
+           </button>
+         ))
+       )}
      </div>
    </div>
  )}
@@ -1405,6 +1569,7 @@ export const CatalogManager: React.FC = () => {
  autoFocus
  value={measuredName}
  onChange={(e) => setMeasuredName(e.target.value)}
+ placeholder={measuredMode === 'WEIGHT' ? 'e.g. Tusker Keg Draft 60kg' : 'e.g. Makali, Muratina'}
  className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-500"
  />
  </div>
@@ -1419,40 +1584,123 @@ export const CatalogManager: React.FC = () => {
  onChange={(e) => setMeasuredCategory(e.target.value as ProductCategory)}
  className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
  >
- <option value="TRADITIONAL_BREW">Traditional Brew & Continuous</option>
  <option value="BEER">Beer / Keg Draft</option>
+ <option value="TRADITIONAL_BREW">Traditional Brew & Continuous</option>
  <option value="WINE">Wine (Carafe / Dispenser)</option>
  <option value="SPIRIT">Spirit / Whiskey Dispenser</option>
  <option value="SOFT_DRINK">Soft Drink / Juice</option>
  </select>
  </div>
 
- {/* Stock & Valuation (Pure Value Measurement - Value IS Selling Price) */}
- <div className="space-y-3 p-3.5 rounded-2xl bg-[#0E1420] border border-cyan-900/60">
-   <div>
-     <div className="flex items-center justify-between mb-1">
-       <label className="text-xs font-semibold text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
-         <Scale className="w-3.5 h-3.5 text-cyan-400" />
-         <span>Current Stock on Shelf (KES Value)</span>
-       </label>
-       <span className="text-[10px] text-cyan-400 font-mono font-semibold">1 KES Stock = 1 KES Selling Worth</span>
-     </div>
-     <input
-       type="number"
-       step="any"
-       min="0"
-       required
-       value={measuredStock}
-       onChange={(e) => setMeasuredStock(e.target.value)}
-       className="w-full bg-[#121824] border border-cyan-500/80 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-400"
-       placeholder="e.g. 1500"
-     />
-     <span className="text-[10px] text-slate-400 mt-1 block">
-       Total KES worth of drink currently remaining on the counter. Value directly equals selling price.
-     </span>
-   </div>
- </div>
+ {measuredMode === 'WEIGHT' ? (
+   /* Weight Configuration Fields */
+   <div className="space-y-3 p-4 rounded-2xl bg-[#0E1420] border border-cyan-800/80">
+     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+       <div>
+         <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
+           Full Tank (kg)
+         </label>
+         <input
+           type="number"
+           step="any"
+           min="1"
+           required
+           value={measuredFullWeight}
+           onChange={(e) => setMeasuredFullWeight(e.target.value)}
+           className="w-full bg-[#121824] border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-400"
+           placeholder="60"
+         />
+         <span className="text-[10px] text-slate-400 mt-0.5 block">e.g. 60kgs full keg</span>
+       </div>
 
+       <div>
+         <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
+           Price per kg (KES)
+         </label>
+         <input
+           type="number"
+           step="any"
+           min="1"
+           required
+           value={measuredPricePerKg}
+           onChange={(e) => setMeasuredPricePerKg(e.target.value)}
+           className="w-full bg-[#121824] border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-400"
+           placeholder="150"
+         />
+         <span className="text-[10px] text-slate-400 mt-0.5 block">e.g. 150 KES/kg</span>
+       </div>
+
+       <div>
+         <label className="block text-[11px] font-semibold text-cyan-300 uppercase tracking-wider mb-1">
+           Scale Weight (kg)
+         </label>
+         <input
+           type="number"
+           step="any"
+           min="0"
+           required
+           value={measuredStock}
+           onChange={(e) => setMeasuredStock(e.target.value)}
+           className="w-full bg-[#121824] border border-cyan-500 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-400"
+           placeholder="31"
+         />
+         <span className="text-[10px] text-cyan-400 mt-0.5 block">Current scale reading</span>
+       </div>
+     </div>
+
+     {/* Live Formula & Valuation Box */}
+     <div className="p-3 rounded-xl bg-gradient-to-r from-cyan-950/60 to-[#0E1420] border border-cyan-600/60 space-y-1.5">
+       <div className="flex items-center justify-between text-xs">
+         <span className="font-semibold text-cyan-300 flex items-center gap-1.5">
+           <Scale className="w-4 h-4 text-cyan-400" />
+           <span>System Calculation</span>
+         </span>
+         <span className="font-mono text-xs text-cyan-400 font-bold">
+           {Math.min(100, Math.round(((parseFloat(measuredStock) || 0) / (parseFloat(measuredFullWeight) || 60)) * 100))}% Full
+         </span>
+       </div>
+
+       <div className="flex items-baseline justify-between">
+         <div className="text-xl font-mono font-black text-white">
+           KES {Math.round((parseFloat(measuredStock) || 0) * (parseFloat(measuredPricePerKg) || 0)).toLocaleString()}
+         </div>
+         <div className="text-xs font-mono text-cyan-200">
+           {measuredStock || 0} kg × KES {measuredPricePerKg || 0} = KES {Math.round((parseFloat(measuredStock) || 0) * (parseFloat(measuredPricePerKg) || 0)).toLocaleString()}
+         </div>
+       </div>
+
+       <p className="text-[10px] text-slate-400">
+         Eg: If worker finds keg weighing 31kg with kg=150 KES: 31 × 150 = 4,650 KES.
+       </p>
+     </div>
+   </div>
+ ) : (
+   /* Pure Value Measurement - Value IS Selling Price */
+   <div className="space-y-3 p-3.5 rounded-2xl bg-[#0E1420] border border-cyan-900/60">
+     <div>
+       <div className="flex items-center justify-between mb-1">
+         <label className="text-xs font-semibold text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
+           <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
+           <span>Current Stock on Shelf (KES Value)</span>
+         </label>
+         <span className="text-[10px] text-cyan-400 font-mono font-semibold">1 KES Stock = 1 KES Selling Worth</span>
+       </div>
+       <input
+         type="number"
+         step="any"
+         min="0"
+         required
+         value={measuredStock}
+         onChange={(e) => setMeasuredStock(e.target.value)}
+         className="w-full bg-[#121824] border border-cyan-500/80 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-400"
+         placeholder="e.g. 1500"
+       />
+       <span className="text-[10px] text-slate-400 mt-1 block">
+         Total KES worth of drink currently remaining on the counter.
+       </span>
+     </div>
+   </div>
+ )}
 
  {/* Action Buttons */}
  <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
@@ -1483,6 +1731,13 @@ export const CatalogManager: React.FC = () => {
  </div>
  </div>
  )}
+
+ {/* Quick Keg Scale Calculator Modal */}
+ <WeightCalculatorModal
+   isOpen={showWeightCalcModal}
+   onClose={() => setShowWeightCalcModal(false)}
+   initialProductId={weightCalcModalProductId}
+ />
  </div>
  );
 };

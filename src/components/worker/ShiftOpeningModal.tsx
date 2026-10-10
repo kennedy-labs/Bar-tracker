@@ -89,14 +89,17 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
  const actual = physicalCounts[p.id] !== undefined ? physicalCounts[p.id] : expected;
  const diff = actual - expected;
 
- const isVal = p.isMeasured && (p.measurementType === 'VALUE' || p.unit === 'VALUE_KES');
+ const isWeight = p.measurementType === 'WEIGHT' || p.unit === 'KG' || (p.isMeasured && (p.fullWeightKg || 0) > 0);
+ const isVal = !isWeight && p.isMeasured && (p.measurementType === 'VALUE' || p.unit === 'VALUE_KES');
+ const priceRate = isWeight ? (p.pricePerKg || p.sellingPrice || 150) : p.sellingPrice;
+
  if (diff < 0) {
  const qtyShort = Math.abs(diff);
  totalMissing += isVal ? 1 : qtyShort;
- missingValue += isVal ? qtyShort : qtyShort * p.sellingPrice;
+ missingValue += isVal ? qtyShort : Math.round(qtyShort * priceRate * 100) / 100;
  } else if (diff > 0) {
  totalSurplus += isVal ? 1 : diff;
- surplusValue += isVal ? diff : diff * p.sellingPrice;
+ surplusValue += isVal ? diff : Math.round(diff * priceRate * 100) / 100;
  }
  });
 
@@ -263,30 +266,46 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
  const diff = count - expected;
 
  const isMeasured = p.isMeasured;
- const isValue = isMeasured && (p.measurementType === 'VALUE' || p.unit === 'VALUE_KES');
- const stepDelta = isValue ? 100 : 1;
- const unitLabel = isValue ? 'worth' : (p.measureUnitLabel || p.unit.toLowerCase());
+ const isWeight = p.measurementType === 'WEIGHT' || p.unit === 'KG' || (isMeasured && (p.fullWeightKg || 0) > 0);
+ const isValue = !isWeight && isMeasured && (p.measurementType === 'VALUE' || p.unit === 'VALUE_KES');
+ const priceRate = isWeight ? (p.pricePerKg || p.sellingPrice || 150) : p.sellingPrice;
+ const stepDelta = isValue ? 100 : (isWeight ? 1 : 1);
+ const unitLabel = isValue ? 'worth' : isWeight ? 'kg' : (p.measureUnitLabel || p.unit.toLowerCase());
 
  return (
  <div
  key={p.id}
  className={`flex items-center justify-between p-3 rounded-2xl bg-[#0E1420] border transition-colors ${
- isMeasured ? 'border-cyan-900/60 bg-gradient-to-r from-[#0E1420] to-cyan-950/20' : 'border-slate-800'
+ isWeight
+   ? 'border-cyan-800/80 bg-gradient-to-r from-[#0E1420] via-cyan-950/20 to-[#0E1420]'
+   : isMeasured
+   ? 'border-cyan-900/60 bg-gradient-to-r from-[#0E1420] to-cyan-950/20'
+   : 'border-slate-800'
  }`}
  >
  <div className="min-w-0 flex-1 mr-2">
  <div className="flex items-center gap-2">
  <span className="text-sm font-bold text-white truncate">{p.name}</span>
- {isMeasured && (
+ {isWeight && (
+ <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-cyan-950 text-cyan-300 border border-cyan-600/70 shrink-0 flex items-center gap-1">
+   <span>⚖️ Scale (kg)</span>
+ </span>
+ )}
+ {isMeasured && !isWeight && (
  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-cyan-950 text-cyan-400 border border-cyan-700/60 shrink-0">
  Measured
  </span>
  )}
  </div>
- <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
- <span>KES {p.sellingPrice}</span>
+ <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5 flex-wrap">
+ <span>{isWeight ? `KES ${priceRate}/kg` : `KES ${p.sellingPrice}`}</span>
  <span>·</span>
  <span>Expected: {isValue ? `KES ${expected.toLocaleString()}` : `${expected} ${unitLabel}`}</span>
+ {isWeight && (
+   <span className="text-cyan-300 font-mono font-semibold">
+     (Scale: {count}kg = KES {Math.round(count * priceRate).toLocaleString()})
+   </span>
+ )}
  {diff !== 0 && (
  <span
  className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
@@ -296,8 +315,8 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
  }`}
  >
  {diff > 0
- ? `+${isValue ? `KES ${diff}` : diff} surplus`
- : `${isValue ? `KES ${Math.abs(diff)}` : Math.abs(diff)} short`}
+ ? `+${isValue ? `KES ${diff}` : isWeight ? `${diff} kg (+KES ${Math.round(diff * priceRate)})` : diff} surplus`
+ : `${isValue ? `KES ${Math.abs(diff)}` : isWeight ? `${Math.abs(diff)} kg (-KES ${Math.round(Math.abs(diff) * priceRate)})` : Math.abs(diff)} short`}
  </span>
  )}
  </div>
@@ -305,7 +324,7 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
 
  {/* Touch Stepper or Direct Value Input */}
  <div className="flex items-center gap-1.5 shrink-0">
- {!isValue && (
+ {!isValue && !isWeight && (
  <button
  type="button"
  onClick={() => adjustCount(p.id, -0.5)}
@@ -315,11 +334,21 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
  -½
  </button>
  )}
+ {isWeight && (
+ <button
+ type="button"
+ onClick={() => adjustCount(p.id, -5)}
+ className="px-1.5 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-slate-300 flex items-center justify-center font-mono text-xs cursor-pointer"
+ title="Decrease by 5 kg"
+ >
+ -5kg
+ </button>
+ )}
  <button
  type="button"
  onClick={() => adjustCount(p.id, -stepDelta)}
  className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
- title={isValue ? '-100 KES' : '-1 bottle'}
+ title={isValue ? '-100 KES' : isWeight ? '-1 kg' : '-1 bottle'}
  >
  <Minus className="w-3.5 h-3.5" />
  </button>
@@ -333,22 +362,34 @@ export const ShiftOpeningModal: React.FC<ShiftOpeningModalProps> = ({
  setPhysicalCounts((prev) => ({ ...prev, [p.id]: Math.round(val * 100) / 100 }));
  }}
  className={`w-16 h-9 text-center font-mono font-bold text-sm rounded-xl focus:outline-none ${
- isValue
+ isWeight
+ ? 'bg-slate-900 border border-cyan-500 text-cyan-200'
+ : isValue
  ? 'bg-slate-900 border border-cyan-800/80 text-cyan-300'
  : 'bg-slate-900 border border-slate-700 text-white focus:border-emerald-500'
  }`}
  placeholder="0"
- title="Type count (e.g. 9.5 for half bottle)"
+ title={isWeight ? 'Scale weight in kg (e.g. 31)' : 'Type count'}
  />
  <button
  type="button"
  onClick={() => adjustCount(p.id, stepDelta)}
  className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
- title={isValue ? '+100 KES' : '+1 bottle'}
+ title={isValue ? '+100 KES' : isWeight ? '+1 kg' : '+1 bottle'}
  >
  <Plus className="w-3.5 h-3.5" />
  </button>
- {!isValue && (
+ {isWeight && (
+ <button
+ type="button"
+ onClick={() => adjustCount(p.id, 5)}
+ className="px-1.5 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-cyan-400 flex items-center justify-center font-mono text-xs cursor-pointer"
+ title="Increase by 5 kg"
+ >
+ +5kg
+ </button>
+ )}
+ {!isValue && !isWeight && (
  <button
  type="button"
  onClick={() => adjustCount(p.id, 0.5)}

@@ -21,11 +21,12 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
  onConfirmRestock,
 }) => {
  const isMeasured = product.isMeasured;
- const isValue = isMeasured && (product.measurementType === 'VALUE' || product.unit === 'VALUE_KES');
- const unitLabel = isValue ? 'KES' : product.measureUnitLabel || product.unit.toLowerCase();
+ const isWeight = product.measurementType === 'WEIGHT' || product.unit === 'KG' || Boolean(isMeasured && (product.fullWeightKg || 0) > 0);
+ const isValue = !isWeight && isMeasured && (product.measurementType === 'VALUE' || product.unit === 'VALUE_KES');
+ const unitLabel = isValue ? 'KES' : isWeight ? 'kg' : product.measureUnitLabel || product.unit.toLowerCase();
 
  const [mode, setMode] = useState<'ADD' | 'REDUCE'>('ADD');
- const [quantity, setQuantity] = useState<string>(isValue ? '500' : (isMeasured ? '5' : '12'));
+ const [quantity, setQuantity] = useState<string>(isValue ? '500' : isWeight ? '60' : (isMeasured ? '5' : '12'));
  const [reduceReason, setReduceReason] = useState<string>('Returned to Main Store');
  const [source, setSource] = useState<string>('Central Warehouse / Storekeeper');
  const [note, setNote] = useState<string>('');
@@ -65,10 +66,16 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
  });
  };
 
- const addPresets = isValue ? [250, 500, 1000, 1500] : (isMeasured ? [1, 2, 5, 10] : [6, 12, 24, 48]);
+ const addPresets = isValue
+   ? [250, 500, 1000, 1500]
+   : isWeight
+   ? [10, 20, 30, 60]
+   : (isMeasured ? [1, 2, 5, 10] : [6, 12, 24, 48]);
  const reducePresets = isValue
- ? [200, 500, 1000].filter((v) => v <= currentCount)
- : [1, 2, 6, 12].filter((v) => v <= currentCount);
+   ? [200, 500, 1000].filter((v) => v <= currentCount)
+   : isWeight
+   ? [5, 10, 20, 30].filter((v) => v <= currentCount)
+   : [1, 2, 6, 12].filter((v) => v <= currentCount);
 
  return (
  <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-xs">

@@ -20,7 +20,9 @@ import {
  ChevronUp,
  AlertCircle,
  Info,
+ Scale,
 } from 'lucide-react';
+import { WeightCalculatorModal } from '../common/WeightCalculatorModal';
 
 interface UnifiedStockLedgerProps {
  currentUser: User;
@@ -35,6 +37,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
  const [showExpenseModal, setShowExpenseModal] = useState<boolean>(false);
  const [showCloseModal, setShowCloseModal] = useState<boolean>(false);
+ const [showWeightModal, setShowWeightModal] = useState<boolean>(false);
  const [justClosedShift, setJustClosedShift] = useState<Shift | null>(null);
  const [toastMessage, setToastMessage] = useState<string | null>(null);
  const [copiedReceipt, setCopiedReceipt] = useState<boolean>(false);
@@ -148,13 +151,26 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
 
      // 6. Amount (Sales Revenue)
      // For drinks measured by money value (e.g. Muratina left on counter), salesUnits is ALREADY KES!
+     // For drinks measured by weight on scale (e.g. Keg tank), salesUnits is kg sold * ratePerUnit KES/kg!
+     const isWeight =
+       product.measurementType === 'WEIGHT' ||
+       product.unit === 'KG' ||
+       Boolean(product.isMeasured && (product.fullWeightKg || 0) > 0);
+     const ratePerUnit = isWeight
+       ? (product.pricePerKg || product.sellingPrice || 150)
+       : (product.sellingPrice || 0);
+
      const sellingPrice = product.sellingPrice || 0;
-     const amountKes = isValue ? salesUnits : salesUnits * sellingPrice;
+     const amountKes = isValue
+       ? salesUnits
+       : Math.round(salesUnits * ratePerUnit * 100) / 100;
 
      return {
        product,
        ssi,
        isValue,
+       isWeight,
+       ratePerUnit,
        openingStock,
        addedStock,
        totalStock,
@@ -527,6 +543,16 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
 
  <div className="flex items-center gap-2 flex-wrap">
  <button
+ type="button"
+ onClick={() => setShowWeightModal(true)}
+ className="py-1 px-2.5 rounded-lg bg-cyan-950/60 hover:bg-cyan-900/70 border border-cyan-800/80 text-cyan-300 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+ title="Open Keg Scale & Weight Valuation Calculator"
+ >
+ <Scale className="w-3.5 h-3.5 text-cyan-400" />
+ <span>Scale (kg)</span>
+ </button>
+
+ <button
  onClick={handleVerifyAllOpening}
  className="py-1 px-2.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-[#161F30] text-xs font-medium transition-colors cursor-pointer"
  >
@@ -626,12 +652,17 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  {p.name}
  </div>
  <div className="text-[10px] sm:text-[11px] text-slate-400 font-mono flex items-center gap-1.5 flex-wrap">
-   <span>{row.isValue ? 'Measured by Value' : `KES ${row.sellingPrice.toLocaleString()}`}</span>
+   <span>{row.isValue ? 'Measured by Value' : row.isWeight ? `KES ${row.ratePerUnit}/kg` : `KES ${row.sellingPrice.toLocaleString()}`}</span>
+   {row.isWeight && (
+     <span className="text-[9px] font-mono font-bold px-1 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-700/60">
+       ⚖️ Scale (kg)
+     </span>
+   )}
    <span>·</span>
    <span className="text-slate-400 truncate">{p.category}</span>
    {row.salesUnits > 0 && !isExpanded && (
      <span className="text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-800/60 px-1 rounded text-[9px]">
-       {row.isValue ? `KES ${row.salesUnits} sold` : `${row.salesUnits} sold`}
+       {row.isValue ? `KES ${row.salesUnits} sold` : row.isWeight ? `${row.salesUnits} kg sold (KES ${row.amountKes.toLocaleString()})` : `${row.salesUnits} sold`}
      </span>
    )}
  </div>
@@ -715,7 +746,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
      </p>
    </div>
    <span className="text-[11px] font-mono text-slate-300 bg-[#0D1117] px-2 py-0.5 rounded border border-slate-800">
-     {row.isValue ? 'Measured by Value' : `Price: KES ${row.sellingPrice.toLocaleString()}`}
+     {row.isValue ? 'Measured by Value' : row.isWeight ? `Rate: KES ${row.ratePerUnit}/kg (Scale)` : `Price: KES ${row.sellingPrice.toLocaleString()}`}
    </span>
  </div>
 
@@ -728,7 +759,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
        <span className="text-[9px] text-slate-400">(Open + Add)</span>
      </div>
      <div className="text-sm sm:text-base font-bold text-white">
-       {row.isValue ? `KES ${row.totalStock.toLocaleString()}` : `${row.totalStock} units`}
+       {row.isValue ? `KES ${row.totalStock.toLocaleString()}` : row.isWeight ? `${row.totalStock} kg (Scale)` : `${row.totalStock} units`}
      </div>
      <div className="text-[10px] text-slate-400 mt-0.5">
        {row.openingStock || 0} + {row.addedStock || 0}
@@ -748,14 +779,14 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
          </span>
        ) : row.hasClosingEntered ? (
          <span className={row.salesUnits > 0 ? 'text-white' : 'text-slate-400'}>
-           {row.isValue ? `KES ${row.salesUnits.toLocaleString()} worth` : `${row.salesUnits} units`}
+           {row.isValue ? `KES ${row.salesUnits.toLocaleString()} worth` : row.isWeight ? `${row.salesUnits} kg sold` : `${row.salesUnits} units`}
          </span>
        ) : (
          <span className="text-slate-400 text-xs">Enter closing</span>
        )}
      </div>
      <div className="text-[10px] text-slate-400 mt-0.5">
-       {(row.closingStock !== undefined ? "Closing: " + (row.isValue ? "KES " + row.closingStock : row.closingStock) : "Closing pending")}
+       {(row.closingStock !== undefined ? "Closing: " + (row.isValue ? "KES " + row.closingStock : row.isWeight ? `${row.closingStock} kg (Scale)` : `${row.closingStock} units`) : "Closing pending")}
      </div>
    </div>
 
@@ -768,7 +799,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
        {(row.amountKes > 0 ? "KES " + row.amountKes.toLocaleString() : "KES 0")}
      </div>
      <div className="text-[10px] text-slate-400 mt-0.5">
-       {row.isValue ? 'Direct Value Entry' : `${row.salesUnits} × KES ${row.sellingPrice.toLocaleString()}`}
+       {row.isValue ? 'Direct Value Entry' : row.isWeight ? `${row.salesUnits} kg × KES ${row.ratePerUnit}/kg = KES ${row.amountKes.toLocaleString()}` : `${row.salesUnits} × KES ${row.sellingPrice.toLocaleString()}`}
      </div>
    </div>
  </div>
@@ -1055,6 +1086,12 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  </div>
  </div>
  )}
+
+ {/* Weight & Keg Scale Valuation Modal */}
+ <WeightCalculatorModal
+   isOpen={showWeightModal}
+   onClose={() => setShowWeightModal(false)}
+ />
  </div>
  );
 };

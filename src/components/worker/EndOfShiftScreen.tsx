@@ -129,8 +129,19 @@ export const EndOfShiftScreen: React.FC<EndOfShiftScreenProps> = ({
 
  shiftStockItems.forEach((item) => {
  const prod = products.find((p) => p.id === item.productId);
- const isMeasured = prod?.isMeasured || item.unit === 'VALUE_KES';
- const isValue = isMeasured && (prod?.measurementType === 'VALUE' || prod?.unit === 'VALUE_KES' || item.unit === 'VALUE_KES');
+ const isWeight =
+   item.measurementType === 'WEIGHT' ||
+   item.unit === 'KG' ||
+   prod?.measurementType === 'WEIGHT' ||
+   prod?.unit === 'KG' ||
+   (item.isMeasured && ((item.fullWeightKg || 0) > 0 || (prod?.fullWeightKg || 0) > 0));
+ const isValue =
+   !isWeight &&
+   (prod?.isMeasured || item.unit === 'VALUE_KES') &&
+   (prod?.measurementType === 'VALUE' || prod?.unit === 'VALUE_KES' || item.unit === 'VALUE_KES');
+ const priceRate = isWeight
+   ? (item.pricePerKg || prod?.pricePerKg || item.sellingPrice || prod?.sellingPrice || 150)
+   : item.sellingPrice;
 
  const availableStock =
  item.openingPhysicalCount +
@@ -143,11 +154,13 @@ export const EndOfShiftScreen: React.FC<EndOfShiftScreenProps> = ({
  ? closingPhysicalCounts[item.productId]
  : availableStock;
  const sold = Math.max(0, availableStock - leftOnCounter);
- if (!isValue) {
+ if (isValue) {
+ expectedSalesRevenue += sold;
+ } else if (isWeight) {
+ expectedSalesRevenue += Math.round(sold * priceRate * 100) / 100;
+ } else {
  totalBottlesSold += sold;
  expectedSalesRevenue += sold * item.sellingPrice;
- } else {
- expectedSalesRevenue += sold;
  }
  });
 
@@ -190,7 +203,17 @@ export const EndOfShiftScreen: React.FC<EndOfShiftScreenProps> = ({
  const soldItems = shiftItems.filter((i) => i.recordedSales > 0);
 
  const drinksText = soldItems.length > 0
- ? soldItems.map((i) => `• ${i.productName}: ${i.recordedSales} sold (KES ${(i.recordedSales * i.sellingPrice).toLocaleString()})`).join('\n')
+ ? soldItems.map((i) => {
+   const isW = i.measurementType === 'WEIGHT' || i.unit === 'KG' || (i.isMeasured && (i.fullWeightKg || 0) > 0);
+   const rate = isW ? (i.pricePerKg || i.sellingPrice || 150) : i.sellingPrice;
+   if (i.measurementType === 'VALUE' || i.unit === 'VALUE_KES') {
+     return `• ${i.productName}: KES ${i.recordedSales.toLocaleString()} sold`;
+   }
+   if (isW) {
+     return `• ${i.productName}: ${i.recordedSales} kg sold (KES ${Math.round(i.recordedSales * rate).toLocaleString()})`;
+   }
+   return `• ${i.productName}: ${i.recordedSales} sold (KES ${(i.recordedSales * i.sellingPrice).toLocaleString()})`;
+ }).join('\n')
  : '• No drink sales recorded';
 
  const expText = shiftExp.length > 0
@@ -309,17 +332,33 @@ Generated via Bar Track System`;
  const sold = Math.max(0, available - left);
 
  const prod = products.find((p) => p.id === item.productId);
- const isMeasured = prod?.isMeasured || item.unit === 'VALUE_KES';
- const isValue = isMeasured && (prod?.measurementType === 'VALUE' || prod?.unit === 'VALUE_KES' || item.unit === 'VALUE_KES');
- const stepDelta = isValue ? 100 : 1;
- const unitLabel = isValue ? 'worth' : (prod?.measureUnitLabel || item.unit.toLowerCase());
- const itemRevenue = isValue ? sold : sold * item.sellingPrice;
+ const isMeasured = Boolean(item.isMeasured || prod?.isMeasured);
+ const isWeight =
+   item.measurementType === 'WEIGHT' ||
+   item.unit === 'KG' ||
+   prod?.measurementType === 'WEIGHT' ||
+   prod?.unit === 'KG' ||
+   (item.isMeasured && ((item.fullWeightKg || 0) > 0 || (prod?.fullWeightKg || 0) > 0));
+ const isValue =
+   !isWeight &&
+   (prod?.isMeasured || item.unit === 'VALUE_KES') &&
+   (prod?.measurementType === 'VALUE' || prod?.unit === 'VALUE_KES' || item.unit === 'VALUE_KES');
+ const priceRate = isWeight
+   ? (item.pricePerKg || prod?.pricePerKg || item.sellingPrice || prod?.sellingPrice || 150)
+   : item.sellingPrice;
+ const stepDelta = isValue ? 100 : (isWeight ? 1 : 1);
+ const unitLabel = isValue ? 'worth' : isWeight ? 'kg' : (prod?.measureUnitLabel || item.unit.toLowerCase());
+ const itemRevenue = isValue ? sold : Math.round(sold * priceRate * 100) / 100;
 
  return (
  <div
  key={item.productId}
  className={`p-3 rounded-2xl bg-[#0E1420] border flex items-center justify-between gap-2 ${
- isMeasured ? 'border-cyan-900/60 bg-gradient-to-r from-[#0E1420] to-cyan-950/20' : 'border-slate-800'
+ isWeight
+   ? 'border-cyan-800/80 bg-gradient-to-r from-[#0E1420] via-cyan-950/20 to-[#0E1420]'
+   : isMeasured
+   ? 'border-cyan-900/60 bg-gradient-to-r from-[#0E1420] to-cyan-950/20'
+   : 'border-slate-800'
  }`}
  >
  <div className="min-w-0 flex-1">
@@ -327,7 +366,12 @@ Generated via Bar Track System`;
  <span className="font-bold text-xs sm:text-sm text-white truncate">
  {item.productName}
  </span>
- {isMeasured && (
+ {isWeight && (
+ <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-cyan-950 text-cyan-300 border border-cyan-600/70 shrink-0">
+ ⚖️ Scale (kg)
+ </span>
+ )}
+ {isMeasured && !isWeight && (
  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-cyan-950 text-cyan-400 border border-cyan-700/60 shrink-0">
  Measured
  </span>
@@ -343,28 +387,44 @@ Generated via Bar Track System`;
  </span>
  )}
  </div>
- <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5 font-mono">
+ <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5 font-mono flex-wrap">
  <span>
  Start: {isValue ? `KES ${available.toLocaleString()}` : `${available} ${unitLabel}`}
+ {isWeight && ` (KES ${(available * priceRate).toLocaleString()})`}
  {item.additions > 0 && ` (inc. +${item.additions} restocked)`}
  {item.additions < 0 && ` (inc. ${item.additions} reduced)`}
  </span>
  <span>·</span>
  <span className="text-emerald-400 font-bold">
- Sold: {isValue ? `KES ${sold.toLocaleString()}` : sold}
+ Sold: {isValue ? `KES ${sold.toLocaleString()}` : isWeight ? `${sold} kg` : sold}
  </span>
  <span>·</span>
- <span>KES {itemRevenue.toLocaleString()}</span>
+ <span className="text-white font-bold">KES {itemRevenue.toLocaleString()}</span>
+ {isWeight && (
+   <span className="text-cyan-300">
+     · Weighed left: {left}kg
+   </span>
+ )}
  </div>
  </div>
 
  {/* Stepper Buttons */}
  <div className="flex items-center gap-1.5 shrink-0">
+ {isWeight && (
+ <button
+ type="button"
+ onClick={() => adjustCount(item.productId, -5)}
+ className="px-1.5 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 flex items-center justify-center font-mono text-xs cursor-pointer"
+ title="Decrease by 5 kg"
+ >
+ -5kg
+ </button>
+ )}
  <button
  type="button"
  onClick={() => adjustCount(item.productId, -stepDelta)}
  className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
- title={isValue ? '-100 KES' : '-1'}
+ title={isValue ? '-100 KES' : isWeight ? '-1 kg' : '-1'}
  >
  <Minus className="w-4 h-4" />
  </button>
@@ -382,7 +442,9 @@ Generated via Bar Track System`;
  }));
  }}
  className={`w-16 h-9 text-center rounded-xl font-mono font-bold text-xs focus:outline-none ${
- isValue
+ isWeight
+ ? 'bg-[#0E1420] border border-cyan-500 text-cyan-200'
+ : isValue
  ? 'bg-[#0E1420] border border-cyan-700 text-cyan-300'
  : 'bg-[#151D2C] border border-slate-700 text-white'
  }`}
@@ -392,10 +454,20 @@ Generated via Bar Track System`;
  type="button"
  onClick={() => adjustCount(item.productId, stepDelta)}
  className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white flex items-center justify-center font-bold text-lg cursor-pointer"
- title={isValue ? '+100 KES' : '+1'}
+ title={isValue ? '+100 KES' : isWeight ? '+1 kg' : '+1'}
  >
  <Plus className="w-4 h-4" />
  </button>
+ {isWeight && (
+ <button
+ type="button"
+ onClick={() => adjustCount(item.productId, 5)}
+ className="px-1.5 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-cyan-400 flex items-center justify-center font-mono text-xs cursor-pointer"
+ title="Increase by 5 kg"
+ >
+ +5kg
+ </button>
+ )}
  </div>
  </div>
  );
@@ -869,23 +941,53 @@ Generated via Bar Track System`;
  .filter((item) => item.recordedSales > 0 || (item.closingPhysicalCount !== undefined && item.closingPhysicalCount < item.openingPhysicalCount))
  .map((item) => {
  const prod = products.find((p) => p.id === item.productId);
- const isValue = (prod?.isMeasured && prod.measurementType === 'VALUE') || item.unit === 'VALUE_KES';
- const rev = isValue ? item.recordedSales : item.recordedSales * item.sellingPrice;
+ const isWeight =
+   item.measurementType === 'WEIGHT' ||
+   item.unit === 'KG' ||
+   prod?.measurementType === 'WEIGHT' ||
+   prod?.unit === 'KG' ||
+   (item.isMeasured && ((item.fullWeightKg || 0) > 0 || (prod?.fullWeightKg || 0) > 0));
+ const isValue =
+   !isWeight &&
+   ((prod?.isMeasured && prod.measurementType === 'VALUE') || item.unit === 'VALUE_KES');
+ const priceRate = isWeight
+   ? (item.pricePerKg || prod?.pricePerKg || item.sellingPrice || prod?.sellingPrice || 150)
+   : item.sellingPrice;
+ const rev = isValue ? item.recordedSales : item.recordedSales * priceRate;
 
  return (
  <tr key={item.productId} className="hover:bg-slate-900/50">
  <td className="p-2.5 font-sans font-medium text-white flex items-center gap-1.5">
  <span>{item.productName}</span>
- {prod?.isMeasured && (
+ {isWeight && (
+ <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
+ ⚖️ Scale
+ </span>
+ )}
+ {prod?.isMeasured && !isWeight && (
  <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">
  Measured
  </span>
  )}
  </td>
- <td className="p-2.5 text-center text-slate-400">{isValue ? `KES ${item.openingPhysicalCount.toLocaleString()}` : item.openingPhysicalCount}</td>
- <td className="p-2.5 text-center text-emerald-400">+{item.additions + item.transfersIn}</td>
- <td className="p-2.5 text-center text-slate-300">{item.closingPhysicalCount !== undefined ? (isValue ? `KES ${item.closingPhysicalCount.toLocaleString()}` : item.closingPhysicalCount) : '-'}</td>
- <td className="p-2.5 text-center font-bold text-emerald-400">{isValue ? `KES ${item.recordedSales.toLocaleString()}` : item.recordedSales}</td>
+ <td className="p-2.5 text-center text-slate-400">
+   {isValue ? `KES ${item.openingPhysicalCount.toLocaleString()}` : isWeight ? `${item.openingPhysicalCount} kg` : item.openingPhysicalCount}
+ </td>
+ <td className="p-2.5 text-center text-emerald-400">
+   +{item.additions + item.transfersIn} {isWeight ? 'kg' : ''}
+ </td>
+ <td className="p-2.5 text-center text-slate-300">
+   {item.closingPhysicalCount !== undefined
+     ? isValue
+       ? `KES ${item.closingPhysicalCount.toLocaleString()}`
+       : isWeight
+       ? `${item.closingPhysicalCount} kg`
+       : item.closingPhysicalCount
+     : '-'}
+ </td>
+ <td className="p-2.5 text-center font-bold text-emerald-400">
+   {isValue ? `KES ${item.recordedSales.toLocaleString()}` : isWeight ? `${item.recordedSales} kg` : item.recordedSales}
+ </td>
  <td className="p-2.5 text-right font-bold text-white">
  KES {rev.toLocaleString()}
  </td>
