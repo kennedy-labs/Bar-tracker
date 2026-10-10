@@ -49,6 +49,7 @@ const STORAGE_KEYS = {
 class StoreService {
   private subscribers: (() => void)[] = [];
   private pendingAutoSync = false;
+  private hasLocalMutationsToPush = false;
   private isAutoSyncing = false;
   private autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
   private lastAutoSyncTime: string | null = null;
@@ -75,24 +76,21 @@ class StoreService {
   }
 
   private setupAutoSyncEngine() {
-    // Listen to Neon status changes: when connected, flush pending sync
+    // Listen to Neon status changes: when connected, trigger pull first
     neonService.subscribeStatus((st) => {
       if (st.status === 'CONNECTED') {
-        if (this.pendingAutoSync || !this.hasInitialCloudSynced) {
-          this.scheduleAutoSync(200);
-        }
+        this.scheduleAutoSync(100, false);
       }
     });
 
     // Browser network events
     window.addEventListener('online', () => {
       this.set(STORAGE_KEYS.IS_ONLINE, true);
-      this.scheduleAutoSync(200);
+      this.scheduleAutoSync(100, false);
     });
 
     window.addEventListener('offline', () => {
       this.set(STORAGE_KEYS.IS_ONLINE, false);
-      this.pendingAutoSync = true;
     });
 
     // Continuous live synchronization loop:
@@ -115,8 +113,11 @@ class StoreService {
     });
   }
 
-  public scheduleAutoSync(delayMs = 600) {
+  public scheduleAutoSync(delayMs = 600, isLocalMutation = false) {
     if (typeof window === 'undefined') return;
+    if (isLocalMutation) {
+      this.hasLocalMutationsToPush = true;
+    }
     this.pendingAutoSync = true;
     if (this.autoSyncTimer) {
       clearTimeout(this.autoSyncTimer);
@@ -137,30 +138,36 @@ class StoreService {
     const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
     if (!isOnline || (neonStatus.status !== 'CONNECTED' && neonStatus.status !== 'SYNCING')) {
-      this.pendingAutoSync = true;
       return { success: false, message: 'Offline. Queued for auto-sync.' };
     }
 
     this.isAutoSyncing = true;
     try {
-      const currentBiz = this.getCurrentBusiness();
-
-      // If we have pending local mutations or offline changes, push them to Neon first
-      if (currentBiz && currentBiz.id && (this.pendingAutoSync || this.getOfflineQueueCount() > 0)) {
-        try {
-          await this.uploadAllToNeon(currentBiz.id);
-        } catch (uploadErr) {
-          console.warn('Pending mutations upload to Neon notice:', uploadErr);
-        }
-      }
-
-      // Always pull latest businesses and users from Neon for cross-device synchronization
+      // 1. ALWAYS pull latest businesses and users FIRST from Neon for cross-device consistency
       const pullRes = await neonService.pullAllBusinessesAndUsers();
       if (pullRes.success && pullRes.businesses && pullRes.businesses.length > 0) {
         this.mergeCloudBusinessesAndUsers(pullRes.businesses, pullRes.users || []);
       }
 
-      // Pull authoritative establishment data for the current active business
+      const currentBiz = this.getCurrentBusiness();
+
+      // 2. ONLY push to Neon if the initial cloud state has ALREADY been established
+      // AND we have actual local mutations made in this active session (or offline queue entries)
+      if (
+        currentBiz &&
+        currentBiz.id &&
+        this.hasInitialCloudSynced &&
+        (this.hasLocalMutationsToPush || this.getOfflineQueueCount() > 0)
+      ) {
+        try {
+          await this.uploadAllToNeon(currentBiz.id);
+          this.hasLocalMutationsToPush = false;
+        } catch (uploadErr) {
+          console.warn('Pending mutations upload to Neon notice:', uploadErr);
+        }
+      }
+
+      // 3. Always pull authoritative establishment data for the current active business
       const bizToPull = this.getCurrentBusiness();
       if (bizToPull && bizToPull.id) {
         const fullBizRes = await neonService.pullBusinessFromNeon(bizToPull.id);
@@ -200,7 +207,13 @@ class StoreService {
   }
 
   public triggerNeonSync() {
-    this.scheduleAutoSync(0);
+    this.scheduleAutoSync(0, false);
+  }
+
+  public clearActiveSessionCache() {
+    this.hasLocalMutationsToPush = false;
+    this.hasInitialCloudSynced = false;
+    this.pendingAutoSync = false;
   }
 
   public subscribe(callback: () => void) {
@@ -220,15 +233,15 @@ class StoreService {
     });
   }
 
-  private notify() {
+  private notify(isLocalMutation = true) {
     this.notifySubscribersOnly();
     try {
       this.liveChannel?.postMessage({ type: 'LOCAL_STORE_MUTATED', timestamp: Date.now() });
     } catch (e) {
       // ignore
     }
-    // Automatically debounce cloud sync whenever any local state changes
-    this.scheduleAutoSync(600);
+    // Automatically debounce cloud sync whenever local state changes
+    this.scheduleAutoSync(600, isLocalMutation);
   }
 
   private get<T>(key: string, defaultValue: T): T {
@@ -283,6 +296,25 @@ class StoreService {
         localStorage.removeItem('bartracker_session_user');
         localStorage.removeItem('bartracker_auth_session');
         localStorage.removeItem('bartracker_saved_username');
+      }
+
+      // Also clean up obsolete deleted test establishments from local storage
+      const hasObsolete = storedBusinesses.some(
+        (b) => b.id === 'biz-1791300380629' || b.id === 'biz-1791224873816'
+      );
+      if (hasObsolete) {
+        const cleanBizs = storedBusinesses.filter(
+          (b) => b.id !== 'biz-1791300380629' && b.id !== 'biz-1791224873816'
+        );
+        this.set(STORAGE_KEYS.BUSINESSES, cleanBizs);
+        const cleanUsers = storedUsers.filter(
+          (u) => u.businessId !== 'biz-1791300380629' && u.businessId !== 'biz-1791224873816'
+        );
+        this.set(STORAGE_KEYS.USERS, cleanUsers);
+        const currentBizId = this.get<string>(STORAGE_KEYS.CURRENT_BIZ_ID, '');
+        if (currentBizId === 'biz-1791300380629' || currentBizId === 'biz-1791224873816') {
+          this.set(STORAGE_KEYS.CURRENT_BIZ_ID, cleanBizs[0]?.id || '');
+        }
       }
     } catch (e) {
       console.error('Error purging legacy demo data:', e);
@@ -1166,47 +1198,50 @@ class StoreService {
       return false;
     };
 
-    // First attempt: Check local storage candidates
-    const localCandidates = findCandidates(this.getUsers());
-    for (const cand of localCandidates) {
-      if (await verifyCandidate(cand)) {
-        authService.clearFailedAttempts(rawInput);
-        authService.createSession(cand);
-        if (cand.businessId) {
-          this.setCurrentBusiness(cand.businessId);
-        }
-        return cand;
-      }
-    }
-
-    // Second attempt: If local check didn't match or local candidates pool was empty,
-    // query Neon PostgreSQL live to fetch updated credentials or newly registered businesses
+    // ALWAYS query Neon PostgreSQL live first when online to guarantee present credentials and state
     if (typeof navigator !== 'undefined' && navigator.onLine) {
       try {
         const pullRes = await neonService.pullAllBusinessesAndUsers();
         if (pullRes.success && pullRes.users && pullRes.users.length > 0) {
           this.mergeCloudBusinessesAndUsers(pullRes.businesses || [], pullRes.users);
-          const freshCandidates = findCandidates(this.getUsers());
-          for (const cand of freshCandidates) {
-            if (await verifyCandidate(cand)) {
-              authService.clearFailedAttempts(rawInput);
-              authService.createSession(cand);
-              if (cand.businessId) {
-                this.setCurrentBusiness(cand.businessId);
-                // Also pull business-specific data immediately
-                neonService.pullBusinessFromNeon(cand.businessId).then((res) => {
-                  if (res.success && res.data) {
-                    this.mergeCloudBusinessData(res.data);
-                    this.notify();
-                  }
-                }).catch(() => {});
-              }
-              return cand;
-            }
-          }
         }
       } catch (e) {
         // network error fallback
+      }
+    }
+
+    // Sort candidates so that the most recently active business is tested first
+    const businesses = this.get<BusinessProfile[]>(STORAGE_KEYS.BUSINESSES, []);
+    const bizOrderMap = new Map<string, number>();
+    businesses.forEach((b, index) => bizOrderMap.set(b.id, index));
+
+    const candidates = findCandidates(this.getUsers()).sort((a, b) => {
+      const idxA = a.businessId ? (bizOrderMap.get(a.businessId) ?? 999) : 999;
+      const idxB = b.businessId ? (bizOrderMap.get(b.businessId) ?? 999) : 999;
+      return idxA - idxB;
+    });
+
+    for (const cand of candidates) {
+      if (await verifyCandidate(cand)) {
+        authService.clearFailedAttempts(rawInput);
+        authService.createSession(cand);
+        if (cand.businessId) {
+          this.setCurrentBusiness(cand.businessId);
+          // Crucial: Await authoritative database state so the store is 100% in the present state before UI renders
+          if (typeof navigator !== 'undefined' && navigator.onLine) {
+            try {
+              const fullBizRes = await neonService.pullBusinessFromNeon(cand.businessId);
+              if (fullBizRes.success && fullBizRes.data) {
+                this.mergeCloudBusinessData(fullBizRes.data);
+                this.hasInitialCloudSynced = true;
+                this.hasLocalMutationsToPush = false;
+              }
+            } catch (err) {
+              console.warn('Post-login cloud fetch notice:', err);
+            }
+          }
+        }
+        return cand;
       }
     }
 
@@ -3275,102 +3310,49 @@ class StoreService {
     if (!data.business) return;
     const bizId = data.business.id;
 
-    // 1. Authoritative Merge for Products
-    // Only rows belonging to the business being merged are considered, so a
-    // multi-establishment database cannot leak foreign catalog entries into
-    // this business's product list (which then desyncs its inventory rows).
+    // 0. Update Business profile metadata
+    const businesses = this.get<BusinessProfile[]>(STORAGE_KEYS.BUSINESSES, []);
+    const bIdx = businesses.findIndex((b) => b.id === bizId);
+    if (bIdx >= 0) {
+      businesses[bIdx] = {
+        ...businesses[bIdx],
+        ...data.business,
+      };
+      this.set(STORAGE_KEYS.BUSINESSES, businesses);
+    }
+
+    // 1. Authoritative Merge for Products (Cloud is the absolute source of truth)
     if (data.products && data.products.length > 0) {
-      // (ownership filter applied below)
       const bizProducts = data.products.filter(
         (cp) => !cp.businessId || cp.businessId === bizId
       );
-      const cloudIds = new Set(bizProducts.map((cp) => cp.id));
-      const localProducts = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
-      const mergedMap = new Map<string, Product>();
-      bizProducts.forEach((cp) => mergedMap.set(cp.id, cp));
-      localProducts.forEach((lp) => {
-        const belongsHere = !lp.businessId || lp.businessId === bizId;
-        if (belongsHere && !mergedMap.has(lp.id) && !cloudIds.has(lp.id)) {
-          mergedMap.set(lp.id, lp);
-        }
-      });
-      // Preserve products owned by other businesses untouched.
-      localProducts.forEach((lp) => {
-        if (lp.businessId && lp.businessId !== bizId) {
-          mergedMap.set(lp.id, lp);
-        }
-      });
-      this.set(STORAGE_KEYS.PRODUCTS, Array.from(mergedMap.values()));
+      const otherBizProducts = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []).filter(
+        (lp) => lp.businessId && lp.businessId !== bizId
+      );
+      this.set(STORAGE_KEYS.PRODUCTS, [...bizProducts, ...otherBizProducts]);
     }
 
     // 2. Authoritative Merge for Shifts (Includes Active Attendant Shifts)
-    if (data.shifts && data.shifts.length > 0) {
+    if (data.shifts) {
       const shiftMap = this.get<Record<string, Shift[]>>(STORAGE_KEYS.SHIFTS_MAP, {});
       shiftMap[bizId] = data.shifts;
       this.set(STORAGE_KEYS.SHIFTS_MAP, shiftMap);
     }
 
-    // 3. Authoritative Merge for Inventory (Cloud is the source of truth)
-    // The cloud row wins for quantityOnHand. A local row is only preserved when
-    // there is no cloud counterpart at all, or when a local mutation is still
-    // pending upload (otherwise a stale higher local count would silently
-    // overwrite a remote owner adjustment).
-    if (data.inventory && data.inventory.length > 0) {
+    // 3. Authoritative Merge for Inventory (Cloud is the single source of truth)
+    if (data.inventory) {
       const invMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
-      const localInv = invMap[bizId] || [];
-      const localMap = new Map<string, InventoryItem>();
-      localInv.forEach((i) => localMap.set(i.productId, i));
-      const localMutationPending = this.pendingAutoSync || this.getOfflineQueueCount() > 0;
-
-      // Restrict the merge to products that actually belong to this business,
-      // so foreign inventory rows cannot be pulled in alongside foreign catalog rows.
-      const businessProductIds = new Set(
-        this.get<Product[]>(STORAGE_KEYS.PRODUCTS, [])
-          .filter((p) => !p.businessId || p.businessId === bizId)
-          .map((p) => p.id)
-      );
-      const cloudInventory = data.inventory.filter(
-        (ci) => businessProductIds.has(ci.productId)
-      );
-
-      const mergedInv = cloudInventory.map((ci) => {
-        const li = localMap.get(ci.productId);
-        if (li && localMutationPending) {
-          return li;
-        }
-        return ci;
-      });
-      localInv.forEach((li) => {
-        if (!mergedInv.some((m) => m.productId === li.productId)) {
-          mergedInv.push(li);
-        }
-      });
-      invMap[bizId] = mergedInv;
+      invMap[bizId] = data.inventory;
       this.set(STORAGE_KEYS.INVENTORY_MAP, invMap);
     }
 
-    // 4. Authoritative Merge for Shift Stock Items (Cloud wins unless a local
-    // mutation is still pending upload). Records are matched by their
-    // shiftId/productId identity so the cloud opening count is not frozen out.
-    if (data.shiftStockItems && data.shiftStockItems.length > 0) {
-      const localSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
-      const localMap = new Map<string, ShiftStockItem>();
-      localSSIs.forEach((i) => localMap.set(`${i.shiftId}-${i.productId}`, i));
-      const localMutationPending = this.pendingAutoSync || this.getOfflineQueueCount() > 0;
-
-      const mergedSSIs = data.shiftStockItems.map((ci) => {
-        const li = localMap.get(`${ci.shiftId}-${ci.productId}`);
-        if (li && localMutationPending) {
-          return li;
-        }
-        return ci;
-      });
-      localSSIs.forEach((li) => {
-        if (!mergedSSIs.some((m) => m.shiftId === li.shiftId && m.productId === li.productId)) {
-          mergedSSIs.push(li);
-        }
-      });
-      this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, mergedSSIs);
+    // 4. Authoritative Merge for Shift Stock Items (Cloud is the single source of truth)
+    if (data.shiftStockItems) {
+      const currentShiftIds = new Set((data.shifts || []).map((s) => s.id));
+      const otherSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []).filter(
+        (item) => !currentShiftIds.has(item.shiftId)
+      );
+      this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, [...data.shiftStockItems, ...otherSSIs]);
     }
 
     // 5. Authoritative Merge for Shift Expenses

@@ -1479,6 +1479,16 @@ class NeonService {
         }
       });
 
+      // Synchronize activeShiftId from authoritative shifts table if open
+      const activeDbShift = shifts.find(
+        (s) => s.status === 'ACTIVE' || s.status === 'OPENING_VERIFICATION'
+      );
+      if (activeDbShift) {
+        business.activeShiftId = activeDbShift.id;
+      } else if (!shifts.some((s) => s.id === business.activeShiftId && (s.status === 'ACTIVE' || s.status === 'OPENING_VERIFICATION'))) {
+        business.activeShiftId = '';
+      }
+
       this.updateState({ status: 'CONNECTED', errorMessage: undefined });
       return {
         success: true,
@@ -1520,7 +1530,10 @@ class NeonService {
 
     try {
       const sql = this.client || neon(url);
-      const bizRows = await sql`SELECT * FROM businesses ORDER BY created_at ASC;`;
+      const bizRows = await sql`
+        SELECT * FROM businesses 
+        ORDER BY updated_at DESC, created_at DESC;
+      `;
       const businesses: BusinessProfile[] = bizRows.map((b) => ({
         id: b.id,
         name: b.name,
@@ -1532,7 +1545,11 @@ class NeonService {
         activeShiftId: b.active_shift_code || '',
       }));
 
-      const userRows = await sql`SELECT * FROM users;`;
+      const userRows = await sql`
+        SELECT * FROM users 
+        WHERE is_archived = FALSE OR is_archived IS NULL
+        ORDER BY updated_at DESC, created_at DESC;
+      `;
       const users: User[] = userRows.map((u) => ({
         id: u.id,
         businessId: u.business_id,

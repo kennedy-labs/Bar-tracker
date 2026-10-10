@@ -193,9 +193,11 @@ export default function App() {
 
   const handleLogout = () => {
     authService.destroySession();
+    store.clearActiveSessionCache();
     setCurrentUser(null);
     try {
       localStorage.removeItem('bartracker_session_user');
+      sessionStorage.removeItem('bartrack_active_tab');
     } catch (err) {
       console.error(err);
     }
