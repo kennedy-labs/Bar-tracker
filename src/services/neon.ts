@@ -1641,6 +1641,11 @@ class NeonService {
         SET 
           opening_physical_count = ${cleanQty},
           opening_system_count = ${cleanQty},
+          additions = 0,
+          closing_physical_count = CASE 
+            WHEN closing_physical_count IS NOT NULL AND closing_physical_count > ${cleanQty} THEN ${cleanQty}
+            ELSE closing_physical_count 
+          END,
           updated_at = NOW()
         WHERE business_id = ${businessId}
           AND product_id = ${productId}

@@ -809,6 +809,7 @@ export const CatalogManager: React.FC = () => {
                             <input
                               type="number"
                               step="any"
+                              inputMode="decimal"
                               min="0"
                               disabled={p.isArchived}
                               value={stockInputs[p.id] !== undefined ? stockInputs[p.id] : stockOnHand}
@@ -1067,6 +1068,7 @@ export const CatalogManager: React.FC = () => {
                         <input
                           type="number"
                           step="any"
+                          inputMode="decimal"
                           min="0"
                           disabled={p.isArchived}
                           value={stockInputs[p.id] !== undefined ? stockInputs[p.id] : stockOnHand}

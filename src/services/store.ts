@@ -2764,20 +2764,42 @@ class StoreService {
         ssi.openingPhysicalCount = cleanQty;
         ssi.openingSystemCount = cleanQty;
 
-        // Recalculate sales only if a closing count has been entered
-        const available = Number(ssi.openingPhysicalCount || 0) +
-          Number(ssi.additions || 0) +
-          Number(ssi.transfersIn || 0) -
-          Number(ssi.transfersOut || 0) -
-          Number(ssi.damages || 0);
+        // Zero out additions and damages/transfers so that total available stock
+        // directly and cleanly matches the owner's physical adjustment
+        ssi.additions = 0;
+        ssi.transfersIn = 0;
+        ssi.transfersOut = 0;
+        ssi.damages = 0;
 
+        // If a closing physical count had already been entered (or was an old count from before),
+        // adjust or cap it to cleanQty so it doesn't cause overage or overwrite the inventory back to the old value
         if (ssi.closingPhysicalCount !== undefined) {
-          ssi.recordedSales = Math.round(Math.max(0, available - ssi.closingPhysicalCount) * 100) / 100;
+          if (ssi.closingPhysicalCount > cleanQty) {
+            ssi.closingPhysicalCount = cleanQty;
+          }
+          ssi.recordedSales = Math.round(Math.max(0, cleanQty - ssi.closingPhysicalCount) * 100) / 100;
         } else {
           ssi.recordedSales = 0;
         }
       }
       this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
+
+      // Lock any pending stock addition records for this product on the active shift
+      // so they don't apply an extra duplicate delta after the owner audited the real stock
+      const additions = this.get<StockAdditionRecord[]>(STORAGE_KEYS.STOCK_ADDITIONS, []);
+      let additionsModified = false;
+      additions.forEach((a) => {
+        if (a.shiftId === activeShift.id && a.productId === productId && a.status === 'PENDING_OWNER_CONFIRMATION') {
+          a.status = 'SAVED_LOCKED';
+          a.savedBy = 'Owner Direct Stock Adjustment';
+          a.savedAt = new Date().toISOString();
+          a.isImmutable = true;
+          additionsModified = true;
+        }
+      });
+      if (additionsModified) {
+        this.set(STORAGE_KEYS.STOCK_ADDITIONS, additions);
+      }
     }
 
     this.addEvent({
