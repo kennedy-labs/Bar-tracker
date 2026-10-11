@@ -17,6 +17,7 @@ import {
 import { BusinessIdentityBadge } from './BusinessIdentityBadge';
 import { EditProfileModal } from './EditProfileModal';
 import { WeightCalculatorModal } from './WeightCalculatorModal';
+import { PWAInstallButton } from './PWAInstallPrompt';
 
 interface TopBarProps {
   currentUser: User | null;
@@ -84,8 +85,8 @@ export const TopBar: React.FC<TopBarProps> = ({
           <BusinessIdentityBadge />
         </div>
 
-        {/* Zone 2: Navigation Links */}
-        <nav className="flex items-center gap-1 sm:gap-2">
+        {/* Zone 2: Navigation Links (Desktop) */}
+        <nav className="hidden md:flex items-center gap-1 sm:gap-2">
           {navItems.map((item) => {
             const isSettingsCategory = ['settings', 'mpesa', 'partners', 'staff', 'database', 'profile'].includes(activeTab);
             const isActive = item.id === 'settings' ? isSettingsCategory : (item.id === 'stock' ? (activeTab === 'stock' || activeTab === 'catalog') : activeTab === item.id);
@@ -109,6 +110,10 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         {/* Zone 3: Account & Session Action */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* PWA Install Button (Header) */}
+          <div className="hidden sm:block">
+            <PWAInstallButton />
+          </div>
           {/* Quick Weight & Keg Scale Valuation Tool */}
           <button
             type="button"

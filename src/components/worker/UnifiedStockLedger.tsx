@@ -397,6 +397,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  <Coins className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
  <input
  type="number"
+ inputMode="decimal"
  min="0"
  value={openingCashInput}
  onChange={(e) => setOpeningCashInput(e.target.value)}
@@ -413,6 +414,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  <Smartphone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
  <input
  type="number"
+ inputMode="decimal"
  min="0"
  value={openingMpesaInput}
  onChange={(e) => setOpeningMpesaInput(e.target.value)}
@@ -467,6 +469,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  <td className="py-2.5 px-3 text-center">
  <input
  type="number" step="any"
+ inputMode="decimal"
  min="0"
  value={cellInputStrings[row.product.id]?.opening !== undefined ? cellInputStrings[row.product.id]?.opening : (row.openingStock !== undefined ? row.openingStock : '')}
  onFocus={(e) => e.target.select()}
@@ -691,6 +694,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  >
  <input
  type="number" step="any"
+ inputMode="decimal"
  min="0"
  value={cellInputStrings[p.id]?.opening !== undefined ? cellInputStrings[p.id]?.opening : (row.openingStock !== undefined ? row.openingStock : '')}
  onFocus={(e) => e.target.select()}
@@ -709,6 +713,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  <input
                                 type="number"
                                 step="any"
+                                inputMode="decimal"
                                 min="0"
                                 value={cellInputStrings[p.id]?.added !== undefined ? cellInputStrings[p.id]?.added : (row.addedStock !== undefined && row.addedStock > 0 ? row.addedStock : '')}
  onFocus={(e) => e.target.select()}
@@ -726,6 +731,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  >
  <input
  type="number" step="any"
+ inputMode="decimal"
  min="0"
  value={cellInputStrings[p.id]?.closing !== undefined ? cellInputStrings[p.id]?.closing : (row.closingStock !== undefined ? row.closingStock : '')}
  onFocus={(e) => e.target.select()}
@@ -943,6 +949,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  </label>
  <input
  type="number"
+ inputMode="decimal"
  min="0"
  value={closingCashInput}
  onChange={(e) => setClosingCashInput(e.target.value)}
@@ -957,6 +964,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  </label>
  <input
  type="number"
+ inputMode="decimal"
  min="0"
  value={closingMpesaInput}
  onChange={(e) => setClosingMpesaInput(e.target.value)}

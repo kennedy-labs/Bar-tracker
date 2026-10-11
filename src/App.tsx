@@ -4,6 +4,8 @@ import { store } from './services/store';
 import { authService } from './services/auth';
 import { AuthScreen } from './components/auth/AuthScreen';
 import { TopBar } from './components/common/TopBar';
+import { MobileBottomNav } from './components/common/MobileBottomNav';
+import { WeightCalculatorModal } from './components/common/WeightCalculatorModal';
 import { WorkerTerminal } from './components/worker/WorkerTerminal';
 import { OwnerDashboard } from './components/owner/OwnerDashboard';
 
@@ -216,6 +218,8 @@ export default function App() {
 
   const discrepancies = store.getDiscrepancies({ status: 'FLAGGED' });
 
+  const [isMobileScaleOpen, setIsMobileScaleOpen] = useState(false);
+
   // If not logged in, show production Authentication Screen
   if (!currentUser) {
     return <AuthScreen onLogin={handleLogin} />;
@@ -250,6 +254,20 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Mobile Sticky Bottom Navigation (Android / Mobile viewports) */}
+      <MobileBottomNav
+        currentUser={currentUser}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onOpenScaleModal={() => setIsMobileScaleOpen(true)}
+      />
+
+      {/* Global Weight Calculator Modal triggered from Mobile Navigation */}
+      <WeightCalculatorModal
+        isOpen={isMobileScaleOpen}
+        onClose={() => setIsMobileScaleOpen(false)}
+      />
     </div>
   );
 }
