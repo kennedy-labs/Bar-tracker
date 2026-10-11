@@ -38,6 +38,7 @@ const STORAGE_KEYS = {
   STOCK_MOVEMENTS: 'bar_track_stock_movements',
   STOCK_ADDITIONS: 'bar_track_stock_additions',
   DELETED_STOCK_ADDITIONS: 'bar_track_deleted_stock_additions',
+  DELETED_PRODUCT_IDS: 'bar_track_deleted_product_ids',
   HANDOVER_DRAFTS: 'bar_track_handover_drafts',
   DISCREPANCIES: 'bar_track_discrepancies',
   EVENTS_MAP: 'bar_track_events_map',
@@ -151,12 +152,10 @@ class StoreService {
 
       const currentBiz = this.getCurrentBusiness();
 
-      // 2. ONLY push to Neon if the initial cloud state has ALREADY been established
-      // AND we have actual local mutations made in this active session (or offline queue entries)
+      // 2. ALWAYS push local mutations or offline queue entries to Neon FIRST before pulling
       if (
         currentBiz &&
         currentBiz.id &&
-        this.hasInitialCloudSynced &&
         (this.hasLocalMutationsToPush || this.getOfflineQueueCount() > 0)
       ) {
         try {
@@ -167,7 +166,7 @@ class StoreService {
         }
       }
 
-      // 3. Always pull authoritative establishment data for the current active business
+      // 3. Pull authoritative establishment data for the current active business
       const bizToPull = this.getCurrentBusiness();
       if (bizToPull && bizToPull.id) {
         const fullBizRes = await neonService.pullBusinessFromNeon(bizToPull.id);
@@ -206,8 +205,8 @@ class StoreService {
     return this.isAutoSyncing;
   }
 
-  public triggerNeonSync() {
-    this.scheduleAutoSync(0, false);
+  public triggerNeonSync(isLocalMutation = true) {
+    this.scheduleAutoSync(50, isLocalMutation);
   }
 
   public clearActiveSessionCache() {
@@ -2732,10 +2731,10 @@ class StoreService {
     if (item) {
       item.quantityOnHand = cleanQty;
       item.updatedAt = new Date().toISOString();
-      if (!item.id) item.id = `${bizId}-${productId}`;
+      if (!item.id || !item.id.startsWith('inv-')) item.id = `inv-${bizId}-${productId}`;
     } else {
       inv.push({
-        id: `${bizId}-${productId}`,
+        id: `inv-${bizId}-${productId}`,
         productId,
         quantityOnHand: cleanQty,
         updatedAt: new Date().toISOString(),
@@ -2789,10 +2788,18 @@ class StoreService {
       severity: 'INFO',
     });
 
-    // Mark a mutation as pending and push synchronously before the periodic
-    // syncWithCloud pull can run, ensuring database and attendant stay in lockstep.
     this.pendingAutoSync = true;
     this.hasLocalMutationsToPush = true;
+
+    // DIRECT, IMMEDIATE ATOMIC SYNC TO NEON POSTGRESQL:
+    if (bizId) {
+      neonService.adjustProductStock(bizId, productId, cleanQty)
+        .then(() => {
+          this.hasLocalMutationsToPush = false;
+        })
+        .catch((e) => console.warn('Direct neonService.adjustProductStock notice:', e));
+    }
+
     this.uploadAllToNeon()
       .catch((e) => console.warn('Instant neon sync notice:', e))
       .finally(() => {
@@ -3150,8 +3157,9 @@ class StoreService {
     const product = allProducts.find((p) => p.id === productId);
     if (!product) return null;
 
+    const bizId = this.getCurrentBusinessId();
     if (!product.businessId) {
-      product.businessId = this.getCurrentBusinessId();
+      product.businessId = bizId;
     }
 
     Object.assign(product, updates);
@@ -3167,6 +3175,28 @@ class StoreService {
     }
     this.set(STORAGE_KEYS.PRODUCTS, allProducts);
 
+    // Also update any active shift stock items so attendant UI immediately displays updated name and price
+    const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
+    let ssiChanged = false;
+    allSSIs.forEach((ssi) => {
+      if (ssi.productId === productId) {
+        ssi.productName = product.name;
+        ssi.unit = product.unit;
+        ssi.sellingPrice = product.sellingPrice;
+        ssi.isMeasured = product.isMeasured;
+        ssi.measurementType = product.measurementType;
+        ssi.measureUnitLabel = product.measureUnitLabel;
+        ssi.totalMeasuredValueKes = product.totalMeasuredValueKes;
+        ssi.fullWeightKg = product.fullWeightKg;
+        ssi.emptyWeightKg = product.emptyWeightKg;
+        ssi.pricePerKg = product.pricePerKg;
+        ssiChanged = true;
+      }
+    });
+    if (ssiChanged) {
+      this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
+    }
+
     this.addEvent({
       type: 'INFO',
       title: `Catalog Updated: ${product.name}`,
@@ -3174,6 +3204,9 @@ class StoreService {
       actorName: 'Owner Audit Desk',
       severity: 'INFO',
     });
+
+    // Instant direct update to Neon PostgreSQL
+    neonService.updateProduct(product).catch((e) => console.warn('Direct neonService.updateProduct notice:', e));
 
     this.notify();
     this.triggerNeonSync();
@@ -3186,12 +3219,39 @@ class StoreService {
     const product = allProducts.find((p) => p.id === productId);
     if (!product) return false;
 
+    const bizId = this.getCurrentBusinessId();
+
     if (permanent) {
       const filtered = allProducts.filter((p) => p.id !== productId);
       this.set(STORAGE_KEYS.PRODUCTS, filtered);
+
+      // Clean from local inventory
+      const inv = this.getInventory().filter((i) => i.productId !== productId);
+      const inventoryMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
+      inventoryMap[bizId] = inv;
+      this.set(STORAGE_KEYS.INVENTORY_MAP, inventoryMap);
+
+      // Clean from local shift stock items
+      const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []).filter(
+        (i) => i.productId !== productId
+      );
+      this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
+
+      // Record in permanent deleted set so cloud pull cannot re-resurrect it
+      const deleted = this.get<string[]>(STORAGE_KEYS.DELETED_PRODUCT_IDS, []);
+      if (!deleted.includes(productId)) {
+        deleted.push(productId);
+        this.set(STORAGE_KEYS.DELETED_PRODUCT_IDS, deleted);
+      }
+
+      // Instant direct deletion in Neon PostgreSQL
+      if (bizId) {
+        neonService.deleteProduct(bizId, productId).catch((e) => console.warn('Direct neonService.deleteProduct notice:', e));
+      }
     } else {
       product.isArchived = true;
       this.set(STORAGE_KEYS.PRODUCTS, allProducts);
+      neonService.updateProduct(product).catch((e) => console.warn('Direct neonService.updateProduct archive notice:', e));
     }
 
     this.addEvent({
@@ -3212,15 +3272,26 @@ class StoreService {
     const product = allProducts.find((p) => p.id === productId);
     if (!product) return false;
 
+    // Remove from deleted list if present
+    const deleted = this.get<string[]>(STORAGE_KEYS.DELETED_PRODUCT_IDS, []);
+    if (deleted.includes(productId)) {
+      this.set(
+        STORAGE_KEYS.DELETED_PRODUCT_IDS,
+        deleted.filter((id) => id !== productId)
+      );
+    }
+
     product.isArchived = false;
     this.set(STORAGE_KEYS.PRODUCTS, allProducts);
+
+    neonService.updateProduct(product).catch((e) => console.warn('Direct neonService.updateProduct restore notice:', e));
 
     this.addEvent({
       type: 'INFO',
       title: `Drink Restored: ${product.name}`,
-      description: `${product.name} restored to active catalog shelves`,
+      description: `${product.name} restored to catalog shelves`,
       actorName: 'Owner Audit Desk',
-      severity: 'SUCCESS',
+      severity: 'INFO',
     });
 
     this.notify();
@@ -3275,6 +3346,7 @@ class StoreService {
       events: this.getEvents(40, targetId),
       stockAdditions: this.getStockAdditions(),
       deletedStockAdditionIds: this.get<string[]>(STORAGE_KEYS.DELETED_STOCK_ADDITIONS, []),
+      deletedProductIds: this.get<string[]>(STORAGE_KEYS.DELETED_PRODUCT_IDS, []),
       discrepancies: this.getDiscrepancies(),
       interTransfers: this.getInterBusinessTransfers(),
       partners: this.getPartners(),
@@ -3325,13 +3397,14 @@ class StoreService {
       this.set(STORAGE_KEYS.BUSINESSES, businesses);
     }
 
-    // 1. Authoritative Merge for Products (Cloud is the absolute source of truth)
+    // 1. Authoritative Merge for Products (Cloud is the absolute source of truth, respecting user deletions)
     if (data.products && data.products.length > 0) {
+      const deletedIds = new Set(this.get<string[]>(STORAGE_KEYS.DELETED_PRODUCT_IDS, []));
       const bizProducts = data.products.filter(
-        (cp) => !cp.businessId || cp.businessId === bizId
+        (cp) => (!cp.businessId || cp.businessId === bizId) && !deletedIds.has(cp.id)
       );
       const otherBizProducts = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []).filter(
-        (lp) => lp.businessId && lp.businessId !== bizId
+        (lp) => lp.businessId && lp.businessId !== bizId && !deletedIds.has(lp.id)
       );
       this.set(STORAGE_KEYS.PRODUCTS, [...bizProducts, ...otherBizProducts]);
     }
@@ -3346,7 +3419,25 @@ class StoreService {
     // 3. Authoritative Merge for Inventory (Cloud is the single source of truth)
     if (data.inventory) {
       const invMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
-      invMap[bizId] = data.inventory;
+      if (this.hasLocalMutationsToPush && invMap[bizId] && invMap[bizId].length > 0) {
+        // Protect pending unpushed local adjustments from being prematurely wiped by stale pulls
+        const cloudMap = new Map(data.inventory.map((ci) => [ci.productId, ci]));
+        const merged = invMap[bizId].map((li) => {
+          const ci = cloudMap.get(li.productId);
+          if (!ci) return li;
+          if (ci.updatedAt && li.updatedAt && new Date(ci.updatedAt) > new Date(li.updatedAt)) {
+            return ci;
+          }
+          return li;
+        });
+        const localIds = new Set(invMap[bizId].map((li) => li.productId));
+        data.inventory.forEach((ci) => {
+          if (!localIds.has(ci.productId)) merged.push(ci);
+        });
+        invMap[bizId] = merged;
+      } else {
+        invMap[bizId] = data.inventory;
+      }
       this.set(STORAGE_KEYS.INVENTORY_MAP, invMap);
     }
 

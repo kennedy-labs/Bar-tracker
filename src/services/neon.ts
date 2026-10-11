@@ -42,6 +42,7 @@ export interface SyncPayload {
   events?: OperationalEvent[];
   stockAdditions?: StockAdditionRecord[];
   deletedStockAdditionIds?: string[];
+  deletedProductIds?: string[];
   discrepancies?: Discrepancy[];
   interTransfers?: InterBusinessTransfer[];
   partners?: BusinessPartner[];
@@ -669,6 +670,7 @@ class NeonService {
       // Safe Unique Indexes for upsert conflicts
       await sql.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_users_biz_username ON users(business_id, username);`);
       await sql.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_inventory_biz_prod ON inventory(business_id, product_id);`);
+      await sql.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_shift_stock_items_shift_prod ON shift_stock_items(shift_id, product_id);`);
 
       this.schemaVerified = true;
       this.updateState({ status: 'CONNECTED', errorMessage: undefined });
@@ -830,13 +832,13 @@ class NeonService {
         await sql`
           INSERT INTO inventory (id, business_id, product_id, quantity_on_hand, updated_at)
           VALUES (
-            ${inv.id || `${business.id}-${inv.productId}`},
+            ${inv.id && inv.id.startsWith('inv-') ? inv.id : `inv-${business.id}-${inv.productId}`},
             ${business.id},
             ${inv.productId},
             ${inv.quantityOnHand || 0},
             NOW()
           )
-          ON CONFLICT (id) DO UPDATE SET
+          ON CONFLICT (business_id, product_id) DO UPDATE SET
             quantity_on_hand = EXCLUDED.quantity_on_hand,
             updated_at = NOW();
         `;
@@ -994,6 +996,16 @@ class NeonService {
             WHERE id = ${delId}
               AND (is_immutable IS NULL OR is_immutable = FALSE);
           `;
+        }
+      }
+
+      // 9b. Process permanently deleted products (prevent resurrection on cloud sync)
+      if (payload.deletedProductIds && payload.deletedProductIds.length > 0) {
+        for (const delProdId of payload.deletedProductIds) {
+          await sql`DELETE FROM shift_stock_items WHERE business_id = ${business.id} AND product_id = ${delProdId};`;
+          await sql`DELETE FROM inventory WHERE business_id = ${business.id} AND product_id = ${delProdId};`;
+          await sql`DELETE FROM stock_additions WHERE business_id = ${business.id} AND product_id = ${delProdId};`;
+          await sql`DELETE FROM products WHERE business_id = ${business.id} AND id = ${delProdId};`;
         }
       }
 
@@ -1177,7 +1189,7 @@ class NeonService {
             ${item.pricePerKg != null ? item.pricePerKg : null},
             NOW()
           )
-          ON CONFLICT (id) DO UPDATE SET
+          ON CONFLICT (shift_id, product_id) DO UPDATE SET
             opening_physical_count = EXCLUDED.opening_physical_count,
             opening_system_count = EXCLUDED.opening_system_count,
             additions = EXCLUDED.additions,
@@ -1589,6 +1601,150 @@ class NeonService {
     } catch (err: unknown) {
       console.warn('Failed to delete stock addition from Neon:', err);
       return false;
+    }
+  }
+
+  /**
+   * Direct atomic stock count adjustment in Neon PostgreSQL
+   * Updates inventory immediately and active shift opening counts in lockstep
+   */
+  public async adjustProductStock(
+    businessId: string,
+    productId: string,
+    quantityOnHand: number
+  ): Promise<{ success: boolean; message: string }> {
+    const url = this.state.databaseUrl || this.getSavedDatabaseUrl();
+    if (!url) return { success: false, message: 'No database URL configured.' };
+
+    const cleanQty = Math.max(0, Number(quantityOnHand) || 0);
+    try {
+      const sql = this.client || neon(url);
+
+      // 1. Update inventory row atomically with conflict resolution on (business_id, product_id)
+      await sql`
+        INSERT INTO inventory (id, business_id, product_id, quantity_on_hand, updated_at)
+        VALUES (
+          ${`inv-${businessId}-${productId}`},
+          ${businessId},
+          ${productId},
+          ${cleanQty},
+          NOW()
+        )
+        ON CONFLICT (business_id, product_id) DO UPDATE SET
+          quantity_on_hand = EXCLUDED.quantity_on_hand,
+          updated_at = NOW();
+      `;
+
+      // 2. Synchronize active shift stock items directly in Neon so attendants remain aligned
+      await sql`
+        UPDATE shift_stock_items
+        SET 
+          opening_physical_count = ${cleanQty},
+          opening_system_count = ${cleanQty},
+          updated_at = NOW()
+        WHERE business_id = ${businessId}
+          AND product_id = ${productId}
+          AND shift_id IN (
+            SELECT id FROM shifts 
+            WHERE business_id = ${businessId} AND status = 'ACTIVE'
+          );
+      `;
+
+      return { success: true, message: 'Stock adjusted and synced to cloud immediately.' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('neonService.adjustProductStock error:', msg);
+      return { success: false, message: msg };
+    }
+  }
+
+  /**
+   * Direct atomic deletion of a product and its associated records from Neon
+   */
+  public async deleteProduct(
+    businessId: string,
+    productId: string
+  ): Promise<{ success: boolean; message: string }> {
+    const url = this.state.databaseUrl || this.getSavedDatabaseUrl();
+    if (!url) return { success: false, message: 'No database URL configured.' };
+
+    try {
+      const sql = this.client || neon(url);
+      await sql`DELETE FROM shift_stock_items WHERE business_id = ${businessId} AND product_id = ${productId};`;
+      await sql`DELETE FROM inventory WHERE business_id = ${businessId} AND product_id = ${productId};`;
+      await sql`DELETE FROM stock_additions WHERE business_id = ${businessId} AND product_id = ${productId};`;
+      await sql`DELETE FROM products WHERE business_id = ${businessId} AND id = ${productId};`;
+      return { success: true, message: 'Product permanently removed from cloud database.' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('neonService.deleteProduct error:', msg);
+      return { success: false, message: msg };
+    }
+  }
+
+  /**
+   * Direct atomic update of product metadata in Neon PostgreSQL
+   */
+  public async updateProduct(
+    product: Product
+  ): Promise<{ success: boolean; message: string }> {
+    const url = this.state.databaseUrl || this.getSavedDatabaseUrl();
+    if (!url) return { success: false, message: 'No database URL configured.' };
+
+    try {
+      const sql = this.client || neon(url);
+      const bizId = product.businessId;
+      if (!bizId) return { success: false, message: 'No business ID for product.' };
+
+      await sql`
+        UPDATE products
+        SET 
+          name = ${product.name},
+          category = ${product.category},
+          unit = ${product.unit},
+          selling_price = ${product.sellingPrice || 0},
+          reorder_level = ${product.reorderLevel || 5},
+          volume_ml = ${product.volumeMl || null},
+          is_archived = ${product.isArchived || false},
+          is_measured = ${product.isMeasured || false},
+          measurement_type = ${product.measurementType || (product.isMeasured ? 'VALUE' : 'COUNT')},
+          measure_unit_label = ${product.measureUnitLabel || null},
+          total_measured_value_kes = ${product.totalMeasuredValueKes != null ? product.totalMeasuredValueKes : null},
+          full_weight_kg = ${product.fullWeightKg != null ? product.fullWeightKg : null},
+          empty_weight_kg = ${product.emptyWeightKg != null ? product.emptyWeightKg : null},
+          price_per_kg = ${product.pricePerKg != null ? product.pricePerKg : null},
+          updated_at = NOW()
+        WHERE id = ${product.id} AND business_id = ${bizId};
+      `;
+
+      // Also cascade name, unit, and pricing updates into active shift stock items
+      await sql`
+        UPDATE shift_stock_items
+        SET 
+          product_name = ${product.name},
+          unit = ${product.unit || 'BOTTLE'},
+          selling_price = ${product.sellingPrice || 0},
+          is_measured = ${product.isMeasured || false},
+          measurement_type = ${product.measurementType || (product.isMeasured ? 'VALUE' : 'COUNT')},
+          measure_unit_label = ${product.measureUnitLabel || null},
+          total_measured_value_kes = ${product.totalMeasuredValueKes != null ? product.totalMeasuredValueKes : null},
+          full_weight_kg = ${product.fullWeightKg != null ? product.fullWeightKg : null},
+          empty_weight_kg = ${product.emptyWeightKg != null ? product.emptyWeightKg : null},
+          price_per_kg = ${product.pricePerKg != null ? product.pricePerKg : null},
+          updated_at = NOW()
+        WHERE business_id = ${bizId}
+          AND product_id = ${product.id}
+          AND shift_id IN (
+            SELECT id FROM shifts 
+            WHERE business_id = ${bizId} AND status = 'ACTIVE'
+          );
+      `;
+
+      return { success: true, message: 'Product updated in cloud database.' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('neonService.updateProduct error:', msg);
+      return { success: false, message: msg };
     }
   }
 }
