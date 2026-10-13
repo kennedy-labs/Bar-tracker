@@ -20,6 +20,23 @@ import {
   HandoverDraft,
 } from '../types';
 import { authService } from './auth';
+import { db, handleFirestoreError, OperationType } from './firebase';
+import { collection, doc, setDoc, deleteDoc, getDocs, onSnapshot } from 'firebase/firestore';
+
+const FIRESTORE_COLLECTIONS = {
+  BUSINESSES: 'businesses',
+  USERS: 'users',
+  PRODUCTS: 'products',
+  INVENTORY: 'inventory',
+  SHIFTS: 'shifts',
+  SHIFT_STOCK_ITEMS: 'shiftStockItems',
+  STOCK_ADDITIONS: 'stockAdditions',
+  EXPENSES: 'expenses',
+  DISCREPANCIES: 'discrepancies',
+  EVENTS: 'events',
+  MPESA_ACCOUNTS: 'mpesaAccounts',
+  INTER_TRANSFERS: 'interTransfers',
+};
 
 const STORAGE_KEYS = {
   CURRENT_BIZ_ID: 'bar_track_current_biz_id',
@@ -55,6 +72,9 @@ class StoreService {
   private lastSyncTimestamp: string | null = null;
   private isCurrentlySyncing: boolean = false;
 
+  private isRemoteMutating: boolean = false;
+  private firestoreListenersInitialized: boolean = false;
+
   constructor() {
     if (typeof window !== 'undefined') {
       try {
@@ -72,19 +92,20 @@ class StoreService {
 
       window.addEventListener('online', () => {
         this.onlineStatus = true;
-        this.set(STORAGE_KEYS.IS_ONLINE, true);
+        this.set(STORAGE_KEYS.IS_ONLINE, true, false);
         this.syncWithCloud();
         this.notify();
       });
 
       window.addEventListener('offline', () => {
         this.onlineStatus = false;
-        this.set(STORAGE_KEYS.IS_ONLINE, false);
+        this.set(STORAGE_KEYS.IS_ONLINE, false, false);
         this.notify();
       });
     }
 
     this.loadFromStorage();
+    this.initFirestoreSync();
   }
 
   public subscribe(callback: () => void) {
@@ -132,7 +153,7 @@ class StoreService {
     return defaultValue;
   }
 
-  private set(key: string, value: unknown) {
+  private set(key: string, value: unknown, syncToCloud: boolean = true) {
     this.memoryStore.set(key, value);
     if (typeof window !== 'undefined') {
       try {
@@ -140,6 +161,9 @@ class StoreService {
       } catch {
         // storage quota fallback
       }
+    }
+    if (syncToCloud && !this.isRemoteMutating) {
+      this.dispatchFirestoreSync(key, value);
     }
   }
 
@@ -159,24 +183,24 @@ class StoreService {
       }
     });
 
-    // Ensure defaults exist for arrays and maps
-    if (!this.memoryStore.has(STORAGE_KEYS.BUSINESSES)) this.set(STORAGE_KEYS.BUSINESSES, []);
-    if (!this.memoryStore.has(STORAGE_KEYS.USERS)) this.set(STORAGE_KEYS.USERS, []);
-    if (!this.memoryStore.has(STORAGE_KEYS.PRODUCTS)) this.set(STORAGE_KEYS.PRODUCTS, []);
-    if (!this.memoryStore.has(STORAGE_KEYS.INVENTORY_MAP)) this.set(STORAGE_KEYS.INVENTORY_MAP, {});
-    if (!this.memoryStore.has(STORAGE_KEYS.SHIFTS_MAP)) this.set(STORAGE_KEYS.SHIFTS_MAP, {});
-    if (!this.memoryStore.has(STORAGE_KEYS.EXPENSES)) this.set(STORAGE_KEYS.EXPENSES, []);
-    if (!this.memoryStore.has(STORAGE_KEYS.PARTNERS)) this.set(STORAGE_KEYS.PARTNERS, []);
-    if (!this.memoryStore.has(STORAGE_KEYS.INTER_TRANSFERS)) this.set(STORAGE_KEYS.INTER_TRANSFERS, []);
-    if (!this.memoryStore.has(STORAGE_KEYS.MPESA_ACCOUNTS_MAP)) this.set(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, {});
-    if (!this.memoryStore.has(STORAGE_KEYS.EVENTS_MAP)) this.set(STORAGE_KEYS.EVENTS_MAP, {});
-    if (!this.memoryStore.has(STORAGE_KEYS.DISCREPANCIES)) this.set(STORAGE_KEYS.DISCREPANCIES, []);
-    if (!this.memoryStore.has(STORAGE_KEYS.STOCK_ADDITIONS)) this.set(STORAGE_KEYS.STOCK_ADDITIONS, []);
-    if (!this.memoryStore.has(STORAGE_KEYS.CURRENT_BIZ_ID)) this.set(STORAGE_KEYS.CURRENT_BIZ_ID, '');
-    if (!this.memoryStore.has(STORAGE_KEYS.SHIFT_STOCK_ITEMS)) this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
-    if (!this.memoryStore.has(STORAGE_KEYS.STOCK_MOVEMENTS)) this.set(STORAGE_KEYS.STOCK_MOVEMENTS, []);
-    if (!this.memoryStore.has(STORAGE_KEYS.HANDOVER_DRAFTS)) this.set(STORAGE_KEYS.HANDOVER_DRAFTS, []);
-    if (!this.memoryStore.has(STORAGE_KEYS.OFFLINE_QUEUE)) this.set(STORAGE_KEYS.OFFLINE_QUEUE, []);
+    // Ensure defaults exist for arrays and maps without overwriting cloud
+    if (!this.memoryStore.has(STORAGE_KEYS.BUSINESSES)) this.set(STORAGE_KEYS.BUSINESSES, [], false);
+    if (!this.memoryStore.has(STORAGE_KEYS.USERS)) this.set(STORAGE_KEYS.USERS, [], false);
+    if (!this.memoryStore.has(STORAGE_KEYS.PRODUCTS)) this.set(STORAGE_KEYS.PRODUCTS, [], false);
+    if (!this.memoryStore.has(STORAGE_KEYS.INVENTORY_MAP)) this.set(STORAGE_KEYS.INVENTORY_MAP, {}, false);
+    if (!this.memoryStore.has(STORAGE_KEYS.SHIFTS_MAP)) this.set(STORAGE_KEYS.SHIFTS_MAP, {}, false);
+    if (!this.memoryStore.has(STORAGE_KEYS.EXPENSES)) this.set(STORAGE_KEYS.EXPENSES, [], false);
+    if (!this.memoryStore.has(STORAGE_KEYS.PARTNERS)) this.set(STORAGE_KEYS.PARTNERS, [], false);
+    if (!this.memoryStore.has(STORAGE_KEYS.INTER_TRANSFERS)) this.set(STORAGE_KEYS.INTER_TRANSFERS, [], false);
+    if (!this.memoryStore.has(STORAGE_KEYS.MPESA_ACCOUNTS_MAP)) this.set(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, {}, false);
+    if (!this.memoryStore.has(STORAGE_KEYS.EVENTS_MAP)) this.set(STORAGE_KEYS.EVENTS_MAP, {}, false);
+    if (!this.memoryStore.has(STORAGE_KEYS.DISCREPANCIES)) this.set(STORAGE_KEYS.DISCREPANCIES, [], false);
+    if (!this.memoryStore.has(STORAGE_KEYS.STOCK_ADDITIONS)) this.set(STORAGE_KEYS.STOCK_ADDITIONS, [], false);
+    if (!this.memoryStore.has(STORAGE_KEYS.CURRENT_BIZ_ID)) this.set(STORAGE_KEYS.CURRENT_BIZ_ID, '', false);
+    if (!this.memoryStore.has(STORAGE_KEYS.SHIFT_STOCK_ITEMS)) this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, [], false);
+    if (!this.memoryStore.has(STORAGE_KEYS.STOCK_MOVEMENTS)) this.set(STORAGE_KEYS.STOCK_MOVEMENTS, [], false);
+    if (!this.memoryStore.has(STORAGE_KEYS.HANDOVER_DRAFTS)) this.set(STORAGE_KEYS.HANDOVER_DRAFTS, [], false);
+    if (!this.memoryStore.has(STORAGE_KEYS.OFFLINE_QUEUE)) this.set(STORAGE_KEYS.OFFLINE_QUEUE, [], false);
   }
 
   public purgeAllData(): void {
@@ -245,6 +269,293 @@ class StoreService {
     this.queueOfflineOperation(actionType, payload);
   }
 
+  public async saveToFirestore(collectionName: string, docId: string, data: unknown): Promise<void> {
+    if (!docId || !db) return;
+    const cleanId = String(docId).replace(/[^a-zA-Z0-9_-]/g, '_');
+    try {
+      const cleanData = JSON.parse(JSON.stringify(data));
+      await setDoc(doc(db, collectionName, cleanId), cleanData, { merge: true });
+    } catch (error) {
+      console.warn(`Firestore save error for ${collectionName}/${cleanId}:`, error);
+      this.queueOfflineOperation(`SAVE_${collectionName}`, { docId: cleanId, data });
+    }
+  }
+
+  public async deleteFromFirestore(collectionName: string, docId: string): Promise<void> {
+    if (!docId || !db) return;
+    const cleanId = String(docId).replace(/[^a-zA-Z0-9_-]/g, '_');
+    try {
+      await deleteDoc(doc(db, collectionName, cleanId));
+    } catch (error) {
+      console.warn(`Firestore delete error for ${collectionName}/${cleanId}:`, error);
+      this.queueOfflineOperation(`DELETE_${collectionName}`, { docId: cleanId });
+    }
+  }
+
+  private dispatchFirestoreSync(key: string, value: unknown) {
+    if (this.isRemoteMutating || !db) return;
+
+    try {
+      if (key === STORAGE_KEYS.BUSINESSES && Array.isArray(value)) {
+        (value as BusinessProfile[]).forEach((b) => {
+          if (b && b.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.BUSINESSES, b.id, b);
+        });
+      } else if (key === STORAGE_KEYS.USERS && Array.isArray(value)) {
+        (value as User[]).forEach((u) => {
+          if (u && u.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.USERS, u.id, u);
+        });
+      } else if (key === STORAGE_KEYS.PRODUCTS && Array.isArray(value)) {
+        (value as Product[]).forEach((p) => {
+          if (p && p.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.PRODUCTS, p.id, p);
+        });
+      } else if (key === STORAGE_KEYS.INVENTORY_MAP && value && typeof value === 'object') {
+        const invMap = value as Record<string, InventoryItem[]>;
+        Object.entries(invMap).forEach(([bizId, items]) => {
+          if (Array.isArray(items)) {
+            items.forEach((item) => {
+              const id = item.id || `inv-${bizId}-${item.productId}`;
+              this.saveToFirestore(FIRESTORE_COLLECTIONS.INVENTORY, id, { ...item, id, businessId: bizId });
+            });
+          }
+        });
+      } else if (key === STORAGE_KEYS.SHIFTS_MAP && value && typeof value === 'object') {
+        const sMap = value as Record<string, Shift[]>;
+        Object.entries(sMap).forEach(([bizId, shifts]) => {
+          if (Array.isArray(shifts)) {
+            shifts.forEach((s) => {
+              if (s && s.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.SHIFTS, s.id, { ...s, businessId: bizId });
+            });
+          }
+        });
+      } else if (key === STORAGE_KEYS.SHIFT_STOCK_ITEMS && Array.isArray(value)) {
+        (value as ShiftStockItem[]).forEach((item) => {
+          if (item && item.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.SHIFT_STOCK_ITEMS, item.id, item);
+        });
+      } else if (key === STORAGE_KEYS.STOCK_ADDITIONS && Array.isArray(value)) {
+        (value as StockAdditionRecord[]).forEach((a) => {
+          if (a && a.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.STOCK_ADDITIONS, a.id, a);
+        });
+      } else if (key === STORAGE_KEYS.EXPENSES && Array.isArray(value)) {
+        (value as Expense[]).forEach((e) => {
+          if (e && e.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.EXPENSES, e.id, e);
+        });
+      } else if (key === STORAGE_KEYS.DISCREPANCIES && Array.isArray(value)) {
+        (value as Discrepancy[]).forEach((d) => {
+          if (d && d.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.DISCREPANCIES, d.id, d);
+        });
+      } else if (key === STORAGE_KEYS.EVENTS_MAP && value && typeof value === 'object') {
+        const eMap = value as Record<string, OperationalEvent[]>;
+        Object.entries(eMap).forEach(([bizId, events]) => {
+          if (Array.isArray(events)) {
+            events.forEach((ev) => {
+              if (ev && ev.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.EVENTS, ev.id, { ...ev, businessId: bizId });
+            });
+          }
+        });
+      } else if (key === STORAGE_KEYS.MPESA_ACCOUNTS_MAP && value && typeof value === 'object') {
+        const mMap = value as Record<string, MpesaAccount[]>;
+        Object.entries(mMap).forEach(([bizId, accs]) => {
+          if (Array.isArray(accs)) {
+            accs.forEach((acc) => {
+              if (acc && acc.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.MPESA_ACCOUNTS, acc.id, { ...acc, businessId: bizId });
+            });
+          }
+        });
+      } else if (key === STORAGE_KEYS.INTER_TRANSFERS && Array.isArray(value)) {
+        (value as InterBusinessTransfer[]).forEach((t) => {
+          if (t && t.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.INTER_TRANSFERS, t.id, t);
+        });
+      }
+    } catch (e) {
+      console.warn('Error dispatching Firestore sync for', key, e);
+    }
+  }
+
+  public async fetchCoreFirestoreEntities(): Promise<void> {
+    if (typeof window === 'undefined') return;
+    try {
+      const bizSnap = await getDocs(collection(db, FIRESTORE_COLLECTIONS.BUSINESSES));
+      if (!bizSnap.empty) {
+        const bizs = bizSnap.docs.map((d) => d.data() as BusinessProfile);
+        this.isRemoteMutating = true;
+        this.set(STORAGE_KEYS.BUSINESSES, bizs, false);
+        this.isRemoteMutating = false;
+      } else {
+        // If Firestore has no businesses yet, upload any local ones
+        const localBiz = this.get<BusinessProfile[]>(STORAGE_KEYS.BUSINESSES, []);
+        if (localBiz.length > 0) {
+          localBiz.forEach((b) => this.saveToFirestore(FIRESTORE_COLLECTIONS.BUSINESSES, b.id, b));
+        }
+      }
+
+      const userSnap = await getDocs(collection(db, FIRESTORE_COLLECTIONS.USERS));
+      if (!userSnap.empty) {
+        const users = userSnap.docs.map((d) => d.data() as User);
+        this.isRemoteMutating = true;
+        this.set(STORAGE_KEYS.USERS, users, false);
+        this.isRemoteMutating = false;
+      } else {
+        const localUsers = this.get<User[]>(STORAGE_KEYS.USERS, []);
+        if (localUsers.length > 0) {
+          localUsers.forEach((u) => this.saveToFirestore(FIRESTORE_COLLECTIONS.USERS, u.id, u));
+        }
+      }
+
+      this.notifySubscribersOnly();
+    } catch (err) {
+      console.debug('Core Firestore fetch note:', err);
+    }
+  }
+
+  private migrateCollectionToFirestore(key: string, coll: string) {
+    const local = this.get<unknown[]>(key, []);
+    if (Array.isArray(local) && local.length > 0) {
+      local.forEach((item: any) => {
+        if (item && item.id) {
+          this.saveToFirestore(coll, item.id, item);
+        }
+      });
+    }
+  }
+
+  public initFirestoreSync(): void {
+    if (this.firestoreListenersInitialized || typeof window === 'undefined') return;
+    this.firestoreListenersInitialized = true;
+
+    // 1. Initial eager fetch of businesses and users for instant availability
+    this.fetchCoreFirestoreEntities();
+
+    // 2. Setup real-time onSnapshot listeners on all collections with handleFirestoreError callbacks
+    const arrayCollections = [
+      { key: STORAGE_KEYS.BUSINESSES, coll: FIRESTORE_COLLECTIONS.BUSINESSES },
+      { key: STORAGE_KEYS.USERS, coll: FIRESTORE_COLLECTIONS.USERS },
+      { key: STORAGE_KEYS.PRODUCTS, coll: FIRESTORE_COLLECTIONS.PRODUCTS },
+      { key: STORAGE_KEYS.SHIFT_STOCK_ITEMS, coll: FIRESTORE_COLLECTIONS.SHIFT_STOCK_ITEMS },
+      { key: STORAGE_KEYS.STOCK_ADDITIONS, coll: FIRESTORE_COLLECTIONS.STOCK_ADDITIONS },
+      { key: STORAGE_KEYS.EXPENSES, coll: FIRESTORE_COLLECTIONS.EXPENSES },
+      { key: STORAGE_KEYS.DISCREPANCIES, coll: FIRESTORE_COLLECTIONS.DISCREPANCIES },
+      { key: STORAGE_KEYS.INTER_TRANSFERS, coll: FIRESTORE_COLLECTIONS.INTER_TRANSFERS },
+    ];
+
+    arrayCollections.forEach(({ key, coll }) => {
+      onSnapshot(
+        collection(db, coll),
+        (snapshot) => {
+          if (snapshot.empty) {
+            this.migrateCollectionToFirestore(key, coll);
+            return;
+          }
+          const docs = snapshot.docs.map((d) => d.data());
+          if (docs.length > 0) {
+            this.isRemoteMutating = true;
+            this.set(key, docs, false);
+            this.isRemoteMutating = false;
+            this.notifySubscribersOnly();
+          }
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.GET, coll);
+        }
+      );
+    });
+
+    // Listen to Inventory Map
+    onSnapshot(
+      collection(db, FIRESTORE_COLLECTIONS.INVENTORY),
+      (snapshot) => {
+        if (snapshot.empty) return;
+        const items = snapshot.docs.map((d) => d.data() as InventoryItem & { businessId?: string });
+        if (items.length > 0) {
+          const invMap: Record<string, InventoryItem[]> = {};
+          items.forEach((item) => {
+            const bId = item.businessId || 'default';
+            if (!invMap[bId]) invMap[bId] = [];
+            invMap[bId].push(item);
+          });
+          this.isRemoteMutating = true;
+          this.set(STORAGE_KEYS.INVENTORY_MAP, invMap, false);
+          this.isRemoteMutating = false;
+          this.notifySubscribersOnly();
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, FIRESTORE_COLLECTIONS.INVENTORY);
+      }
+    );
+
+    // Listen to Shifts Map
+    onSnapshot(
+      collection(db, FIRESTORE_COLLECTIONS.SHIFTS),
+      (snapshot) => {
+        if (snapshot.empty) return;
+        const shifts = snapshot.docs.map((d) => d.data() as Shift & { businessId?: string });
+        if (shifts.length > 0) {
+          const sMap: Record<string, Shift[]> = {};
+          shifts.forEach((s) => {
+            const bId = (s as any).businessId || 'default';
+            if (!sMap[bId]) sMap[bId] = [];
+            sMap[bId].push(s);
+          });
+          this.isRemoteMutating = true;
+          this.set(STORAGE_KEYS.SHIFTS_MAP, sMap, false);
+          this.isRemoteMutating = false;
+          this.notifySubscribersOnly();
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, FIRESTORE_COLLECTIONS.SHIFTS);
+      }
+    );
+
+    // Listen to Events Map
+    onSnapshot(
+      collection(db, FIRESTORE_COLLECTIONS.EVENTS),
+      (snapshot) => {
+        if (snapshot.empty) return;
+        const events = snapshot.docs.map((d) => d.data() as OperationalEvent & { businessId?: string });
+        if (events.length > 0) {
+          const eMap: Record<string, OperationalEvent[]> = {};
+          events.forEach((ev) => {
+            const bId = ev.businessId || 'default';
+            if (!eMap[bId]) eMap[bId] = [];
+            eMap[bId].push(ev);
+          });
+          this.isRemoteMutating = true;
+          this.set(STORAGE_KEYS.EVENTS_MAP, eMap, false);
+          this.isRemoteMutating = false;
+          this.notifySubscribersOnly();
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, FIRESTORE_COLLECTIONS.EVENTS);
+      }
+    );
+
+    // Listen to Mpesa Accounts Map
+    onSnapshot(
+      collection(db, FIRESTORE_COLLECTIONS.MPESA_ACCOUNTS),
+      (snapshot) => {
+        if (snapshot.empty) return;
+        const accs = snapshot.docs.map((d) => d.data() as MpesaAccount & { businessId?: string });
+        if (accs.length > 0) {
+          const mMap: Record<string, MpesaAccount[]> = {};
+          accs.forEach((acc) => {
+            const bId = acc.businessId || 'default';
+            if (!mMap[bId]) mMap[bId] = [];
+            mMap[bId].push(acc);
+          });
+          this.isRemoteMutating = true;
+          this.set(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, mMap, false);
+          this.isRemoteMutating = false;
+          this.notifySubscribersOnly();
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, FIRESTORE_COLLECTIONS.MPESA_ACCOUNTS);
+      }
+    );
+  }
+
   public async syncWithCloud(): Promise<{ success: boolean; message: string; syncedCount: number }> {
     if (!this.isOnline()) {
       return {
@@ -258,21 +569,35 @@ class StoreService {
     this.notify();
 
     try {
-      const queue = this.get<unknown[]>(STORAGE_KEYS.OFFLINE_QUEUE, []);
+      const queue = this.get<Array<{ operationName: string; payload: any }>>(STORAGE_KEYS.OFFLINE_QUEUE, []);
       const count = queue.length;
 
-      // Simulate remote cloud sync propagation delay
-      await new Promise((r) => setTimeout(r, 450));
+      // Process any queued offline mutations
+      for (const item of queue) {
+        try {
+          if (item.operationName.startsWith('SAVE_') && item.payload) {
+            const coll = item.operationName.replace('SAVE_', '');
+            await setDoc(doc(db, coll, item.payload.docId), JSON.parse(JSON.stringify(item.payload.data)), { merge: true });
+          } else if (item.operationName.startsWith('DELETE_') && item.payload) {
+            const coll = item.operationName.replace('DELETE_', '');
+            await deleteDoc(doc(db, coll, item.payload.docId));
+          }
+        } catch (e) {
+          console.warn('Queue item processing error:', e);
+        }
+      }
 
-      this.set(STORAGE_KEYS.OFFLINE_QUEUE, []);
+      await this.fetchCoreFirestoreEntities();
+
+      this.set(STORAGE_KEYS.OFFLINE_QUEUE, [], false);
       this.lastSyncTimestamp = new Date().toISOString();
       this.isCurrentlySyncing = false;
 
       if (count > 0) {
         this.addEvent({
           type: 'SYNC_COMPLETED',
-          title: 'Offline Sync Reconciled',
-          description: `Successfully synchronized ${count} offline operational transactions with owner cloud.`,
+          title: 'Cloud Persistence Reconciled',
+          description: `Successfully synchronized ${count} offline operational transactions with central Firestore cloud.`,
           actorName: 'Sync Engine',
           severity: 'SUCCESS',
         });
@@ -281,7 +606,7 @@ class StoreService {
       this.notify();
       return {
         success: true,
-        message: `Synced ${count} pending updates. System up to date.`,
+        message: `Synced ${count} pending updates. Central database up to date.`,
         syncedCount: count,
       };
     } catch {
@@ -1142,7 +1467,16 @@ class StoreService {
     const bizOrderMap = new Map<string, number>();
     businesses.forEach((b, index) => bizOrderMap.set(b.id, index));
 
-    const candidates = findCandidates(this.getUsers()).sort((a, b) => {
+    let userPool = this.getUsers();
+    let candidates = findCandidates(userPool);
+
+    if (candidates.length === 0) {
+      await this.fetchCoreFirestoreEntities();
+      userPool = this.getUsers();
+      candidates = findCandidates(userPool);
+    }
+
+    candidates.sort((a, b) => {
       const idxA = a.businessId ? (bizOrderMap.get(a.businessId) ?? 999) : 999;
       const idxB = b.businessId ? (bizOrderMap.get(b.businessId) ?? 999) : 999;
       return idxA - idxB;

@@ -31,7 +31,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
   useEffect(() => {
     return store.subscribe(() => {
-      setHasExistingBusiness(store.hasAnyBusiness());
+      const anyBiz = store.hasAnyBusiness();
+      setHasExistingBusiness(anyBiz);
+      if (anyBiz) {
+        setViewMode((current) => {
+          if (current === 'REGISTER' && typeof window !== 'undefined' && !window.location.hash.toLowerCase().includes('signup')) {
+            return 'SIGN_IN';
+          }
+          return current;
+        });
+      }
     });
   }, []);
 
