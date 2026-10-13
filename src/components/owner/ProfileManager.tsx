@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../../types';
 import { store } from '../../services/store';
-import { neonService, NeonState } from '../../services/neon';
 import {
   User as UserIcon,
   Lock,
@@ -11,8 +10,6 @@ import {
   Eye,
   EyeOff,
   Building2,
-  Database,
-  CloudOff,
   Loader2,
 } from 'lucide-react';
 
@@ -26,11 +23,6 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
   onUpdateProfile,
 }) => {
   const business = store.getCurrentBusiness();
-  const [neonState, setNeonState] = useState<NeonState>(neonService.getStatus());
-
-  React.useEffect(() => {
-    return neonService.subscribeStatus((st) => setNeonState(st));
-  }, []);
 
   // Form State
   const [name, setName] = useState(currentUser.name || '');
@@ -123,12 +115,6 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
 
       const updatedUser = await store.updateUser(currentUser.id, updates);
 
-      try {
-        localStorage.setItem('bartracker_saved_username', cleanUsername);
-      } catch {
-        // ignore
-      }
-
       if (onUpdateProfile) {
         onUpdateProfile(updatedUser);
       }
@@ -136,7 +122,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setSuccessMsg('Profile and credentials updated and synced to database.');
+      setSuccessMsg('Profile and credentials updated.');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to update profile.';
       setError(msg);
@@ -169,22 +155,6 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
                   </span>
                 )}
               </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs font-mono">
-            <div className="px-2.5 py-1 rounded-lg bg-[#0E1420] border border-slate-800 text-slate-400 flex items-center gap-1.5">
-              {neonState.status === 'CONNECTED' ? (
-                <>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  <span className="text-emerald-400 font-medium">Cloud Database Connected</span>
-                </>
-              ) : (
-                <>
-                  <CloudOff className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="text-amber-400">Local Cache Mode</span>
-                </>
-              )}
             </div>
           </div>
         </div>

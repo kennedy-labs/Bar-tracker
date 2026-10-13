@@ -20,7 +20,6 @@ import {
  ArrowLeft,
  FileText,
  Clock,
- Database,
 } from 'lucide-react';
 
 interface AuthScreenProps {
@@ -43,15 +42,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
         return 'REGISTER';
       }
     }
-    return 'SIGN_IN';
+    return store.hasAnyBusiness() ? 'SIGN_IN' : 'REGISTER';
   });
 
   const [authMode, setAuthMode] = useState<'CREDENTIALS' | 'KEYPAD'>('CREDENTIALS');
 
- // Sign In Form State
- const [username, setUsername] = useState<string>(() => {
- return localStorage.getItem('bartracker_saved_username') || '';
- });
+  // Sign In Form State
+  const [username, setUsername] = useState<string>('');
  const [password, setPassword] = useState<string>('');
  const [showPassword, setShowPassword] = useState<boolean>(false);
  const [rememberUser, setRememberUser] = useState<boolean>(true);
@@ -109,17 +106,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
  return () => clearInterval(timer);
  }, [lockoutSeconds]);
 
- // Initial cloud sync to detect existing businesses in clean browsers
- useEffect(() => {
- store.syncWithCloud(true).then(() => {
- if (store.hasAnyBusiness()) {
- const hash = typeof window !== 'undefined' ? window.location.hash.toLowerCase() : '';
- if (!hash.includes('signup') && !hash.includes('register')) {
- setViewMode('SIGN_IN');
- }
- }
- });
- }, []);
 
   const switchMode = (mode: 'SIGN_IN' | 'REGISTER') => {
     setViewMode(mode);
@@ -162,11 +148,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
  try {
  const authenticatedUser = await store.authenticateUser(cleanUsername, cleanPassword);
  if (authenticatedUser) {
- if (rememberUser) {
- localStorage.setItem('bartracker_saved_username', cleanUsername);
- } else {
- localStorage.removeItem('bartracker_saved_username');
- }
  if (authenticatedUser.businessId) {
  store.setCurrentBusiness(authenticatedUser.businessId);
  }
@@ -781,19 +762,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
  </div>
  )}
 
- {/* Security & Neon PostgreSQL Architecture Footer */}
+ {/* Operational Security Footer */}
  <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-slate-500 text-[11px]">
  <div className="flex items-center gap-1.5">
  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
  <span>SHA-256 Salted Authentication</span>
  </div>
  <div className="flex items-center gap-1.5">
- <Database className="w-3.5 h-3.5 text-cyan-400" />
- <span>Neon Serverless PostgreSQL Ready</span>
- </div>
- <div className="flex items-center gap-1.5">
  <Lock className="w-3.5 h-3.5 text-slate-400" />
- <span>Brute-Force Protected</span>
+ <span>Session Rate-Limited</span>
  </div>
  </div>
  </div>

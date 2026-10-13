@@ -187,15 +187,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
         }
       }
 
-      // 3. Commit updates to store & trigger cloud database synchronization
+      // 3. Commit updates to store
       const updatedUser = await store.updateUser(currentUser.id, updates);
-
-      // Keep username in local helper if it was remembered
-      try {
-        localStorage.setItem('bartracker_saved_username', cleanUsername);
-      } catch {
-        // ignore
-      }
 
       setSuccessMsg('Profile and credentials updated successfully.');
       onSuccess(updatedUser);

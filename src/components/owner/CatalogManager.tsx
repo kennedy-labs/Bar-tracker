@@ -3,6 +3,7 @@ import { Product, ProductCategory, ProductUnit } from '../../types';
 import { store } from '../../services/store';
 import { weightMeasurementService } from '../../services/weightMeasurement';
 import { WeightCalculatorModal } from '../common/WeightCalculatorModal';
+import { StockAdjustmentModal } from '../common/StockAdjustmentModal';
 import {
   Wine,
   Plus,
@@ -18,6 +19,7 @@ import {
   Layers,
   Sparkles,
   ShieldAlert,
+  ShieldCheck,
   SlidersHorizontal,
   FileText,
   CheckCircle2,
@@ -32,7 +34,10 @@ import {
 export const CatalogManager: React.FC = () => {
  const [, setTick] = useState(0);
  useEffect(() => {
- return store.subscribe(() => setTick((t) => t + 1));
+ return store.subscribe(() => {
+   setStockInputs({});
+   setTick((t) => t + 1);
+ });
  }, []);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -44,6 +49,11 @@ export const CatalogManager: React.FC = () => {
   // Direct Stock Input Handlers (Owner can type any number or click +/-)
   const [stockInputs, setStockInputs] = useState<Record<string, string>>({});
   const [savedStockNotice, setSavedStockNotice] = useState<string | null>(null);
+  const [adjustingStockProduct, setAdjustingStockProduct] = useState<{
+    product: Product;
+    currentStock: number;
+    targetStock?: number;
+  } | null>(null);
 
   const handleStockChange = (productId: string, val: string) => {
     setStockInputs((prev) => ({ ...prev, [productId]: val }));
@@ -63,10 +73,22 @@ export const CatalogManager: React.FC = () => {
     }
     const num = Math.round(parsed * 100) / 100;
     if (num !== currentVal) {
-      store.adjustProductStock(productId, num);
       const prod = allProducts.find((p) => p.id === productId);
-      setSavedStockNotice(`Updated ${prod?.name || 'drink'} stock to ${num} ${prod?.unit.toLowerCase() || 'units'}`);
-      setTimeout(() => setSavedStockNotice(null), 3500);
+      if (prod && Math.abs(num - currentVal) >= 2) {
+        // Open professional stock adjustment modal to specify clerical mistake vs shrinkage
+        setAdjustingStockProduct({
+          product: prod,
+          currentStock: currentVal,
+          targetStock: num,
+        });
+      } else {
+        store.adjustProductStock(productId, num, {
+          mode: 'CLERICAL_CORRECTION',
+          reason: 'Catalog stock count update',
+        });
+        setSavedStockNotice(`Updated ${prod?.name || 'drink'} stock to ${num} ${prod?.unit.toLowerCase() || 'units'}`);
+        setTimeout(() => setSavedStockNotice(null), 3500);
+      }
     }
     setStockInputs((prev) => {
       const copy = { ...prev };
@@ -78,7 +100,10 @@ export const CatalogManager: React.FC = () => {
   const handleStockStep = (productId: string, currentVal: number, delta: number) => {
     const nextVal = Math.max(0, Math.round((currentVal + delta) * 100) / 100);
     if (nextVal !== currentVal) {
-      store.adjustProductStock(productId, nextVal);
+      store.adjustProductStock(productId, nextVal, {
+        mode: 'CLERICAL_CORRECTION',
+        reason: delta > 0 ? 'Stock unit added' : 'Stock unit decremented',
+      });
       const prod = allProducts.find((p) => p.id === productId);
       setSavedStockNotice(`Updated ${prod?.name || 'drink'} stock to ${nextVal} ${prod?.unit.toLowerCase() || 'units'}`);
       setTimeout(() => setSavedStockNotice(null), 3000);
@@ -840,6 +865,16 @@ export const CatalogManager: React.FC = () => {
                               <Plus className="w-3 h-3" />
                             </button>
 
+                            <button
+                              type="button"
+                              onClick={() => setAdjustingStockProduct({ product: p, currentStock: stockOnHand })}
+                              disabled={p.isArchived}
+                              className="w-6 h-6 rounded-md bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-400 flex items-center justify-center border border-emerald-800/60 cursor-pointer"
+                              title="Reconcile Count: Clerical correction or physical shrinkage"
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                            </button>
+
                             <span className="text-[10px] text-slate-500 font-mono pl-1">
                               {p.isMeasured && (p.measurementType === 'VALUE' || p.unit === 'VALUE_KES')
                                 ? 'val'
@@ -1097,6 +1132,16 @@ export const CatalogManager: React.FC = () => {
                           title="Increase stock count by 1"
                         >
                           <Plus className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setAdjustingStockProduct({ product: p, currentStock: stockOnHand })}
+                          disabled={p.isArchived}
+                          className="w-7 h-7 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-400 flex items-center justify-center border border-emerald-800/60 cursor-pointer"
+                          title="Reconcile Count: Clerical correction or physical shrinkage"
+                        >
+                          <ShieldCheck className="w-4 h-4" />
                         </button>
                       </div>
 
@@ -1740,6 +1785,26 @@ export const CatalogManager: React.FC = () => {
    onClose={() => setShowWeightCalcModal(false)}
    initialProductId={weightCalcModalProductId}
  />
+
+ {/* Professional Stock Adjustment Modal */}
+ {adjustingStockProduct && (
+   <StockAdjustmentModal
+     isOpen={Boolean(adjustingStockProduct)}
+     onClose={() => setAdjustingStockProduct(null)}
+     product={adjustingStockProduct.product}
+     currentStock={adjustingStockProduct.currentStock}
+     initialTargetStock={adjustingStockProduct.targetStock}
+     currentUser={store.getSessionUser() || { id: 'owner', name: 'Owner', role: 'OWNER', username: 'owner' }}
+     onSuccess={(newQty, mode) => {
+       setSavedStockNotice(
+         `Stock count for ${adjustingStockProduct.product.name} updated to ${newQty} (${
+           mode === 'CLERICAL_CORRECTION' ? 'Clerical Correction' : 'Shrinkage Flagged'
+         })`
+       );
+       setTimeout(() => setSavedStockNotice(null), 3500);
+     }}
+   />
+ )}
  </div>
  );
 };

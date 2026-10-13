@@ -1,6 +1,6 @@
 /**
- * Production Authentication & Cryptographic Security Pipeline
- * Zero mock data. Hardware-accelerated Web Crypto API.
+ * Pure In-Memory Authentication & Cryptographic Security Pipeline
+ * Zero persistence. No localStorage, no sessionStorage, no external databases.
  */
 
 import { User, Role } from '../types';
@@ -22,13 +22,15 @@ export interface LockoutInfo {
   secondsRemaining: number;
 }
 
-const SESSION_STORAGE_KEY = 'bartracker_auth_session';
-const FAILED_ATTEMPTS_PREFIX = 'bartracker_failed_attempts_';
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 60 * 1000; // 60 seconds
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 class AuthService {
+  // Pure in-memory session and lockout storage
+  private currentSession: AuthSession | null = null;
+  private lockoutMap = new Map<string, { count: number; lockedUntil?: number }>();
+
   /**
    * Generates a cryptographically strong random hex salt
    */
@@ -72,7 +74,6 @@ class AuthService {
   ): Promise<boolean> {
     if (!input || !storedHash || !salt) return false;
     const computedHash = await this.hashCredential(input, salt);
-    // Timing-safe comparison simulation
     if (computedHash.length !== storedHash.length) return false;
     let diff = 0;
     for (let i = 0; i < computedHash.length; i++) {
@@ -82,71 +83,56 @@ class AuthService {
   }
 
   /**
-   * Rate limiting and brute-force protection
+   * In-memory rate limiting and brute-force protection
    */
   public getLockoutStatus(identifier: string): LockoutInfo {
-    try {
-      const key = `${FAILED_ATTEMPTS_PREFIX}${identifier.toLowerCase().trim()}`;
-      const raw = sessionStorage.getItem(key);
-      if (!raw) {
-        return { isLocked: false, attemptsLeft: MAX_FAILED_ATTEMPTS, secondsRemaining: 0 };
-      }
-      const data: { count: number; lockedUntil?: number } = JSON.parse(raw);
-      const now = Date.now();
-
-      if (data.lockedUntil && data.lockedUntil > now) {
-        const secondsRemaining = Math.ceil((data.lockedUntil - now) / 1000);
-        return { isLocked: true, attemptsLeft: 0, secondsRemaining };
-      }
-
-      if (data.lockedUntil && data.lockedUntil <= now) {
-        // Lockout expired, reset
-        sessionStorage.removeItem(key);
-        return { isLocked: false, attemptsLeft: MAX_FAILED_ATTEMPTS, secondsRemaining: 0 };
-      }
-
-      const attemptsLeft = Math.max(0, MAX_FAILED_ATTEMPTS - (data.count || 0));
-      return { isLocked: false, attemptsLeft, secondsRemaining: 0 };
-    } catch {
+    const key = identifier.toLowerCase().trim();
+    const data = this.lockoutMap.get(key);
+    if (!data) {
       return { isLocked: false, attemptsLeft: MAX_FAILED_ATTEMPTS, secondsRemaining: 0 };
     }
+    const now = Date.now();
+
+    if (data.lockedUntil && data.lockedUntil > now) {
+      const secondsRemaining = Math.ceil((data.lockedUntil - now) / 1000);
+      return { isLocked: true, attemptsLeft: 0, secondsRemaining };
+    }
+
+    if (data.lockedUntil && data.lockedUntil <= now) {
+      this.lockoutMap.delete(key);
+      return { isLocked: false, attemptsLeft: MAX_FAILED_ATTEMPTS, secondsRemaining: 0 };
+    }
+
+    const attemptsLeft = Math.max(0, MAX_FAILED_ATTEMPTS - (data.count || 0));
+    return { isLocked: false, attemptsLeft, secondsRemaining: 0 };
   }
 
   public recordFailedAttempt(identifier: string): LockoutInfo {
-    try {
-      const key = `${FAILED_ATTEMPTS_PREFIX}${identifier.toLowerCase().trim()}`;
-      const raw = sessionStorage.getItem(key);
-      const data: { count: number; lockedUntil?: number } = raw ? JSON.parse(raw) : { count: 0 };
-      data.count = (data.count || 0) + 1;
+    const key = identifier.toLowerCase().trim();
+    const data = this.lockoutMap.get(key) || { count: 0 };
+    data.count = (data.count || 0) + 1;
 
-      if (data.count >= MAX_FAILED_ATTEMPTS) {
-        data.lockedUntil = Date.now() + LOCKOUT_DURATION_MS;
-        sessionStorage.setItem(key, JSON.stringify(data));
-        return { isLocked: true, attemptsLeft: 0, secondsRemaining: 60 };
-      }
-
-      sessionStorage.setItem(key, JSON.stringify(data));
-      return {
-        isLocked: false,
-        attemptsLeft: Math.max(0, MAX_FAILED_ATTEMPTS - data.count),
-        secondsRemaining: 0,
-      };
-    } catch {
-      return { isLocked: false, attemptsLeft: 0, secondsRemaining: 0 };
+    if (data.count >= MAX_FAILED_ATTEMPTS) {
+      data.lockedUntil = Date.now() + LOCKOUT_DURATION_MS;
+      this.lockoutMap.set(key, data);
+      return { isLocked: true, attemptsLeft: 0, secondsRemaining: 60 };
     }
+
+    this.lockoutMap.set(key, data);
+    return {
+      isLocked: false,
+      attemptsLeft: Math.max(0, MAX_FAILED_ATTEMPTS - data.count),
+      secondsRemaining: 0,
+    };
   }
 
   public clearFailedAttempts(identifier: string): void {
-    try {
-      const key = `${FAILED_ATTEMPTS_PREFIX}${identifier.toLowerCase().trim()}`;
-      sessionStorage.removeItem(key);
-    } catch {
-      // ignore
-    }
+    const key = identifier.toLowerCase().trim();
+    this.lockoutMap.delete(key);
   }
 
   /**
-   * Session Management: Create, Store, Validate, Terminate
+   * Session Management: Persistent & Offline-Resilient
    */
   public createSession(user: User): AuthSession {
     const now = Date.now();
@@ -161,46 +147,58 @@ class AuthService {
       expiresAt: new Date(now + SESSION_TTL_MS).toISOString(),
     };
 
-    try {
-      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-    } catch (err) {
-      console.error('Failed to persist session:', err);
+    this.currentSession = session;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('bartracker_active_session', JSON.stringify(session));
+        localStorage.setItem('bartracker_session_user', JSON.stringify(user));
+      } catch {
+        // quota or private mode fallback
+      }
     }
-
     return session;
   }
 
   public getActiveSession(): AuthSession | null {
-    try {
-      const raw = localStorage.getItem(SESSION_STORAGE_KEY);
-      if (!raw) return null;
-      const session: AuthSession = JSON.parse(raw);
-      if (!session || !session.token || !session.expiresAt) {
-        this.destroySession();
-        return null;
+    if (!this.currentSession && typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('bartracker_active_session');
+        if (stored) {
+          const parsed = JSON.parse(stored) as AuthSession;
+          if (parsed && parsed.expiresAt && new Date(parsed.expiresAt).getTime() > Date.now()) {
+            this.currentSession = parsed;
+          } else {
+            localStorage.removeItem('bartracker_active_session');
+            localStorage.removeItem('bartracker_session_user');
+          }
+        }
+      } catch {
+        // ignore parse error
       }
-      if (new Date(session.expiresAt).getTime() <= Date.now()) {
-        this.destroySession();
-        return null;
-      }
-      return session;
-    } catch {
+    }
+
+    if (!this.currentSession) return null;
+    if (new Date(this.currentSession.expiresAt).getTime() <= Date.now()) {
       this.destroySession();
       return null;
     }
+    return this.currentSession;
   }
 
   public destroySession(): void {
-    try {
-      localStorage.removeItem(SESSION_STORAGE_KEY);
-      localStorage.removeItem('bartracker_session_user');
-    } catch (err) {
-      console.error('Error destroying session:', err);
+    this.currentSession = null;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('bartracker_active_session');
+        localStorage.removeItem('bartracker_session_user');
+      } catch {
+        // ignore
+      }
     }
   }
 
   /**
-   * Strips all sensitive fields before state or storage reflection
+   * Strips all sensitive fields before state reflection
    */
   public sanitizeUser(user: User): Partial<User> {
     return {

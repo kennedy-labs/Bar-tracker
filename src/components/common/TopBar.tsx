@@ -1,16 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { User } from '../../types';
 import { store } from '../../services/store';
-import { neonService, NeonState } from '../../services/neon';
 import {
   LogOut,
   Layers,
   Clock,
   LayoutDashboard,
   SlidersHorizontal,
-  RefreshCw,
-  Database,
+  Cloud,
   CloudOff,
+  RefreshCw,
+  CheckCircle2,
   User as UserIcon,
   Scale,
 } from 'lucide-react';
@@ -35,26 +35,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   setActiveTab,
   onUpdateProfile,
 }) => {
-  const [neonState, setNeonState] = useState<NeonState>(neonService.getStatus());
-  const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isWeightModalOpen, setIsWeightModalOpen] = useState(false);
-
-  useEffect(() => {
-    return neonService.subscribeStatus((st) => setNeonState(st));
-  }, []);
-
-  const handleManualSync = async () => {
-    if (isManualSyncing) return;
-    setIsManualSyncing(true);
-    try {
-      await store.uploadAllToNeon();
-    } catch {
-      // silent
-    } finally {
-      setIsManualSyncing(false);
-    }
-  };
 
   const isOwner = currentUser?.role === 'OWNER';
 
@@ -77,6 +59,19 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   const navItems = isOwner ? ownerNavItems : workerNavItems;
 
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
+
+  const handleManualSync = async () => {
+    if (!store.isOnline()) {
+      setSyncNotice('Device is offline. All records saved locally.');
+      setTimeout(() => setSyncNotice(null), 3000);
+      return;
+    }
+    const res = await store.syncWithCloud();
+    setSyncNotice(res.message);
+    setTimeout(() => setSyncNotice(null), 3500);
+  };
+
   return (
     <header className="sticky top-0 z-40 bg-ink/95 backdrop-blur-md border-b border-line px-4 md:px-6 py-2.5">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
@@ -88,7 +83,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         {/* Zone 2: Navigation Links (Desktop) */}
         <nav className="hidden md:flex items-center gap-1 sm:gap-2">
           {navItems.map((item) => {
-            const isSettingsCategory = ['settings', 'mpesa', 'partners', 'staff', 'database', 'profile'].includes(activeTab);
+            const isSettingsCategory = ['settings', 'mpesa', 'partners', 'staff', 'profile'].includes(activeTab);
             const isActive = item.id === 'settings' ? isSettingsCategory : (item.id === 'stock' ? (activeTab === 'stock' || activeTab === 'catalog') : activeTab === item.id);
 
             return (
@@ -118,7 +113,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           <button
             type="button"
             onClick={() => setIsWeightModalOpen(true)}
-            title="Keg & Weight Calculator: Weigh tank on scale to calculate remaining value (e.g. 31kg × KES 150 = KES 4,650)"
+            title="Keg & Weight Calculator: Weigh tank on scale to calculate remaining value"
             className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-800/60 hover:border-cyan-600/80 text-cyan-300 transition-colors cursor-pointer"
           >
             <Scale className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
@@ -144,29 +139,48 @@ export const TopBar: React.FC<TopBarProps> = ({
             </button>
           )}
 
-          {/* Quiet Sync Indicator for Owner */}
-          {isOwner && (
-            <button
-              onClick={handleManualSync}
-              disabled={isManualSyncing}
-              title={
-                neonState.status === 'CONNECTED'
-                  ? 'Cloud Synced with Neon PostgreSQL'
-                  : 'Click to trigger cloud synchronization'
-              }
-              className="text-[11px] font-mono text-muted hover:text-content flex items-center gap-1 cursor-pointer transition-colors"
-            >
-              {isManualSyncing ? (
-                <RefreshCw className="w-3 h-3 text-info animate-spin" />
-              ) : neonState.status === 'CONNECTED' ? (
-                <span className="w-1.5 h-1.5 rounded-full bg-success" />
-              ) : (
-                <CloudOff className="w-3 h-3 text-warn" />
-              )}
-              <span className="hidden md:inline">
-                {isManualSyncing ? 'Syncing...' : 'Synced'}
-              </span>
-            </button>
+          {/* Offline / Cloud Synchronization Indicator */}
+          <button
+            type="button"
+            onClick={handleManualSync}
+            title={
+              store.isOnline()
+                ? `Cloud Synchronized · ${store.getPendingSyncCount()} pending changes. Click to sync now.`
+                : `Offline Mode: Changes saved safely on device. ${store.getPendingSyncCount()} transactions queued.`
+            }
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border transition-colors cursor-pointer ${
+              !store.isOnline()
+                ? 'bg-amber-950/40 border-amber-800/60 text-amber-300 hover:bg-amber-900/50'
+                : store.getPendingSyncCount() > 0
+                ? 'bg-sky-950/40 border-sky-800/60 text-sky-300 hover:bg-sky-900/50'
+                : 'bg-surface border-line text-muted hover:text-content hover:bg-surface-2'
+            }`}
+          >
+            {store.isCloudSyncing() ? (
+              <RefreshCw className="w-3.5 h-3.5 text-sky-400 animate-spin shrink-0" />
+            ) : !store.isOnline() ? (
+              <CloudOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            ) : store.getPendingSyncCount() > 0 ? (
+              <Cloud className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            )}
+            <span className="font-mono text-[11px] hidden sm:inline">
+              {store.isCloudSyncing()
+                ? 'Syncing...'
+                : !store.isOnline()
+                ? `Offline (${store.getPendingSyncCount()})`
+                : store.getPendingSyncCount() > 0
+                ? `Sync (${store.getPendingSyncCount()})`
+                : 'Synced'}
+            </span>
+          </button>
+
+          {/* Sync notification popup */}
+          {syncNotice && (
+            <div className="absolute top-12 right-4 z-50 bg-slate-900 border border-slate-700 text-white text-xs px-3 py-2 rounded-xl shadow-xl max-w-xs animate-in fade-in duration-150">
+              {syncNotice}
+            </div>
           )}
 
           {/* Clean Logout */}

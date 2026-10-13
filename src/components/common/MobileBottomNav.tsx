@@ -51,7 +51,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       className="fixed bottom-0 inset-x-0 z-40 bg-[#0B0F17]/95 backdrop-blur-lg border-t border-[#1E2638] px-3 py-1.5 md:hidden flex items-center justify-around gap-1 shadow-lg"
     >
       {navItems.map((item) => {
-        const isSettingsCategory = ['settings', 'mpesa', 'partners', 'staff', 'database', 'profile'].includes(activeTab);
+        const isSettingsCategory = ['settings', 'mpesa', 'partners', 'staff', 'profile'].includes(activeTab);
         const isActive =
           item.id === 'settings'
             ? isSettingsCategory

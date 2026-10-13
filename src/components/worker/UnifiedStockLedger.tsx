@@ -56,9 +56,12 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
 
  const [, setStoreTick] = useState<number>(0);
 
- useEffect(() => {
- return store.subscribe(() => setStoreTick((t) => t + 1));
- }, []);
+  useEffect(() => {
+    return store.subscribe(() => {
+      setCellInputStrings({});
+      setStoreTick((t) => t + 1);
+    });
+  }, []);
 
  const showToast = (msg: string) => {
  setToastMessage(msg);
@@ -78,8 +81,6 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
     Record<string, { opening?: string; added?: string; closing?: string }>
   >({});
 
-  // Pre-shift custom starting counts when no active shift has started yet
-  const [preShiftStartingCounts, setPreShiftStartingCounts] = useState<Record<string, number>>({});
 
  // Extract categories for clean filter tabs
  const categories = useMemo(() => {
@@ -109,9 +110,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
           ? ssi.openingPhysicalCount
           : (inv ? Number(inv.quantityOnHand || 0) : 0);
       } else {
-        openingStock = preShiftStartingCounts[product.id] !== undefined
-          ? preShiftStartingCounts[product.id]
-          : (inv ? Number(inv.quantityOnHand || 0) : 0);
+        openingStock = inv ? Number(inv.quantityOnHand || 0) : 0;
       }
 
       // 2. Added stock
@@ -170,7 +169,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
        sellingPrice,
      };
    });
- }, [products, shiftStockItems, inventory, activeShift, preShiftStartingCounts]);
+ }, [products, shiftStockItems, inventory, activeShift]);
 
  // Filtered rows
  const filteredRows = useMemo(() => {
@@ -215,12 +214,13 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
    };
  }, [rowDataList]);
 
- // Handle cell edit commit to store & Neon
+  // Handle cell edit commit to store & Neon
   const handleCellChange = (
     productId: string,
     field: 'opening' | 'added' | 'closing',
     valueStr: string
   ) => {
+    // Only buffer input locally while attendant is actively typing
     setCellInputStrings((prev) => ({
       ...prev,
       [productId]: {
@@ -228,18 +228,18 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
         [field]: valueStr,
       },
     }));
+  };
 
-    const trimmed = valueStr.trim();
+  const handleCellBlur = (productId: string, field: 'opening' | 'added' | 'closing') => {
+    const rawVal = cellInputStrings[productId]?.[field];
+    if (rawVal === undefined) return;
+
+    const trimmed = rawVal.trim();
     const parsed = trimmed === '' ? undefined : Math.max(0, parseFloat(trimmed));
     const num = parsed !== undefined && !isNaN(parsed) ? parsed : undefined;
 
     if (!activeShift) {
-      if (field === 'opening') {
-        setPreShiftStartingCounts((prev) => ({
-          ...prev,
-          [productId]: num !== undefined ? num : 0,
-        }));
-      }
+      // In pre-shift shelf preview, keep the input buffered until the shift opens
       return;
     }
 
@@ -262,9 +262,8 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
         closingPhysicalCount: num,
       });
     }
-  };
 
-  const handleCellBlur = (productId: string, field: 'opening' | 'added' | 'closing') => {
+    // Clear input buffer once committed so store becomes single source of truth
     setCellInputStrings((prev) => {
       if (!prev[productId]) return prev;
       const copy = { ...prev };
@@ -289,6 +288,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
       updates[p.id] = { opening: qty };
     });
     store.batchUpdateShiftStockItems(activeShift.id, updates);
+    setCellInputStrings({});
     showToast('All opening counts confirmed.');
   };
 
@@ -299,11 +299,15 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
 
     const physicalCounts: Record<string, number> = {};
     products.forEach((p) => {
-      const customOpen = preShiftStartingCounts[p.id];
       const inv = inventory.find((i) => i.productId === p.id);
-      physicalCounts[p.id] = customOpen !== undefined
-        ? customOpen
-        : (inv ? Number(inv.quantityOnHand || 0) : 0);
+      const systemQty = inv ? Number(inv.quantityOnHand || 0) : 0;
+      const rawInput = cellInputStrings[p.id]?.opening;
+      if (rawInput !== undefined && rawInput.trim() !== '') {
+        const parsed = Math.max(0, parseFloat(rawInput.trim()));
+        physicalCounts[p.id] = !isNaN(parsed) ? parsed : systemQty;
+      } else {
+        physicalCounts[p.id] = systemQty;
+      }
     });
 
     const shift = store.openShift({
@@ -314,7 +318,6 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
       physicalCounts,
     });
 
-    setPreShiftStartingCounts({});
     setCellInputStrings({});
     showToast(`Shift #${shift.shiftNumber} started.`);
   };

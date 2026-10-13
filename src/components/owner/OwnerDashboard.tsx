@@ -15,8 +15,8 @@ import { StaffManager } from './StaffManager';
 import { CatalogManager } from './CatalogManager';
 import { MpesaConfigManager } from './MpesaConfigManager';
 import { RestockAuditManager } from './RestockAuditManager';
-import { NeonDatabaseManager } from './NeonDatabaseManager';
 import { ProfileManager } from './ProfileManager';
+import { LiveLaunchManager } from './LiveLaunchManager';
 import {
   TrendingUp,
   AlertTriangle,
@@ -47,8 +47,8 @@ import {
   ChevronRight,
   Store,
   FileText,
-  Database,
   UserCheck,
+  Rocket,
 } from 'lucide-react';
 
 interface OwnerDashboardProps {
@@ -69,8 +69,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
 
   // Settings Sub-tab State
-  const [settingsSubTab, setSettingsSubTab] = useState<'mpesa' | 'staff' | 'partners' | 'database' | 'profile'>(() => {
-    if (['mpesa', 'staff', 'partners', 'database', 'profile'].includes(activeTab)) {
+  const [settingsSubTab, setSettingsSubTab] = useState<'mpesa' | 'staff' | 'partners' | 'profile' | 'launch'>(() => {
+    if (['mpesa', 'staff', 'partners', 'profile', 'launch'].includes(activeTab)) {
       return activeTab as any;
     }
     return 'mpesa';
@@ -79,7 +79,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   useEffect(() => {
     if (activeTab === 'catalog') {
       setActiveTab('stock');
-    } else if (['mpesa', 'staff', 'partners', 'database', 'profile'].includes(activeTab)) {
+    } else if (['mpesa', 'staff', 'partners', 'profile', 'launch'].includes(activeTab)) {
       setSettingsSubTab(activeTab as any);
     }
   }, [activeTab, setActiveTab]);
@@ -802,14 +802,14 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
       {/* 6. UNIFIED BAR SETUP & SETTINGS TAB */}
       {(activeTab === 'settings' ||
-        ['mpesa', 'partners', 'staff', 'database', 'profile'].includes(activeTab)) && (
+        ['mpesa', 'partners', 'staff', 'profile', 'launch'].includes(activeTab)) && (
         <div className="space-y-4 sm:space-y-5">
           {/* Sub-navigation Segment Switcher */}
           <div className="p-2 sm:p-3 rounded-2xl sm:rounded-3xl bg-[#121824] border border-[#1E293B] shadow-lg">
             <div className="text-[11px] font-mono text-slate-400 uppercase tracking-wider px-2 pt-1 pb-2">
               Bar Settings & Configuration
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
               <button
                 type="button"
                 onClick={() => {
@@ -861,22 +861,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setSettingsSubTab('database');
-                  setActiveTab('database');
-                }}
-                className={`py-3 px-3 rounded-xl sm:rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                  settingsSubTab === 'database'
-                    ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
-                    : 'bg-[#0E1420] text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
-                }`}
-              >
-                <Database className="w-4 h-4 shrink-0 text-cyan-400" />
-                <span className="truncate">Neon Database</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
                   setSettingsSubTab('profile');
                   setActiveTab('profile');
                 }}
@@ -889,6 +873,22 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                 <UserCheck className="w-4 h-4 shrink-0" />
                 <span className="truncate">My Profile</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSettingsSubTab('launch');
+                  setActiveTab('launch');
+                }}
+                className={`py-3 px-3 rounded-xl sm:rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  settingsSubTab === 'launch'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md font-black'
+                    : 'bg-[#0E1420] text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
+                }`}
+              >
+                <Rocket className="w-4 h-4 shrink-0 text-amber-400" />
+                <span className="truncate">Live Launch</span>
+              </button>
             </div>
           </div>
 
@@ -897,13 +897,13 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
             {settingsSubTab === 'mpesa' && <MpesaConfigManager />}
             {settingsSubTab === 'staff' && <StaffManager currentUser={currentUser} />}
             {settingsSubTab === 'partners' && <PartnerBarsManager />}
-            {settingsSubTab === 'database' && <NeonDatabaseManager />}
             {settingsSubTab === 'profile' && (
               <ProfileManager
                 currentUser={currentUser}
                 onUpdateProfile={onUpdateProfile}
               />
             )}
+            {settingsSubTab === 'launch' && <LiveLaunchManager currentUser={currentUser} />}
           </div>
         </div>
       )}

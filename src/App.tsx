@@ -9,10 +9,6 @@ import { WeightCalculatorModal } from './components/common/WeightCalculatorModal
 import { WorkerTerminal } from './components/worker/WorkerTerminal';
 import { OwnerDashboard } from './components/owner/OwnerDashboard';
 
-// Helper to sanitize session user and prevent credential leakage into LocalStorage
-const sanitizeSessionUser = (user: User): Partial<User> => {
-  return authService.sanitizeUser(user);
-};
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -33,7 +29,7 @@ export default function App() {
         }
       }
 
-      // First check active cryptographic session token
+      // Check active in-memory session
       const session = authService.getActiveSession();
       if (session && session.userId && session.username) {
         const authenticUser = store.validateSessionUser(session.userId, session.username);
@@ -44,76 +40,17 @@ export default function App() {
           return authenticUser;
         }
       }
-
-      const saved = localStorage.getItem('bartracker_session_user');
-      if (saved) {
-        const u = JSON.parse(saved);
-        if (u && u.id && u.username) {
-          const authenticUser = store.validateSessionUser(u.id, u.username);
-          if (authenticUser) {
-            if (authenticUser.businessId) {
-              store.setCurrentBusiness(authenticUser.businessId);
-            }
-            return authenticUser;
-          }
-        }
-        localStorage.removeItem('bartracker_session_user');
-      }
       return null;
     } catch {
-      localStorage.removeItem('bartracker_session_user');
       return null;
     }
   });
 
   const [activeTab, setActiveTab] = useState<string>(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        const savedTab = sessionStorage.getItem('bartrack_active_tab');
-        if (
-          savedTab &&
-          [
-            'start',
-            'counter',
-            'end_shift',
-            'history',
-            'overview',
-            'shifts',
-            'stock',
-            'settings',
-            'catalog',
-            'mpesa',
-            'partners',
-            'staff',
-            'database',
-            'profile',
-          ].includes(savedTab)
-        ) {
-          return savedTab;
-        }
-      }
-      const saved = localStorage.getItem('bartracker_session_user');
-      if (saved) {
-        const u = JSON.parse(saved);
-        if (u && u.id && u.username) {
-          const authenticUser = store.validateSessionUser(u.id, u.username);
-          if (authenticUser) {
-            if (authenticUser.role === 'OWNER') return 'overview';
-            return 'counter';
-          }
-        }
-      }
-    } catch {
-      // fallback
-    }
+    const session = authService.getActiveSession();
+    if (session?.role === 'OWNER') return 'overview';
     return 'counter';
   });
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('bartrack_active_tab', activeTab);
-    }
-  }, [activeTab]);
 
   // Strict route/tab authorization guard: prevent cross-role tab penetration
   useEffect(() => {
@@ -127,7 +64,6 @@ export default function App() {
       'mpesa',
       'partners',
       'staff',
-      'database',
       'profile',
     ];
     const workerTabs = ['counter', 'history'];
@@ -141,11 +77,6 @@ export default function App() {
 
   // tick triggers re-render whenever store state mutates
   const [, setTick] = useState<number>(0);
-
-  // Initial live cloud synchronization on application launch
-  useEffect(() => {
-    store.syncWithCloud(true);
-  }, []);
 
   useEffect(() => {
     const unsubscribe = store.subscribe(() => {
@@ -180,11 +111,6 @@ export default function App() {
       store.setCurrentBusiness(authentic.businessId);
     }
     authService.createSession(authentic);
-    try {
-      localStorage.setItem('bartracker_session_user', JSON.stringify(sanitizeSessionUser(authentic)));
-    } catch (err) {
-      console.error(err);
-    }
     // Set appropriate initial tab
     if (authentic.role === 'OWNER') {
       setActiveTab('overview');
@@ -197,27 +123,15 @@ export default function App() {
     authService.destroySession();
     store.clearActiveSessionCache();
     setCurrentUser(null);
-    try {
-      localStorage.removeItem('bartracker_session_user');
-      sessionStorage.removeItem('bartrack_active_tab');
-    } catch (err) {
-      console.error(err);
-    }
     setActiveTab('start');
   };
 
   const handleUpdateProfile = (updatedUser: User) => {
     setCurrentUser(updatedUser);
     authService.createSession(updatedUser);
-    try {
-      localStorage.setItem('bartracker_session_user', JSON.stringify(sanitizeSessionUser(updatedUser)));
-    } catch (err) {
-      console.error(err);
-    }
   };
 
   const discrepancies = store.getDiscrepancies({ status: 'FLAGGED' });
-
   const [isMobileScaleOpen, setIsMobileScaleOpen] = useState(false);
 
   // If not logged in, show production Authentication Screen
