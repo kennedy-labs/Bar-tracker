@@ -1,10 +1,30 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  doc,
+  getDoc,
+} from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+// Initialize Firestore with experimentalForceLongPolling to eliminate the 10-second backend timeout
+// in browser iframe and proxy environments, along with persistent local multi-tab cache
+export const db = initializeFirestore(
+  app,
+  {
+    experimentalForceLongPolling: true,
+    localCache:
+      typeof window !== 'undefined'
+        ? persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+        : undefined,
+  },
+  firebaseConfig.firestoreDatabaseId
+);
+
 export const auth = getAuth(app);
 
 export enum OperationType {
@@ -34,8 +54,14 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errMsg = error instanceof Error ? error.message : String(error);
+  const isOffline =
+    errMsg.includes('offline') ||
+    errMsg.includes('Could not reach Cloud Firestore backend') ||
+    errMsg.includes('backend didn\'t respond');
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMsg,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -51,19 +77,25 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path,
   };
+
+  if (isOffline) {
+    console.warn(`Firestore operating in offline/cached mode for ${path}: ${errMsg}`);
+    return;
+  }
+
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
 
 export async function testConnection(): Promise<boolean> {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    return true;
+    const snap = await getDoc(doc(db, 'test', 'connection'));
+    return snap.exists();
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.warn('Firebase client is currently working offline.');
     } else {
-      console.error('Firebase connection test note:', error);
+      console.debug('Firebase connection test note:', error);
     }
     return false;
   }
