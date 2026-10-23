@@ -1,0 +1,304 @@
+{
+  "entities": {
+    "business": {
+      "title": "Business",
+      "description": "Establishment profile and credentials",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "ownerName": { "type": "string", "maxLength": 100 },
+        "address": { "type": "string", "maxLength": 250 },
+        "connectCode": { "type": "string", "maxLength": 20 },
+        "activeShiftTransferCode": { "type": "string", "maxLength": 20 },
+        "activeShiftId": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "name", "phone", "ownerName"]
+    },
+    "user": {
+      "title": "User",
+      "description": "System user account and hashed authentication credentials",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "maxLength": 50 },
+        "name": { "type": "string", "maxLength": 100 },
+        "role": { "type": "string", "enum": ["WORKER", "OWNER"] },
+        "pinCode": { "type": "string", "maxLength": 128 },
+        "pinSalt": { "type": "string", "maxLength": 128 },
+        "password": { "type": "string", "maxLength": 128 },
+        "passwordSalt": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "isArchived": { "type": "boolean" }
+      },
+      "required": ["id", "businessId", "username", "name", "role"]
+    },
+    "product": {
+      "title": "Product",
+      "description": "Product catalog definition and pricing",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 150 },
+        "category": { "type": "string", "maxLength": 50 },
+        "unit": { "type": "string", "maxLength": 50 },
+        "sellingPrice": { "type": "number" },
+        "reorderLevel": { "type": "number" },
+        "volumeMl": { "type": "number" },
+        "isArchived": { "type": "boolean" },
+        "isMeasured": { "type": "boolean" },
+        "measurementType": { "type": "string", "maxLength": 50 },
+        "measureUnitLabel": { "type": "string", "maxLength": 50 },
+        "totalMeasuredValueKes": { "type": "number" },
+        "fullWeightKg": { "type": "number" },
+        "emptyWeightKg": { "type": "number" },
+        "pricePerKg": { "type": "number" }
+      },
+      "required": ["id", "businessId", "name", "category", "unit", "sellingPrice"]
+    },
+    "inventoryItem": {
+      "title": "InventoryItem",
+      "description": "Current quantity on hand for a product",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "productId": { "type": "string", "maxLength": 128 },
+        "quantityOnHand": { "type": "number" },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "businessId", "productId", "quantityOnHand"]
+    },
+    "shift": {
+      "title": "Shift",
+      "description": "Shift lifecycle, opening floats, and closing balances",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "shiftNumber": { "type": "string", "maxLength": 64 },
+        "workerId": { "type": "string", "maxLength": 128 },
+        "workerName": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "maxLength": 50 },
+        "openedAt": { "type": "string", "maxLength": 64 },
+        "closedAt": { "type": "string", "maxLength": 64 },
+        "openingCashFloat": { "type": "number" },
+        "openingMpesaBalance": { "type": "number" },
+        "recordedSalesCount": { "type": "number" },
+        "closingCashActual": { "type": "number" },
+        "closingMpesaBalance": { "type": "number" },
+        "calculatedMpesaIncome": { "type": "number" },
+        "calculatedCashIncome": { "type": "number" },
+        "totalIncomeReturned": { "type": "number" },
+        "expectedSalesRevenue": { "type": "number" },
+        "totalExpenses": { "type": "number" },
+        "financialVariance": { "type": "number" },
+        "openingInconsistencyNote": { "type": "string", "maxLength": 500 },
+        "closingNotes": { "type": "string", "maxLength": 1000 },
+        "counterFinished": { "type": "boolean" },
+        "isReviewedByOwner": { "type": "boolean" },
+        "reviewedAt": { "type": "string", "maxLength": 64 },
+        "reviewedBy": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "businessId", "shiftNumber", "workerId", "workerName", "status", "openedAt"]
+    },
+    "shiftStockItem": {
+      "title": "ShiftStockItem",
+      "description": "Stock audit line item recorded during a shift",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "shiftId": { "type": "string", "maxLength": 128 },
+        "productId": { "type": "string", "maxLength": 128 },
+        "productName": { "type": "string", "maxLength": 150 },
+        "unit": { "type": "string", "maxLength": 50 },
+        "sellingPrice": { "type": "number" },
+        "openingSystemCount": { "type": "number" },
+        "openingPhysicalCount": { "type": "number" },
+        "openingVerified": { "type": "boolean" },
+        "additions": { "type": "number" },
+        "recordedSales": { "type": "number" },
+        "transfersIn": { "type": "number" },
+        "transfersOut": { "type": "number" },
+        "damages": { "type": "number" },
+        "closingPhysicalCount": { "type": "number" },
+        "expectedClosingCount": { "type": "number" },
+        "discrepancyCount": { "type": "number" },
+        "discrepancyValue": { "type": "number" }
+      },
+      "required": ["id", "businessId", "shiftId", "productId", "productName"]
+    },
+    "stockAddition": {
+      "title": "StockAddition",
+      "description": "Stock addition or correction recorded during operation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "shiftId": { "type": "string", "maxLength": 128 },
+        "shiftNumber": { "type": "string", "maxLength": 64 },
+        "productId": { "type": "string", "maxLength": 128 },
+        "productName": { "type": "string", "maxLength": 150 },
+        "quantity": { "type": "number" },
+        "workerName": { "type": "string", "maxLength": 100 },
+        "timestamp": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "maxLength": 50 },
+        "isImmutable": { "type": "boolean" },
+        "adjustmentType": { "type": "string", "maxLength": 20 },
+        "reason": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["id", "businessId", "shiftId", "productId", "quantity", "workerName"]
+    },
+    "expense": {
+      "title": "Expense",
+      "description": "Operational expense logged during a shift",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "shiftId": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "maxLength": 50 },
+        "amount": { "type": "number" },
+        "paymentMethod": { "type": "string", "maxLength": 20 },
+        "description": { "type": "string", "maxLength": 500 },
+        "receiptRef": { "type": "string", "maxLength": 100 },
+        "timestamp": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "businessId", "shiftId", "category", "amount", "paymentMethod", "description"]
+    },
+    "discrepancy": {
+      "title": "Discrepancy",
+      "description": "Stock or cash mismatch flagged for owner investigation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "shiftId": { "type": "string", "maxLength": 128 },
+        "shiftNumber": { "type": "string", "maxLength": 64 },
+        "workerName": { "type": "string", "maxLength": 100 },
+        "type": { "type": "string", "maxLength": 50 },
+        "itemId": { "type": "string", "maxLength": 128 },
+        "itemName": { "type": "string", "maxLength": 150 },
+        "expected": { "type": "number" },
+        "actual": { "type": "number" },
+        "variance": { "type": "number" },
+        "monetaryValue": { "type": "number" },
+        "severity": { "type": "string", "maxLength": 20 },
+        "status": { "type": "string", "maxLength": 50 },
+        "ownerNotes": { "type": "string", "maxLength": 500 },
+        "timestamp": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "businessId", "shiftId", "workerName", "type", "itemName", "variance"]
+    },
+    "event": {
+      "title": "OperationalEvent",
+      "description": "Audit event journal entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "maxLength": 50 },
+        "title": { "type": "string", "maxLength": 150 },
+        "description": { "type": "string", "maxLength": 500 },
+        "timestamp": { "type": "string", "maxLength": 64 },
+        "actorName": { "type": "string", "maxLength": 100 },
+        "severity": { "type": "string", "maxLength": 20 },
+        "amount": { "type": "number" }
+      },
+      "required": ["id", "businessId", "type", "title", "timestamp", "actorName", "severity"]
+    },
+    "mpesaAccount": {
+      "title": "MpesaAccount",
+      "description": "Business M-Pesa till or paybill account",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "accountName": { "type": "string", "maxLength": 100 },
+        "accountType": { "type": "string", "maxLength": 50 },
+        "identifier": { "type": "string", "maxLength": 50 },
+        "accountNumber": { "type": "string", "maxLength": 50 },
+        "currentBalance": { "type": "number" },
+        "isPrimary": { "type": "boolean" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "businessId", "accountName", "accountType", "identifier"]
+    },
+    "interTransfer": {
+      "title": "InterBusinessTransfer",
+      "description": "Stock transfer dispatch and receipt between establishments",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "fromBusinessId": { "type": "string", "maxLength": 128 },
+        "fromBusinessName": { "type": "string", "maxLength": 150 },
+        "fromShiftId": { "type": "string", "maxLength": 128 },
+        "senderWorkerName": { "type": "string", "maxLength": 100 },
+        "toBusinessId": { "type": "string", "maxLength": 128 },
+        "toBusinessName": { "type": "string", "maxLength": 150 },
+        "productId": { "type": "string", "maxLength": 128 },
+        "productName": { "type": "string", "maxLength": 150 },
+        "quantity": { "type": "number" },
+        "unitPrice": { "type": "number" },
+        "totalTransferValue": { "type": "number" },
+        "status": { "type": "string", "maxLength": 50 },
+        "dispatchedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "fromBusinessId", "toBusinessId", "productId", "quantity", "status"]
+    }
+  },
+  "firestore": {
+    "/businesses/{businessId}": {
+      "schema": "business",
+      "description": "Establishment profiles and settings"
+    },
+    "/users/{userId}": {
+      "schema": "user",
+      "description": "Proprietor and attendant credentials and profiles"
+    },
+    "/products/{productId}": {
+      "schema": "product",
+      "description": "Master beverage catalog and retail prices"
+    },
+    "/inventory/{inventoryId}": {
+      "schema": "inventoryItem",
+      "description": "Persistent quantity on hand for each beverage"
+    },
+    "/shifts/{shiftId}": {
+      "schema": "shift",
+      "description": "Operational shift logs and balancing calculations"
+    },
+    "/shiftStockItems/{itemId}": {
+      "schema": "shiftStockItem",
+      "description": "Shift stock line items and physical counts"
+    },
+    "/stockAdditions/{additionId}": {
+      "schema": "stockAddition",
+      "description": "Audited additions and stock corrections"
+    },
+    "/expenses/{expenseId}": {
+      "schema": "expense",
+      "description": "Shift expenses logged with cash/mpesa breakdown"
+    },
+    "/discrepancies/{discrepancyId}": {
+      "schema": "discrepancy",
+      "description": "Flagged discrepancies and investigations"
+    },
+    "/events/{eventId}": {
+      "schema": "event",
+      "description": "Operational event stream and sync timestamps"
+    },
+    "/mpesaAccounts/{accountId}": {
+      "schema": "mpesaAccount",
+      "description": "M-Pesa payment accounts"
+    },
+    "/interTransfers/{transferId}": {
+      "schema": "interTransfer",
+      "description": "Inter-business stock dispatch records"
+    }
+  }
+}

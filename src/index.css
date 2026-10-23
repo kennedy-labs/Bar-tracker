@@ -1,0 +1,9 @@
+/**
+ * Entry stylesheet.
+ *
+ * All design tokens (colours, fonts, radii, shadows) and base element styling
+ * live in ./styles/theme.css, so the entire application theme can be changed
+ * from a single file.
+ */
+@import "tailwindcss";
+@import "./styles/theme.css";

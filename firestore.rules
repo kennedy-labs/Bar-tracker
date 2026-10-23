@@ -1,0 +1,194 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Test connection doc
+    match /test/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if true;
+      allow write: if isValidId(docId);
+    }
+
+    // Businesses collection - Multi-tenant business profiles
+    match /businesses/{businessId} {
+      allow get: if isValidId(businessId);
+      allow list: if request.auth != null;
+      allow create: if isValidId(businessId)
+        && incoming().id is string && incoming().id.size() <= 128
+        && incoming().name is string && incoming().name.size() > 0 && incoming().name.size() <= 200
+        && incoming().phone is string && incoming().phone.size() <= 50
+        && incoming().ownerName is string && incoming().ownerName.size() <= 100;
+      allow update: if isValidId(businessId)
+        && incoming().id == businessId
+        && incoming().name is string && incoming().name.size() > 0 && incoming().name.size() <= 200;
+      // Critical: Prevent accidental or malicious business profile deletion
+      allow delete: if false;
+    }
+
+    // System users and credentials - Strictly protected
+    match /users/{userId} {
+      allow get: if isValidId(userId);
+      allow list: if request.auth != null;
+      allow create, update: if isValidId(userId)
+        && incoming().id is string && incoming().id.size() <= 128
+        && incoming().username is string && incoming().username.size() > 0 && incoming().username.size() <= 50
+        && incoming().name is string && incoming().name.size() <= 100
+        && incoming().role in ['WORKER', 'OWNER'];
+      // Critical: Staff accounts cannot be deleted arbitrarily; archiving is preferred
+      allow delete: if false;
+    }
+
+    // Product catalog
+    match /products/{productId} {
+      allow get: if isValidId(productId);
+      allow list: if request.auth != null;
+      allow create, update: if isValidId(productId)
+        && incoming().id is string && incoming().id.size() <= 128
+        && incoming().name is string && incoming().name.size() > 0 && incoming().name.size() <= 150
+        && incoming().sellingPrice is number;
+      allow delete: if false;
+    }
+
+    // Inventory quantity on hand
+    match /inventory/{inventoryId} {
+      allow get: if isValidId(inventoryId);
+      allow list: if request.auth != null;
+      allow create, update: if isValidId(inventoryId)
+        && incoming().productId is string && incoming().productId.size() <= 128
+        && incoming().quantityOnHand is number;
+      allow delete: if false;
+    }
+
+    // Shifts - Authoritative audit records; never allow deletion
+    match /shifts/{shiftId} {
+      allow get: if isValidId(shiftId);
+      allow list: if request.auth != null;
+      allow create, update: if isValidId(shiftId)
+        && incoming().id is string && incoming().id.size() <= 128
+        && incoming().shiftNumber is string && incoming().shiftNumber.size() <= 64
+        && incoming().workerId is string && incoming().workerId.size() <= 128
+        && incoming().status is string && incoming().status.size() <= 50;
+      // Critical: Shifts are permanent immutable audit records
+      allow delete: if false;
+    }
+
+    // Shift stock audit line items - Immutable shift ledger
+    match /shiftStockItems/{itemId} {
+      allow get: if isValidId(itemId);
+      allow list: if request.auth != null;
+      allow create, update: if isValidId(itemId)
+        && incoming().id is string && incoming().id.size() <= 128
+        && incoming().shiftId is string && incoming().shiftId.size() <= 128
+        && incoming().productId is string && incoming().productId.size() <= 128;
+      allow delete: if false;
+    }
+
+    // Stock additions and adjustments
+    match /stockAdditions/{additionId} {
+      allow get: if isValidId(additionId);
+      allow list: if request.auth != null;
+      allow create, update: if isValidId(additionId)
+        && incoming().id is string && incoming().id.size() <= 128
+        && incoming().shiftId is string && incoming().shiftId.size() <= 128
+        && incoming().quantity is number;
+      // Allow deletion only if the restock has NOT been locked/verified by owner
+      allow delete: if isValidId(additionId)
+        && existing().isImmutable != true
+        && existing().status != 'SAVED_LOCKED';
+    }
+
+    // Stock movements audit log
+    match /stockMovements/{movementId} {
+      allow get: if isValidId(movementId);
+      allow list: if request.auth != null;
+      allow create, update: if isValidId(movementId)
+        && incoming().id is string && incoming().id.size() <= 128;
+      allow delete: if false;
+    }
+
+    // Expenses - Financial records
+    match /expenses/{expenseId} {
+      allow get: if isValidId(expenseId);
+      allow list: if request.auth != null;
+      allow create, update: if isValidId(expenseId)
+        && incoming().id is string && incoming().id.size() <= 128
+        && incoming().amount is number;
+      allow delete: if false;
+    }
+
+    // Discrepancies - Variance audit
+    match /discrepancies/{discrepancyId} {
+      allow get: if isValidId(discrepancyId);
+      allow list: if request.auth != null;
+      allow create, update: if isValidId(discrepancyId)
+        && incoming().id is string && incoming().id.size() <= 128
+        && incoming().variance is number;
+      allow delete: if false;
+    }
+
+    // Operational event logs - Append-only audit
+    match /events/{eventId} {
+      allow get: if isValidId(eventId);
+      allow list: if request.auth != null;
+      allow create, update: if isValidId(eventId)
+        && incoming().id is string && incoming().id.size() <= 128
+        && incoming().type is string && incoming().type.size() <= 50;
+      allow delete: if false;
+    }
+
+    // M-Pesa accounts
+    match /mpesaAccounts/{accountId} {
+      allow get: if isValidId(accountId);
+      allow list: if request.auth != null;
+      allow create, update: if isValidId(accountId)
+        && incoming().id is string && incoming().id.size() <= 128
+        && incoming().accountName is string && incoming().accountName.size() <= 100;
+      allow delete: if false;
+    }
+
+    // Inter-business stock transfers
+    match /interTransfers/{transferId} {
+      allow get: if isValidId(transferId);
+      allow list: if request.auth != null;
+      allow create, update: if isValidId(transferId)
+        && incoming().id is string && incoming().id.size() <= 128
+        && incoming().quantity is number;
+      allow delete: if false;
+    }
+
+    // Partner bar linkages
+    match /partners/{partnerId} {
+      allow get: if isValidId(partnerId);
+      allow list: if request.auth != null;
+      allow create, update: if isValidId(partnerId)
+        && incoming().id is string && incoming().id.size() <= 128;
+      allow delete: if true;
+    }
+
+    // Handover drafts
+    match /handoverDrafts/{draftId} {
+      allow get: if isValidId(draftId);
+      allow list: if request.auth != null;
+      allow create, update: if isValidId(draftId)
+        && incoming().id is string && incoming().id.size() <= 128;
+      allow delete: if true;
+    }
+  }
+}
