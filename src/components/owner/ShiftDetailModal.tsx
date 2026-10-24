@@ -204,6 +204,11 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({ shift: initi
                         : item.additions + (item.transfersIn || 0) < 0
                         ? item.additions + (item.transfersIn || 0)
                         : '-'}
+                      {item.adjustmentNote && (
+                        <div className="text-[10px] text-amber-300 font-normal truncate max-w-[85px] mx-auto" title={item.adjustmentNote}>
+                          {item.adjustmentNote}
+                        </div>
+                      )}
                     </td>
                     <td className="py-2 px-2 text-center text-xs">
                       {item.ownerAdjustments ? (

@@ -118,6 +118,7 @@ export interface ShiftStockItem {
   fullWeightKg?: number;
   emptyWeightKg?: number;
   pricePerKg?: number;
+  adjustmentNote?: string;
   updatedAt?: string;
 }
 

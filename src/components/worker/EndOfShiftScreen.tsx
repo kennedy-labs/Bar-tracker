@@ -386,7 +386,7 @@ Generated via Bar Track System`;
  )}
  {item.additions < 0 && (
  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-rose-950/80 text-rose-400 border border-rose-800 shrink-0">
- {item.additions} reduced
+ {item.additions} reduced{item.adjustmentNote ? ` (${item.adjustmentNote})` : ''}
  </span>
  )}
  {item.ownerAdjustments !== undefined && item.ownerAdjustments !== 0 && (
@@ -983,6 +983,11 @@ Generated via Bar Track System`;
      : item.additions + item.transfersIn < 0
      ? `${item.additions + item.transfersIn}`
      : '-'} {isWeight && (item.additions + item.transfersIn !== 0) ? 'kg' : ''}
+   {item.adjustmentNote && (
+     <div className="text-[10px] text-amber-300 font-normal truncate max-w-[80px] mx-auto" title={item.adjustmentNote}>
+       {item.adjustmentNote}
+     </div>
+   )}
  </td>
  <td className="p-2.5 text-center text-slate-300">
    {item.closingPhysicalCount !== undefined

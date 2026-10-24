@@ -2365,6 +2365,7 @@ class StoreService {
     openingPhysicalCount?: number;
     additions?: number;
     closingPhysicalCount?: number;
+    adjustmentNote?: string;
   }) {
     const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
     let ssi = allSSIs.find(
@@ -2388,6 +2389,9 @@ class StoreService {
       ssi.openingSystemCount = openCount;
       ssi.openingPhysicalCount =
         params.openingPhysicalCount !== undefined ? params.openingPhysicalCount : openCount;
+      if (params.adjustmentNote !== undefined) {
+        ssi.adjustmentNote = params.adjustmentNote;
+      }
       allSSIs.push(ssi);
     } else {
       if (params.openingPhysicalCount !== undefined) {
@@ -2401,6 +2405,9 @@ class StoreService {
           params.closingPhysicalCount !== undefined
             ? Math.max(0, params.closingPhysicalCount)
             : undefined;
+      }
+      if (params.adjustmentNote !== undefined) {
+        ssi.adjustmentNote = params.adjustmentNote;
       }
     }
 
@@ -2426,16 +2433,20 @@ class StoreService {
       this.saveCurrentInventory(currentInventory);
     }
 
-    // Keep StockAdditionRecord in sync if additions were edited
-    if (params.additions !== undefined) {
+    // Keep StockAdditionRecord in sync if additions were edited or note was added
+    if (params.additions !== undefined || params.adjustmentNote !== undefined) {
       const shift = this.getShiftById(params.shiftId);
       const additions = this.get<StockAdditionRecord[]>(STORAGE_KEYS.STOCK_ADDITIONS, []);
       const recIdx = additions.findIndex((a) => a.shiftId === params.shiftId && a.productId === params.productId);
-      if (params.additions !== 0) {
-        const isReduction = params.additions < 0;
+      const currentAdditions = params.additions !== undefined ? params.additions : (ssi.additions || 0);
+      if (currentAdditions !== 0) {
+        const isReduction = currentAdditions < 0;
         if (recIdx !== -1) {
-          additions[recIdx].quantity = params.additions;
+          if (params.additions !== undefined) additions[recIdx].quantity = currentAdditions;
           additions[recIdx].adjustmentType = isReduction ? 'REDUCE' : 'ADD';
+          if (params.adjustmentNote !== undefined) {
+            additions[recIdx].reason = params.adjustmentNote;
+          }
           additions[recIdx].timestamp = new Date().toISOString();
         } else {
           const newRecord: StockAdditionRecord = {
@@ -2444,8 +2455,9 @@ class StoreService {
             shiftNumber: shift ? shift.shiftNumber : 'ACTIVE',
             productId: params.productId,
             productName: product.name,
-            quantity: params.additions,
+            quantity: currentAdditions,
             adjustmentType: isReduction ? 'REDUCE' : 'ADD',
+            reason: params.adjustmentNote,
             workerName: shift ? shift.workerName : 'Attendant',
             timestamp: new Date().toISOString(),
             status: 'SAVED_LOCKED',
@@ -2455,7 +2467,7 @@ class StoreService {
           };
           additions.unshift(newRecord);
         }
-      } else if (params.additions === 0 && recIdx !== -1) {
+      } else if (currentAdditions === 0 && recIdx !== -1) {
         additions.splice(recIdx, 1);
       }
       this.set(STORAGE_KEYS.STOCK_ADDITIONS, additions);

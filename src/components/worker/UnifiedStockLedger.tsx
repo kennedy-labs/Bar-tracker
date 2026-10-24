@@ -24,6 +24,7 @@ import {
  Scale,
  X,
  Trash2,
+ FileText,
 } from 'lucide-react';
 import { WeightCalculatorModal } from '../common/WeightCalculatorModal';
 import { useBackHandler } from '../../services/navigationHistory';
@@ -118,6 +119,10 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  const [closingMpesaInput, setClosingMpesaInput] = useState<string>('');
  const [closingNotesInput, setClosingNotesInput] = useState<string>('');
 
+ // Minimal subtle form state for optional stock reduction note
+ const [reductionNoteProductId, setReductionNoteProductId] = useState<string | null>(null);
+ const [noteInputStrings, setNoteInputStrings] = useState<Record<string, string>>({});
+
   const [, setStoreTick] = useState<number>(0);
 
   useEffect(() => {
@@ -177,6 +182,23 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
    setIsInlineExpenseOpen(false);
    showToast(`Recorded: ${expenseDesc.trim()} (KES ${parsed.toLocaleString()})`);
  };
+
+  const handleSaveReductionNote = (productId: string, noteText: string) => {
+    if (!activeShift) return;
+    const trimmed = noteText.trim();
+    store.updateShiftStockItemRow({
+      shiftId: activeShift.id,
+      productId,
+      adjustmentNote: trimmed,
+    });
+    setReductionNoteProductId(null);
+    const prod = products.find((p) => p.id === productId);
+    if (trimmed) {
+      showToast(`Saved note for ${prod?.name || 'item'}: "${trimmed}"`);
+    } else {
+      showToast(`Cleared note for ${prod?.name || 'item'}`);
+    }
+  };
 
   // Transient string values while attendant is actively typing in cells
   const [cellInputStrings, setCellInputStrings] = useState<
@@ -266,6 +288,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
        amountKes,
        hasOverage,
        sellingPrice,
+       adjustmentNote: ssi?.adjustmentNote,
      };
    });
  }, [products, shiftStockItems, inventory, activeShift]);
@@ -363,6 +386,12 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
         productId,
         additions: num !== undefined ? num : 0,
       });
+      // When attendant reduces stock (< 0), open minimal subtle prompt for optional note
+      if (num !== undefined && num < 0) {
+        setReductionNoteProductId(productId);
+      } else if (num !== undefined && num >= 0 && reductionNoteProductId === productId) {
+        setReductionNoteProductId(null);
+      }
     } else if (field === 'closing') {
       store.updateShiftStockItemRow({
         shiftId: activeShift.id,
@@ -753,6 +782,27 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                                 : 'border-slate-800 text-slate-300 placeholder:text-slate-600 focus:border-slate-600'
                             }`}
                           />
+                          {/* If stock is reduced (< 0), show subtle trigger button for optional note */}
+                          {row.addedStock < 0 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setReductionNoteProductId(reductionNoteProductId === p.id ? null : p.id);
+                              }}
+                              className={`mt-1 text-[10px] sm:text-[11px] font-sans flex items-center justify-center gap-1 mx-auto px-1.5 py-0.5 rounded transition-all max-w-[90px] cursor-pointer ${
+                                row.adjustmentNote
+                                  ? 'text-amber-300 hover:text-amber-200 bg-amber-950/40 border border-amber-800/50'
+                                  : 'text-rose-400 hover:text-rose-300 bg-rose-950/30 border border-rose-800/40 hover:bg-rose-900/40'
+                              }`}
+                              title={row.adjustmentNote ? `Reason: ${row.adjustmentNote}` : 'Add note for reduction'}
+                            >
+                              <FileText className="w-2.5 h-2.5 shrink-0" />
+                              <span className="truncate">
+                                {row.adjustmentNote ? row.adjustmentNote : '+ note'}
+                              </span>
+                            </button>
+                          )}
                         </td>
 
                         {/* 3. Closing Stock Input */}
@@ -787,6 +837,58 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                           </span>
                         </td>
                       </tr>
+
+                      {/* Minimal subtle form for optional note when stock is reduced */}
+                      {reductionNoteProductId === p.id && row.addedStock < 0 && (
+                        <tr key={`${p.id}-reduction-note`} className="bg-rose-950/20 border-b border-rose-900/40 animate-in fade-in duration-150">
+                          <td colSpan={5} className="py-2.5 px-3 sm:px-4">
+                            <div className="p-3 rounded-xl bg-[#111726] border border-rose-800/50 flex items-center gap-2 font-sans shadow-md">
+                              <input
+                                type="text"
+                                value={noteInputStrings[p.id] !== undefined ? noteInputStrings[p.id] : (row.adjustmentNote || '')}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setNoteInputStrings((prev) => ({ ...prev, [p.id]: val }));
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    const val = noteInputStrings[p.id] !== undefined ? noteInputStrings[p.id] : (row.adjustmentNote || '');
+                                    handleSaveReductionNote(p.id, val);
+                                  }
+                                }}
+                                placeholder="Optional note..."
+                                className="flex-1 bg-[#090D14] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-rose-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const val = noteInputStrings[p.id] !== undefined ? noteInputStrings[p.id] : (row.adjustmentNote || '');
+                                  handleSaveReductionNote(p.id, val);
+                                }}
+                                className="px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-600 active:bg-rose-800 text-white text-xs font-semibold transition-all cursor-pointer shadow-sm shrink-0"
+                              >
+                                Save
+                              </button>
+                              {row.adjustmentNote && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveReductionNote(p.id, '')}
+                                  className="px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-950/40 text-xs transition-colors cursor-pointer shrink-0"
+                                >
+                                  Clear
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setReductionNoteProductId(null)}
+                                className="px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 text-xs transition-colors cursor-pointer shrink-0"
+                              >
+                                Skip
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
 
                       {/* Minimal subtle drop-down directly beneath product row */}
                       {expandedDetailsId === p.id && (
@@ -841,6 +943,11 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                                   <div className={`font-mono font-bold text-xs sm:text-sm mt-0.5 ${row.addedStock > 0 ? 'text-emerald-400' : row.addedStock < 0 ? 'text-rose-400' : 'text-slate-500'}`}>
                                     {row.addedStock > 0 ? `+${row.addedStock}` : row.addedStock < 0 ? row.addedStock : '0'} {row.isValue ? 'KES' : 'units'}
                                   </div>
+                                  {row.adjustmentNote && (
+                                    <div className="text-[11px] text-amber-300 font-sans mt-1 truncate" title={row.adjustmentNote}>
+                                      Note: {row.adjustmentNote}
+                                    </div>
+                                  )}
                                 </div>
 
                                 {row.ssi?.ownerAdjustments !== undefined && row.ssi.ownerAdjustments !== 0 && (
