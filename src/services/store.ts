@@ -4109,9 +4109,30 @@ class StoreService {
         deleted.push(productId);
         this.set(STORAGE_KEYS.DELETED_PRODUCT_IDS, deleted);
       }
+
+      // Explicitly delete from Firestore cloud database immediately
+      if (typeof window !== 'undefined' && db) {
+        try {
+          deleteDoc(doc(db, FIRESTORE_COLLECTIONS.PRODUCTS, productId)).catch((e) => {
+            console.debug('Firestore product permanent delete error:', e);
+          });
+          const invId = `inv-${bizId}-${productId}`;
+          deleteDoc(doc(db, FIRESTORE_COLLECTIONS.INVENTORY, invId)).catch(() => {});
+        } catch (err) {
+          console.debug('Cloud product deletion exception:', err);
+        }
+      }
     } else {
       product.isArchived = true;
       this.set(STORAGE_KEYS.PRODUCTS, allProducts);
+      // Sync update to Firestore cloud database
+      if (typeof window !== 'undefined' && db) {
+        try {
+          this.saveToFirestore(FIRESTORE_COLLECTIONS.PRODUCTS, productId, product);
+        } catch (e) {
+          console.debug('Firestore product archive error:', e);
+        }
+      }
     }
 
     this.addEvent({
