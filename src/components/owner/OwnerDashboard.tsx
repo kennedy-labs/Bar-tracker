@@ -154,7 +154,22 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
       {/* 1. EXECUTIVE COMMAND CENTER OVERVIEW TAB */}
       {(activeTab === 'overview' || !activeTab) && (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
+          {/* ACTIVE SHIFT BANNER (Pinned at the top) */}
+          {activeShift && (
+            <div className="sticky top-14 z-20 p-3.5 sm:p-4 rounded-2xl bg-[#111622]/95 backdrop-blur-md border border-emerald-500/30 flex items-center justify-between shadow-lg">
+              <div className="flex items-center gap-2.5">
+                <span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <span className="text-sm font-bold text-white">
+                  Active Shift: {activeShift.workerName}
+                </span>
+              </div>
+              <div className="text-xs text-slate-400 font-mono">
+                Started {new Date(activeShift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </div>
+            </div>
+          )}
+
           {/* ACTIVE SHIFT ACTIVITY HIGHLIGHTS (Persists until shift close) */}
           {(activeAdditions.length > 0 || activeExpenses.length > 0) && (
             <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -275,20 +290,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
 
 
-          {/* SIMPLIFIED ACTIVE SHIFT BANNER */}
-          {activeShift && (
-            <div className="p-4 rounded-2xl bg-[#111622] border border-[#1E2638] flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                <span className="text-sm font-bold text-white">
-                  Active Shift: {activeShift.workerName}
-                </span>
-              </div>
-              <div className="text-xs text-slate-400 font-mono">
-                Started {new Date(activeShift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </div>
-            </div>
-          )}
+
 
           {/* Quick Discrepancy Radar Preview on Overview */}
           {pendingDiscrepancies.length > 0 && (
