@@ -47,6 +47,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
 
  // Inline Expense List & Form state just above '+ Add Expense' button
  const [isInlineExpenseOpen, setIsInlineExpenseOpen] = useState<boolean>(false);
+ const [isExpenseListExpanded, setIsExpenseListExpanded] = useState<boolean>(false);
  const [expenseDesc, setExpenseDesc] = useState<string>('');
  const [expenseAmount, setExpenseAmount] = useState<string>('');
  const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
@@ -180,6 +181,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
    setExpenseDesc('');
    setExpenseAmount('');
    setIsInlineExpenseOpen(false);
+   setIsExpenseListExpanded(true);
    showToast(`Recorded: ${expenseDesc.trim()} (KES ${parsed.toLocaleString()})`);
  };
 
@@ -542,18 +544,13 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  /* ============================================================ */
  <div className="space-y-4">
  {/* 1. Shift Header Strip (Minimal, Calm, Clear) */}
- <div className="bg-[#111622] border border-[#1E2638] rounded-2xl p-3.5 sm:p-4 flex items-center justify-between gap-3">
- <div className="flex items-center gap-3">
- <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+ <div className="bg-[#111622] border border-[#1E2638] rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-3">
  <div>
- <div className="flex items-center gap-2 flex-wrap text-xs text-slate-400">
- <strong className="font-bold text-white text-sm">{activeShift.workerName}</strong>
- <span>·</span>
+ <div className="text-xs text-slate-400">
  <span>Started {new Date(activeShift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
  </div>
  <div className="text-[11px] text-slate-500 font-mono mt-0.5">
  Cash Float: KES {activeShift.openingCashFloat.toLocaleString()} · M-Pesa Float: KES {activeShift.openingMpesaBalance.toLocaleString()}
- </div>
  </div>
  </div>
  </div>
@@ -677,6 +674,11 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                               <ChevronDown className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 transition-colors shrink-0" />
                             )}
                           </div>
+                          {!p.isMeasured && p.unit !== 'KG' && p.unit !== 'VALUE_KES' && (
+                            <div className="text-[11px] text-slate-400 font-mono mt-0.5 tracking-tight">
+                              KES {(p.sellingPrice || 0).toLocaleString()}
+                            </div>
+                          )}
 
                           {/* Subtle Option Popup Menu when longpressed or tapped */}
                           {optionMenuProductId === p.id && (
@@ -998,12 +1000,29 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
    {/* 1. Recorded Expense List */}
    {expenses.length > 0 && (
      <div className="bg-[#111622] border border-[#1E2638] rounded-2xl overflow-hidden shadow-sm">
-       <div className="p-3 bg-[#0D1117] border-b border-[#1E2638] flex items-center justify-between">
-         <span className="text-xs font-bold text-white tracking-wide">Expense list</span>
-         <span className="text-xs font-mono font-bold text-rose-400">KES {totalExpenses.toLocaleString()}</span>
-       </div>
+       <button
+         type="button"
+         onClick={() => setIsExpenseListExpanded((prev) => !prev)}
+         className="w-full p-3 bg-[#0D1117] flex items-center justify-between text-left hover:bg-[#131A26] transition-colors cursor-pointer"
+         aria-expanded={isExpenseListExpanded}
+       >
+         <div className="flex items-center gap-2">
+           <span className="text-xs font-bold text-white tracking-wide">
+             Expense list ({expenses.length})
+           </span>
+           {isExpenseListExpanded ? (
+             <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+           ) : (
+             <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+           )}
+         </div>
+         <span className="text-xs font-mono font-bold text-rose-400">
+           KES {totalExpenses.toLocaleString()}
+         </span>
+       </button>
 
-       <div className="overflow-x-auto">
+       {isExpenseListExpanded && (
+         <div className="overflow-x-auto border-t border-[#1E2638]">
          <table className="w-full text-left text-xs border-collapse">
            <thead>
              <tr className="bg-[#0D1117]/60 text-slate-400 font-mono text-[11px] border-b border-slate-800/80">
@@ -1065,7 +1084,8 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
              ))}
            </tbody>
          </table>
-       </div>
+         </div>
+       )}
      </div>
    )}
 
