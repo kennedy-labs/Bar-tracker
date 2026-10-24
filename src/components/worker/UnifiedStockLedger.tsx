@@ -607,14 +607,6 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
 
       {/* 4. THE CORE STOCK LEDGER TABLE (THE "ONE LIST") */}
       <div className="bg-[#111622] border border-[#1E2638] rounded-2xl overflow-hidden shadow-sm">
-        {/* Mobile Helpful Hint */}
-        <div className="px-3.5 py-2.5 bg-[#0D1117] border-b border-[#1E2638] flex items-center justify-between text-xs text-slate-300">
-          <div className="flex items-center gap-2">
-            <Info className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>Long press or tap any item to view Price, Category & Sold Stock</span>
-          </div>
-        </div>
-
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm border-collapse min-w-[540px]">
             <thead>

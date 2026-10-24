@@ -88,26 +88,28 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
 
         {/* Zone 2: Navigation Links (Desktop) */}
-        <nav className="hidden md:flex items-center gap-1 sm:gap-2">
-          {navItems.map((item) => {
-            const isActive = getIsActive(item.id);
+        {navItems.length > 1 && (
+          <nav className="hidden md:flex items-center gap-1 sm:gap-2">
+            {navItems.map((item) => {
+              const isActive = getIsActive(item.id);
 
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
-                  isActive
-                    ? 'bg-brand-tint text-content font-semibold'
-                    : 'text-muted hover:text-content hover:bg-surface'
-                }`}
-              >
-                <item.icon className={`w-3.5 h-3.5 ${isActive ? 'text-brand-strong' : 'text-faint'}`} />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                    isActive
+                      ? 'bg-brand-tint text-content font-semibold'
+                      : 'text-muted hover:text-content hover:bg-surface'
+                  }`}
+                >
+                  <item.icon className={`w-3.5 h-3.5 ${isActive ? 'text-brand-strong' : 'text-faint'}`} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        )}
 
         {/* Zone 3: Read-Only Owner Name & 3-Dot Settings Menu */}
         <div className="flex items-center gap-2 shrink-0">
@@ -231,27 +233,29 @@ export const TopBar: React.FC<TopBarProps> = ({
       </div>
 
       {/* Phone Navigation Bar (Moved to Top Bar for mobile phones) */}
-      <nav aria-label="Mobile Top Navigation" className="md:hidden mt-2 pt-2 border-t border-line/60 flex items-center justify-around gap-1.5">
-        {navItems.map((item) => {
-          const isActive = getIsActive(item.id);
+      {navItems.length > 1 && (
+        <nav aria-label="Mobile Top Navigation" className="md:hidden mt-2 pt-2 border-t border-line/60 flex items-center justify-around gap-1.5">
+          {navItems.map((item) => {
+            const isActive = getIsActive(item.id);
 
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setActiveTab(item.id)}
-              className={`flex-1 py-1.5 px-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                isActive
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-surface border border-transparent'
-              }`}
-            >
-              <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-emerald-400' : 'text-slate-500'}`} />
-              <span className="truncate">{item.label}</span>
-            </button>
-          );
-        })}
-      </nav>
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveTab(item.id)}
+                className={`flex-1 py-1.5 px-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  isActive
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-surface border border-transparent'
+                }`}
+              >
+                <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-emerald-400' : 'text-slate-500'}`} />
+                <span className="truncate">{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
 
       {/* Edit Profile Modal Triggered from Settings */}
       {currentUser && (
