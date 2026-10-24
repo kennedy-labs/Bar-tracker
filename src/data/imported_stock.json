@@ -1,0 +1,542 @@
+[
+  {
+    "id": "prod-import-1792818059117-0",
+    "businessName": "Mary's joypub",
+    "name": "G/Meakings",
+    "opening": 3,
+    "added": 0,
+    "closing": 3,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-1",
+    "businessName": "Mary's joypub",
+    "name": "KC",
+    "opening": 2,
+    "added": 0,
+    "closing": 2,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-2",
+    "businessName": "Mary's joypub",
+    "name": "KANE",
+    "opening": 3,
+    "added": 0,
+    "closing": 3,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-3",
+    "businessName": "Mary's joypub",
+    "name": "ORIGIN",
+    "opening": 1,
+    "added": 0,
+    "closing": 1,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-4",
+    "businessName": "Mary's joypub",
+    "name": "CHROME",
+    "opening": 2,
+    "added": 0,
+    "closing": 2,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-5",
+    "businessName": "Mary's joypub",
+    "name": "COUNTY",
+    "opening": 1,
+    "added": 0,
+    "closing": 1,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-6",
+    "businessName": "Mary's joypub",
+    "name": "C/MORGAN",
+    "opening": 1,
+    "added": 0,
+    "closing": 1,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-7",
+    "businessName": "Mary's joypub",
+    "name": "BEST GIN",
+    "opening": 2,
+    "added": 0,
+    "closing": 2,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-8",
+    "businessName": "Mary's joypub",
+    "name": "BEST WHISKY",
+    "opening": 1,
+    "added": 0,
+    "closing": 1,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-9",
+    "businessName": "Mary's joypub",
+    "name": "KIBAO",
+    "opening": 1,
+    "added": 0,
+    "closing": 1,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-10",
+    "businessName": "Mary's joypub",
+    "name": "GILBEYS",
+    "opening": 1,
+    "added": 0,
+    "closing": 1,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-11",
+    "businessName": "Mary's joypub",
+    "name": "GUINNESS",
+    "opening": 7,
+    "added": -1,
+    "closing": 6,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-12",
+    "businessName": "Mary's joypub",
+    "name": "TUSKER",
+    "opening": 5,
+    "added": 0,
+    "closing": 5,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-13",
+    "businessName": "Mary's joypub",
+    "name": "PILSNER",
+    "opening": 3,
+    "added": 0,
+    "closing": 3,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-14",
+    "businessName": "Mary's joypub",
+    "name": "W/CUP",
+    "opening": 3,
+    "added": 0,
+    "closing": 3,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-15",
+    "businessName": "Mary's joypub",
+    "name": "BALOZI",
+    "opening": 3,
+    "added": 0,
+    "closing": 3,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-16",
+    "businessName": "Mary's joypub",
+    "name": "ALLSOPS",
+    "opening": 0,
+    "added": 0,
+    "closing": 0,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-17",
+    "businessName": "Mary's joypub",
+    "name": "T/CIDER",
+    "opening": 5,
+    "added": 0,
+    "closing": 5,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-18",
+    "businessName": "Mary's joypub",
+    "name": "SMIRNOFFS",
+    "opening": 9,
+    "added": 0,
+    "closing": 9,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-19",
+    "businessName": "Mary's joypub",
+    "name": "MANGO",
+    "opening": 2,
+    "added": 0,
+    "closing": 2,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-20",
+    "businessName": "Mary's joypub",
+    "name": "HUNTERS",
+    "opening": 1.5,
+    "added": 0,
+    "closing": 1.5,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-21",
+    "businessName": "Mary's joypub",
+    "name": "KC",
+    "opening": 10.5,
+    "added": 0,
+    "closing": 10.5,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-22",
+    "businessName": "Mary's joypub",
+    "name": "CHROME",
+    "opening": 10,
+    "added": 0,
+    "closing": 9.5,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-23",
+    "businessName": "Mary's joypub",
+    "name": "BLUE ICE",
+    "opening": 12.5,
+    "added": 0,
+    "closing": 10,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-24",
+    "businessName": "Mary's joypub",
+    "name": "V&A",
+    "opening": 3,
+    "added": 0,
+    "closing": 3,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-25",
+    "businessName": "Mary's joypub",
+    "name": "C/MORGAN",
+    "opening": 2.5,
+    "added": 0,
+    "closing": 2.5,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-26",
+    "businessName": "Mary's joypub",
+    "name": "C/MORGAN",
+    "opening": 2.5,
+    "added": 0,
+    "closing": 0.5,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-27",
+    "businessName": "Mary's joypub",
+    "name": "KANE",
+    "opening": 12.5,
+    "added": 0,
+    "closing": 12.5,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-28",
+    "businessName": "Mary's joypub",
+    "name": "SMART",
+    "opening": 4.5,
+    "added": 0,
+    "closing": 3.5,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-29",
+    "businessName": "Mary's joypub",
+    "name": "SODAS",
+    "opening": 28,
+    "added": 0,
+    "closing": 28,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-30",
+    "businessName": "Mary's joypub",
+    "name": "FAXE",
+    "opening": 0,
+    "added": 0,
+    "closing": 0,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-31",
+    "businessName": "Mary's joypub",
+    "name": "WATER",
+    "opening": 2,
+    "added": 0,
+    "closing": 2,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-32",
+    "businessName": "Mary's joypub",
+    "name": "COUNTY",
+    "opening": 12,
+    "added": 0,
+    "closing": 9,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-33",
+    "businessName": "Mary's joypub",
+    "name": "HUNTERS",
+    "opening": 1,
+    "added": 0,
+    "closing": 1,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-34",
+    "businessName": "Mary's joypub",
+    "name": "FLY HORSE",
+    "opening": 0,
+    "added": 0,
+    "closing": 0,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-35",
+    "businessName": "Mary's joypub",
+    "name": "KIBAO",
+    "opening": 7.5,
+    "added": 0,
+    "closing": 7.5,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-36",
+    "businessName": "Mary's joypub",
+    "name": "ORIGIN",
+    "opening": 7,
+    "added": 0,
+    "closing": 6.5,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-37",
+    "businessName": "Mary's joypub",
+    "name": "G/Meakings",
+    "opening": 6.5,
+    "added": 0,
+    "closing": 6,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-38",
+    "businessName": "Mary's joypub",
+    "name": "T / ACE",
+    "opening": 1,
+    "added": 0,
+    "closing": 1,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-39",
+    "businessName": "Mary's joypub",
+    "name": "NAPS",
+    "opening": 2,
+    "added": 0,
+    "closing": 2,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-40",
+    "businessName": "Mary's joypub",
+    "name": "GILBEYS",
+    "opening": 2,
+    "added": 0,
+    "closing": 2,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-41",
+    "businessName": "Mary's joypub",
+    "name": "BEST GIN",
+    "opening": 7,
+    "added": 0,
+    "closing": 7,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-42",
+    "businessName": "Mary's joypub",
+    "name": "CARIBIAN",
+    "opening": 6,
+    "added": 0,
+    "closing": 6,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-43",
+    "businessName": "Mary's joypub",
+    "name": "LEMONADE",
+    "opening": 5,
+    "added": 0,
+    "closing": 3,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-44",
+    "businessName": "Mary's joypub",
+    "name": "PREDITOR",
+    "opening": 26,
+    "added": 0,
+    "closing": 24,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-45",
+    "businessName": "Mary's joypub",
+    "name": "VICEROY",
+    "opening": 3,
+    "added": 0,
+    "closing": 3,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-46",
+    "businessName": "Mary's joypub",
+    "name": "GUARANA",
+    "opening": 5,
+    "added": 0,
+    "closing": 5,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-47",
+    "businessName": "Mary's joypub",
+    "name": "PINEAPLE",
+    "opening": 6,
+    "added": 0,
+    "closing": 6,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-48",
+    "businessName": "Mary's joypub",
+    "name": "BLACK ICE",
+    "opening": 1,
+    "added": 0,
+    "closing": 1,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-49",
+    "businessName": "Mary's joypub",
+    "name": "GUINNESS",
+    "opening": 3,
+    "added": 0,
+    "closing": 3,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-50",
+    "businessName": "Mary's joypub",
+    "name": "TUSKER",
+    "opening": 5,
+    "added": 0,
+    "closing": 5,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-51",
+    "businessName": "Mary's joypub",
+    "name": "W/CUP",
+    "opening": 3,
+    "added": 0,
+    "closing": 3,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-52",
+    "businessName": "Mary's joypub",
+    "name": "T/CIDER",
+    "opening": 0,
+    "added": 0,
+    "closing": 0,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-53",
+    "businessName": "Mary's joypub",
+    "name": "SODA NOVIDA",
+    "opening": 11,
+    "added": 11,
+    "closing": 22,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-54",
+    "businessName": "Mary's joypub",
+    "name": "MINUTE BIG",
+    "opening": 2,
+    "added": 0,
+    "closing": 2,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-55",
+    "businessName": "Mary's joypub",
+    "name": "MINUTE",
+    "opening": 19,
+    "added": 0,
+    "closing": 18,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-56",
+    "businessName": "Mary's joypub",
+    "name": "DALLASS",
+    "opening": 8.5,
+    "added": 0,
+    "closing": 6,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-57",
+    "businessName": "Mary's joypub",
+    "name": "SAFARI",
+    "opening": 35,
+    "added": 60,
+    "closing": 60,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-58",
+    "businessName": "Mary's joypub",
+    "name": "PALL MALL",
+    "opening": 72,
+    "added": 0,
+    "closing": 20,
+    "sellingPrice": 0
+  },
+  {
+    "id": "prod-import-1792818059117-59",
+    "businessName": "Mary's joypub",
+    "name": "ORIS",
+    "opening": 179,
+    "added": 0,
+    "closing": 134,
+    "sellingPrice": 0
+  }
+]

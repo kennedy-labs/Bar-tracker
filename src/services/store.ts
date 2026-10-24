@@ -841,7 +841,20 @@ class StoreService {
   }
 
   public clearActiveSessionCache() {
-    // Session cache cleanup
+    // 1. Wipe memory store to stop old data from bleeding into new views
+    this.memoryStore.clear();
+
+    // 2. Re-initialize defaults to ensure no undefined crashes
+    this.memoryStore.set(STORAGE_KEYS.BUSINESSES, []);
+    this.memoryStore.set(STORAGE_KEYS.USERS, []);
+    this.memoryStore.set(STORAGE_KEYS.PRODUCTS, []);
+    this.memoryStore.set(STORAGE_KEYS.INVENTORY_MAP, {});
+    this.memoryStore.set(STORAGE_KEYS.SHIFTS_MAP, {});
+    this.memoryStore.set(STORAGE_KEYS.EXPENSES, []);
+    this.memoryStore.set(STORAGE_KEYS.STOCK_ADDITIONS, []);
+
+    // 3. Force re-load from local storage for the clean state
+    this.loadFromStorage();
   }
 
   /**
@@ -918,8 +931,6 @@ class StoreService {
     const found = businesses.find((b) => b.id === id);
     if (found) return found;
 
-    if (businesses.length > 0) return businesses[0];
-
     const user = this.getSessionUser();
     return {
       id: id || '',
@@ -993,6 +1004,7 @@ class StoreService {
     seedCatalogTemplate?: boolean;
     initialDrinksText?: string;
   }): Promise<{ business: BusinessProfile; user: User }> {
+    this.clearActiveSessionCache();
     const cleanBizName = params.businessName.trim();
     const cleanPhone = (params.phone || '').trim();
     const cleanOwnerName = (params.ownerName || 'Owner').trim();
@@ -1602,6 +1614,7 @@ class StoreService {
   }
 
   public async authenticateUser(usernameInput: string, credentialInput: string, businessNameInput?: string): Promise<User | null> {
+    this.clearActiveSessionCache();
     const rawInput = usernameInput.trim().toLowerCase();
     const cleanCredential = credentialInput.trim();
     if (!rawInput || !cleanCredential) return null;
@@ -2216,6 +2229,7 @@ class StoreService {
 
   public getShifts(): Shift[] {
     const bizId = this.getCurrentBusinessId();
+    if (!bizId) return [];
     const shiftsMap = this.get<Record<string, Shift[]>>(STORAGE_KEYS.SHIFTS_MAP, {});
     const list = shiftsMap[bizId] || [];
     return list.filter(
