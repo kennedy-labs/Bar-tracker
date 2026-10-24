@@ -977,8 +977,12 @@ Generated via Bar Track System`;
  <td className="p-2.5 text-center text-slate-400">
    {isValue ? `KES ${item.openingPhysicalCount.toLocaleString()}` : isWeight ? `${item.openingPhysicalCount} kg` : item.openingPhysicalCount}
  </td>
- <td className="p-2.5 text-center text-emerald-400">
-   +{item.additions + item.transfersIn} {isWeight ? 'kg' : ''}
+ <td className={`p-2.5 text-center ${item.additions + item.transfersIn < 0 ? 'text-rose-400 font-bold' : item.additions + item.transfersIn > 0 ? 'text-emerald-400' : 'text-slate-500'}`}>
+   {item.additions + item.transfersIn > 0
+     ? `+${item.additions + item.transfersIn}`
+     : item.additions + item.transfersIn < 0
+     ? `${item.additions + item.transfersIn}`
+     : '-'} {isWeight && (item.additions + item.transfersIn !== 0) ? 'kg' : ''}
  </td>
  <td className="p-2.5 text-center text-slate-300">
    {item.closingPhysicalCount !== undefined

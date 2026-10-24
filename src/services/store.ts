@@ -2394,7 +2394,7 @@ class StoreService {
         ssi.openingPhysicalCount = Math.max(0, params.openingPhysicalCount);
       }
       if (params.additions !== undefined) {
-        ssi.additions = Math.max(0, params.additions);
+        ssi.additions = Number(params.additions);
       }
       if ('closingPhysicalCount' in params) {
         ssi.closingPhysicalCount =
@@ -2431,9 +2431,11 @@ class StoreService {
       const shift = this.getShiftById(params.shiftId);
       const additions = this.get<StockAdditionRecord[]>(STORAGE_KEYS.STOCK_ADDITIONS, []);
       const recIdx = additions.findIndex((a) => a.shiftId === params.shiftId && a.productId === params.productId);
-      if (params.additions > 0) {
+      if (params.additions !== 0) {
+        const isReduction = params.additions < 0;
         if (recIdx !== -1) {
           additions[recIdx].quantity = params.additions;
+          additions[recIdx].adjustmentType = isReduction ? 'REDUCE' : 'ADD';
           additions[recIdx].timestamp = new Date().toISOString();
         } else {
           const newRecord: StockAdditionRecord = {
@@ -2443,6 +2445,7 @@ class StoreService {
             productId: params.productId,
             productName: product.name,
             quantity: params.additions,
+            adjustmentType: isReduction ? 'REDUCE' : 'ADD',
             workerName: shift ? shift.workerName : 'Attendant',
             timestamp: new Date().toISOString(),
             status: 'SAVED_LOCKED',
@@ -2493,7 +2496,7 @@ class StoreService {
           ssi.openingPhysicalCount = Math.max(0, vals.opening);
           ssi.openingSystemCount = ssi.openingPhysicalCount;
         }
-        if (vals.added !== undefined) ssi.additions = Math.max(0, vals.added);
+        if (vals.added !== undefined) ssi.additions = Number(vals.added);
         if (vals.closing !== undefined) ssi.closingPhysicalCount = Math.max(0, vals.closing);
       }
 
@@ -2509,9 +2512,11 @@ class StoreService {
 
       if (vals.added !== undefined) {
         const recIdx = additions.findIndex((a) => a.shiftId === shiftId && a.productId === productId);
-        if (vals.added > 0) {
+        if (vals.added !== 0) {
+          const isReduction = vals.added < 0;
           if (recIdx !== -1) {
             additions[recIdx].quantity = vals.added;
+            additions[recIdx].adjustmentType = isReduction ? 'REDUCE' : 'ADD';
             additions[recIdx].timestamp = new Date().toISOString();
           } else {
             const rec: StockAdditionRecord = {
@@ -2521,6 +2526,7 @@ class StoreService {
               productId,
               productName: product.name,
               quantity: vals.added,
+              adjustmentType: isReduction ? 'REDUCE' : 'ADD',
               workerName: shift ? shift.workerName : 'Attendant',
               timestamp: new Date().toISOString(),
               status: 'SAVED_LOCKED',

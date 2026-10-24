@@ -62,8 +62,13 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  const [openingMpesaInput, setOpeningMpesaInput] = useState<string>('0');
 
  // Selected item for soft missing details modal (Price, Category, Sold Stock)
- const [detailsProductId, setDetailsProductId] = useState<string | null>(null);
- useBackHandler(Boolean(detailsProductId), () => setDetailsProductId(null), 'worker-item-details');
+ // Inline collapsible details drop-down row & option menu popup
+ const [expandedDetailsId, setExpandedDetailsId] = useState<string | null>(null);
+ const [optionMenuProductId, setOptionMenuProductId] = useState<string | null>(null);
+ useBackHandler(Boolean(expandedDetailsId || optionMenuProductId), () => {
+   setExpandedDetailsId(null);
+   setOptionMenuProductId(null);
+ }, 'worker-item-details');
 
  // Selected item for adjusting opening stock during an active shift
  const [editOpeningProductId, setEditOpeningProductId] = useState<string | null>(null);
@@ -81,7 +86,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
          navigator.vibrate?.(40);
        }
      } catch (_) {}
-     setDetailsProductId(productId);
+     setOptionMenuProductId(productId);
    }, 450);
  };
 
@@ -266,10 +271,6 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  }, [products, shiftStockItems, inventory, activeShift]);
 
  // Selected row for soft missing details modal
- const detailsRow = useMemo(() => {
-   if (!detailsProductId) return null;
-   return rowDataList.find((r) => r.product.id === detailsProductId) || null;
- }, [detailsProductId, rowDataList]);
 
  // Filtered rows
  const filteredRows = useMemo(() => {
@@ -335,8 +336,15 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
     if (rawVal === undefined) return;
 
     const trimmed = rawVal.trim();
-    const parsed = trimmed === '' ? undefined : Math.max(0, parseFloat(trimmed));
-    const num = parsed !== undefined && !isNaN(parsed) ? parsed : undefined;
+   let num: number | undefined;
+   if (trimmed === '' || trimmed === '-') {
+     num = field === 'added' ? 0 : undefined;
+   } else {
+     const parsed = parseFloat(trimmed);
+     if (!isNaN(parsed)) {
+       num = field === 'added' ? parsed : Math.max(0, parsed);
+     }
+   }
 
     if (!activeShift) {
       // In pre-shift shelf preview, keep the input buffered until the shift opens
@@ -568,175 +576,321 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  </div>
  </div>
 
- {/* 4. THE CORE STOCK LEDGER TABLE (THE "ONE LIST") */}
- <div className="bg-[#111622] border border-[#1E2638] rounded-2xl overflow-hidden shadow-sm">
- {/* Mobile Helpful Hint */}
- <div className="px-3.5 py-2 bg-[#0D1117] border-b border-[#1E2638] flex items-center justify-between text-[11px] text-slate-400">
- <div className="flex items-center gap-1.5">
- <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
- <span>Long press any item to view Price, Category & Sold Stock</span>
- </div>
- </div>
+      {/* 4. THE CORE STOCK LEDGER TABLE (THE "ONE LIST") */}
+      <div className="bg-[#111622] border border-[#1E2638] rounded-2xl overflow-hidden shadow-sm">
+        {/* Mobile Helpful Hint */}
+        <div className="px-3.5 py-2.5 bg-[#0D1117] border-b border-[#1E2638] flex items-center justify-between text-xs text-slate-300">
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>Long press or tap any item to view Price, Category & Sold Stock</span>
+          </div>
+        </div>
 
- <div className="overflow-x-auto">
- <table className="w-full text-left text-xs border-collapse">
- <thead>
- <tr className="bg-[#0D1117] text-slate-400 font-mono text-[11px] border-b border-[#1E2638]">
- <th className="py-2.5 px-3 sm:px-3.5 font-bold text-slate-200">Name</th>
- <th className="py-2.5 px-1.5 sm:px-2 text-center font-bold text-slate-200 w-20 sm:w-24">
- <div className="leading-tight">Opening</div>
- </th>
- <th className="py-2.5 px-1.5 sm:px-2 text-center font-bold text-slate-200 w-16 sm:w-20">
- <div className="leading-tight">Add</div>
- </th>
- <th className="py-2.5 px-1.5 sm:px-2 text-center font-bold text-slate-200 w-20 sm:w-24">
- <div className="leading-tight">Closing</div>
- </th>
- <th className="py-2.5 px-2 sm:px-3.5 text-right font-bold text-slate-200 w-24 sm:w-28">
- <div className="leading-tight">Amount</div>
- </th>
- </tr>
- </thead>
- <tbody className="divide-y divide-slate-800/60 font-mono">
- {filteredRows.length === 0 ? (
- <tr>
- <td colSpan={5} className="py-10 text-center text-slate-500 font-sans text-xs">
- No beverages found matching your filter.
- </td>
- </tr>
- ) : (
- filteredRows.map((row) => {
- const p = row.product;
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm border-collapse min-w-[540px]">
+            <thead>
+              <tr className="bg-[#0D1117] text-slate-300 font-mono text-xs sm:text-[13px] border-b border-[#1E2638]">
+                <th className="py-3 px-3 sm:px-4 font-bold text-slate-100">Name</th>
+                <th className="py-3 px-2 sm:px-2.5 text-center font-bold text-slate-100 w-20 sm:w-24">
+                  <div className="leading-tight">Opening</div>
+                </th>
+                <th className="py-3 px-2 sm:px-2.5 text-center font-bold text-slate-100 w-24 sm:w-28">
+                  <div className="leading-tight">Add</div>
+                </th>
+                <th className="py-3 px-2 sm:px-2.5 text-center font-bold text-slate-100 w-22 sm:w-26">
+                  <div className="leading-tight">Closing</div>
+                </th>
+                <th className="py-3 px-3 sm:px-4 text-right font-bold text-slate-100 w-28 sm:w-32">
+                  <div className="leading-tight">Amount</div>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60 font-mono">
+              {filteredRows.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-10 text-center text-slate-500 font-sans text-sm">
+                    No beverages found matching your filter.
+                  </td>
+                </tr>
+              ) : (
+                filteredRows.map((row) => {
+                  const p = row.product;
 
- return (
- <tr
- key={p.id}
- onTouchStart={(e) => handleTouchStart(p.id, e)}
- onTouchMove={handleTouchMove}
- onTouchEnd={cancelLongPress}
- onTouchCancel={cancelLongPress}
- onMouseDown={() => startLongPress(p.id)}
- onMouseUp={cancelLongPress}
- onMouseLeave={cancelLongPress}
- onContextMenu={(e) => {
-   e.preventDefault();
-   setDetailsProductId(p.id);
- }}
- className="transition-colors hover:bg-slate-900/40 select-none cursor-pointer"
- title="Long press to view Price, Category & Sold Stock"
- >
- {/* 1. Name */}
- <td className="py-3 px-3 sm:px-3.5 font-sans">
- <div className="font-medium text-slate-100 truncate text-xs sm:text-sm">
- {p.name}
- </div>
- </td>
+                  return (
+                    <React.Fragment key={p.id}>
+                      <tr className="transition-colors hover:bg-slate-900/30">
+                        {/* 1. Name: Long press or tap item name / empty space to show option to view details */}
+                        <td
+                          className="py-3.5 px-3 sm:px-4 font-sans relative cursor-pointer select-none group"
+                          onTouchStart={(e) => handleTouchStart(p.id, e)}
+                          onTouchMove={handleTouchMove}
+                          onTouchEnd={cancelLongPress}
+                          onTouchCancel={cancelLongPress}
+                          onMouseDown={() => startLongPress(p.id)}
+                          onMouseUp={cancelLongPress}
+                          onMouseLeave={cancelLongPress}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setOptionMenuProductId(p.id);
+                          }}
+                          onClick={() => {
+                            if (expandedDetailsId === p.id) {
+                              setExpandedDetailsId(null);
+                              setOptionMenuProductId(null);
+                            } else if (optionMenuProductId === p.id) {
+                              setOptionMenuProductId(null);
+                            } else {
+                              setOptionMenuProductId(p.id);
+                            }
+                          }}
+                          title="Long press or tap to view details"
+                        >
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="font-semibold text-slate-100 truncate text-[13px] sm:text-[15px]">
+                              {p.name}
+                            </span>
+                            {expandedDetailsId === p.id ? (
+                              <ChevronUp className="w-4 h-4 text-emerald-400 shrink-0" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 transition-colors shrink-0" />
+                            )}
+                          </div>
 
-  {/* 2. Opening Stock (Long-press or click to readjust opening stock without undoing shift) */}
-  <td
-    className="py-2.5 px-1.5 sm:px-2 text-center font-mono font-semibold text-slate-300 cursor-pointer hover:bg-slate-800/40 transition-colors group relative"
-    onClick={(e) => {
-      e.stopPropagation();
-      setEditOpeningProductId(p.id);
-      setEditOpeningInput(String(row.openingStock));
-    }}
-    onTouchStart={(e) => {
-      e.stopPropagation();
-      startLongPress(p.id);
-    }}
-    onTouchEnd={(e) => {
-      e.stopPropagation();
-      cancelLongPress();
-    }}
-    onContextMenu={(e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setEditOpeningProductId(p.id);
-      setEditOpeningInput(String(row.openingStock));
-    }}
-    title="Long press or click to readjust opening stock"
-  >
-    <span className="underline decoration-dotted decoration-slate-500 underline-offset-4 group-hover:text-amber-300 transition-colors">
-      {row.openingStock !== undefined ? row.openingStock : 0}
-    </span>
-  </td>
+                          {/* Subtle Option Popup Menu when longpressed or tapped */}
+                          {optionMenuProductId === p.id && (
+                            <div
+                              className="absolute left-3 top-full mt-1 z-30 bg-[#161F30] border border-emerald-500/60 shadow-2xl rounded-xl p-1.5 flex items-center gap-1.5 animate-in fade-in zoom-in-95"
+                              onClick={(e) => e.stopPropagation()}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onTouchStart={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedDetailsId(expandedDetailsId === p.id ? null : p.id);
+                                  setOptionMenuProductId(null);
+                                }}
+                                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs sm:text-[13px] font-semibold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                              >
+                                <Info className="w-3.5 h-3.5" />
+                                <span>{expandedDetailsId === p.id ? 'Hide Details' : 'View Details'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOptionMenuProductId(null);
+                                }}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                                title="Close"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </td>
 
- {/* 3. Add Stock Input */}
- <td
- className="py-2 px-1.5 sm:px-2 text-center"
- onClick={(e) => e.stopPropagation()}
- onMouseDown={(e) => e.stopPropagation()}
- onTouchStart={(e) => e.stopPropagation()}
- >
- <input
- type="number"
- step="any"
- inputMode="decimal"
- min="0"
- value={cellInputStrings[p.id]?.added !== undefined ? cellInputStrings[p.id]?.added : (row.addedStock !== undefined && row.addedStock > 0 ? row.addedStock : '')}
- onFocus={(e) => e.target.select()}
- onBlur={() => handleCellBlur(p.id, 'added')}
- onChange={(e) => handleCellChange(p.id, 'added', e.target.value)}
- title="Added restock quantity"
- className={`w-12 sm:w-16 text-center py-1.5 px-1 rounded-lg bg-[#0D1117] border text-xs sm:text-sm font-semibold focus:outline-none ${row.addedStock > 0 ? 'border-emerald-600/70 text-emerald-300 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500' : 'border-slate-800 text-slate-300 focus:border-slate-600'}`}
- />
- </td>
+                        {/* 2. Opening Stock */}
+                        <td
+                          className="py-3 px-2 sm:px-2.5 text-center font-mono font-semibold text-slate-200 cursor-pointer hover:bg-slate-800/40 transition-colors group relative"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditOpeningProductId(p.id);
+                            setEditOpeningInput(String(row.openingStock));
+                          }}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onTouchEnd={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setEditOpeningProductId(p.id);
+                            setEditOpeningInput(String(row.openingStock));
+                          }}
+                          title="Click to readjust opening stock"
+                        >
+                          <span className="underline decoration-dotted decoration-slate-500 underline-offset-4 group-hover:text-amber-300 transition-colors text-[13px] sm:text-sm">
+                            {row.openingStock !== undefined ? row.openingStock : 0}
+                          </span>
+                        </td>
 
- {/* 3. Closing Stock Input */}
- <td
- className="py-2 px-1.5 sm:px-2 text-center"
- onClick={(e) => e.stopPropagation()}
- onMouseDown={(e) => e.stopPropagation()}
- onTouchStart={(e) => e.stopPropagation()}
- >
- <input
- type="number" step="any"
- inputMode="decimal"
- min="0"
- value={cellInputStrings[p.id]?.closing !== undefined ? cellInputStrings[p.id]?.closing : (row.closingStock !== undefined ? row.closingStock : '')}
- onFocus={(e) => e.target.select()}
- onBlur={() => handleCellBlur(p.id, 'closing')}
- onChange={(e) => handleCellChange(p.id, 'closing', e.target.value)}
- title="Closing stock count at shift handover"
- className={`w-14 sm:w-16 text-center py-1.5 px-1 rounded-lg bg-[#0D1117] border text-xs sm:text-sm font-semibold focus:outline-none ${row.hasClosingEntered ? "border-slate-500 text-white font-bold" : "border-slate-800 text-slate-400 focus:border-slate-600"}`}
- />
- </td>
+                        {/* 3. Add Stock Input */}
+                        <td
+                          className={`py-2.5 px-1.5 sm:px-2 text-center transition-colors ${row.addedStock < 0 ? 'bg-rose-950/20' : row.addedStock > 0 ? 'bg-emerald-950/15' : ''}`}
+                          onClick={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onTouchEnd={(e) => e.stopPropagation()}
+                          onContextMenu={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="text"
+                            value={cellInputStrings[p.id]?.added !== undefined ? cellInputStrings[p.id]?.added : (row.addedStock !== undefined && row.addedStock !== 0 ? String(row.addedStock) : '')}
+                            onFocus={(e) => e.target.select()}
+                            onBlur={() => handleCellBlur(p.id, 'added')}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                (e.target as HTMLInputElement).blur();
+                              }
+                            }}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (/^-?\d*\.?\d*$/.test(val)) {
+                                handleCellChange(p.id, 'added', val);
+                              }
+                            }}
+                            onTouchStart={(e) => e.stopPropagation()}
+                            onContextMenu={(e) => e.stopPropagation()}
+                            placeholder="0"
+                            title="Add stock (+ or enter negative e.g. -5 to subtract)"
+                            className={`w-15 sm:w-18 text-center py-2 px-1 rounded-lg bg-[#0D1117] border text-xs sm:text-sm font-semibold focus:outline-none transition-colors ${
+                              (cellInputStrings[p.id]?.added !== undefined && cellInputStrings[p.id]?.added?.startsWith('-')) || (cellInputStrings[p.id]?.added === undefined && row.addedStock < 0)
+                                ? 'border-rose-600/70 text-rose-300 bg-rose-950/30 focus:border-rose-500 focus:ring-1 focus:ring-rose-500'
+                                : (cellInputStrings[p.id]?.added !== undefined && parseFloat(cellInputStrings[p.id]?.added || '0') > 0) || (cellInputStrings[p.id]?.added === undefined && row.addedStock > 0)
+                                ? 'border-emerald-600/70 text-emerald-300 bg-emerald-950/20 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500'
+                                : 'border-slate-800 text-slate-300 placeholder:text-slate-600 focus:border-slate-600'
+                            }`}
+                          />
+                        </td>
 
- {/* 4. Amount (Expected sales for that item) */}
- <td className="py-2.5 px-2 sm:px-3.5 text-right font-mono font-semibold">
- <span className={row.amountKes > 0 ? "text-emerald-400 font-bold text-xs sm:text-sm" : "text-slate-500 text-xs"}>
- {row.amountKes > 0 ? `KES ${row.amountKes.toLocaleString()}` : "KES 0"}
- </span>
- </td>
- </tr>
- );
- })
- )}
- </tbody>
+                        {/* 3. Closing Stock Input */}
+                        <td
+                          className="py-2.5 px-2 sm:px-2.5 text-center"
+                          onClick={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onTouchEnd={(e) => e.stopPropagation()}
+                          onContextMenu={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="number"
+                            step="any"
+                            inputMode="decimal"
+                            min="0"
+                            value={cellInputStrings[p.id]?.closing !== undefined ? cellInputStrings[p.id]?.closing : (row.closingStock !== undefined ? row.closingStock : '')}
+                            onFocus={(e) => e.target.select()}
+                            onBlur={() => handleCellBlur(p.id, 'closing')}
+                            onChange={(e) => handleCellChange(p.id, 'closing', e.target.value)}
+                            onTouchStart={(e) => e.stopPropagation()}
+                            onContextMenu={(e) => e.stopPropagation()}
+                            title="Closing stock count at shift handover"
+                            className={`w-15 sm:w-18 text-center py-2 px-1 rounded-lg bg-[#0D1117] border text-xs sm:text-sm font-semibold focus:outline-none ${row.hasClosingEntered ? "border-slate-500 text-white font-bold" : "border-slate-800 text-slate-400 focus:border-slate-600"}`}
+                          />
+                        </td>
 
- {/* Grand Totals Footer */}
- <tfoot className="bg-[#0D1117] font-mono text-xs font-bold border-t border-[#1E2638]">
- <tr>
- <td className="py-3 px-3 sm:px-3.5 text-white">
- TOTAL ({rowDataList.length} items)
- </td>
- <td className="py-3 px-1.5 sm:px-2 text-center text-slate-300">
- {summaryTotals.totalOpening}
- </td>
- <td className="py-3 px-1.5 sm:px-2 text-center text-emerald-400">
- {summaryTotals.totalAdded > 0 ? `+${summaryTotals.totalAdded}` : '-'}
- </td>
- <td className="py-3 px-1.5 sm:px-2 text-center text-slate-300">
- {summaryTotals.totalClosing > 0 ? summaryTotals.totalClosing : '-'}
- </td>
- <td className="py-3 px-2 sm:px-3.5 text-right text-emerald-400">
- KES {summaryTotals.totalAmount.toLocaleString()}
- </td>
- </tr>
- </tfoot>
- </table>
- </div>
- </div>
+                        {/* 4. Amount (Expected sales for that item) */}
+                        <td className="py-3 px-3 sm:px-4 text-right font-mono font-semibold">
+                          <span className={row.amountKes > 0 ? "text-emerald-400 font-bold text-xs sm:text-sm" : "text-slate-500 text-xs sm:text-sm"}>
+                            {row.amountKes > 0 ? `KES ${row.amountKes.toLocaleString()}` : "KES 0"}
+                          </span>
+                        </td>
+                      </tr>
+
+                      {/* Minimal subtle drop-down directly beneath product row */}
+                      {expandedDetailsId === p.id && (
+                        <tr key={`${p.id}-dropdown`} className="bg-[#0b0e14]/90 border-b border-slate-800/80 animate-in fade-in duration-150">
+                          <td colSpan={5} className="py-3 px-3 sm:px-4">
+                            <div className="p-3.5 rounded-xl bg-[#111622] border border-[#1E2638] space-y-2.5 text-xs sm:text-[13px] font-sans shadow-inner">
+                              <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+                                <span className="font-semibold text-slate-100 text-xs sm:text-sm flex items-center gap-1.5">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                  {p.name}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedDetailsId(null)}
+                                  className="px-2.5 py-1 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex items-center gap-1"
+                                >
+                                  <span>Close</span>
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                                <div className="bg-[#0D1117] p-2.5 rounded-lg border border-slate-800/80">
+                                  <div className="text-[11px] text-slate-400 uppercase font-mono tracking-wider">Price</div>
+                                  <div className="font-mono font-bold text-white text-xs sm:text-sm mt-0.5">
+                                    {row.isValue ? 'By Value' : `KES ${row.sellingPrice.toLocaleString()}`}
+                                  </div>
+                                </div>
+
+                                <div className="bg-[#0D1117] p-2.5 rounded-lg border border-slate-800/80">
+                                  <div className="text-[11px] text-slate-400 uppercase font-mono tracking-wider">Category</div>
+                                  <div className="font-mono text-slate-200 text-xs sm:text-sm mt-0.5 truncate">
+                                    {p.category || 'General'}
+                                  </div>
+                                </div>
+
+                                <div className="bg-[#0D1117] p-2.5 rounded-lg border border-slate-800/80">
+                                  <div className="text-[11px] text-slate-400 uppercase font-mono tracking-wider">Sold Stock</div>
+                                  <div className="font-mono font-bold text-emerald-400 text-xs sm:text-sm mt-0.5">
+                                    {row.hasClosingEntered
+                                      ? row.isValue
+                                        ? `KES ${row.salesUnits.toLocaleString()}`
+                                        : `${row.salesUnits} units`
+                                      : '0 (pending closing)'}
+                                  </div>
+                                </div>
+
+                                <div className="bg-[#0D1117] p-2.5 rounded-lg border border-slate-800/80">
+                                  <div className="text-[11px] text-slate-400 uppercase font-mono tracking-wider">
+                                    {row.addedStock < 0 ? 'Stock Reduced' : 'Stock Added'}
+                                  </div>
+                                  <div className={`font-mono font-bold text-xs sm:text-sm mt-0.5 ${row.addedStock > 0 ? 'text-emerald-400' : row.addedStock < 0 ? 'text-rose-400' : 'text-slate-500'}`}>
+                                    {row.addedStock > 0 ? `+${row.addedStock}` : row.addedStock < 0 ? row.addedStock : '0'} {row.isValue ? 'KES' : 'units'}
+                                  </div>
+                                </div>
+
+                                {row.ssi?.ownerAdjustments !== undefined && row.ssi.ownerAdjustments !== 0 && (
+                                  <div className="bg-[#0D1117] p-2.5 rounded-lg border border-slate-800/80 col-span-2 sm:col-span-4 flex items-center justify-between">
+                                    <span className="text-[11px] text-slate-400 uppercase font-mono">Owner Audit Adjust</span>
+                                    <span className="font-mono font-bold text-amber-400 text-xs sm:text-sm">
+                                      {row.ssi.ownerAdjustments > 0 ? `+${row.ssi.ownerAdjustments}` : row.ssi.ownerAdjustments}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })
+              )}
+            </tbody>
+
+            {/* Grand Totals Footer */}
+            <tfoot className="bg-[#0D1117] font-mono text-xs sm:text-sm font-bold border-t border-[#1E2638]">
+              <tr>
+                <td className="py-3.5 px-3 sm:px-4 text-white">
+                  TOTAL ({rowDataList.length} items)
+                </td>
+                <td className="py-3.5 px-2 sm:px-2.5 text-center text-slate-200">
+                  {summaryTotals.totalOpening}
+                </td>
+                <td className="py-3.5 px-2 sm:px-2.5 text-center font-bold">
+                  {summaryTotals.totalAdded > 0 ? (
+                    <span className="text-emerald-400">+{summaryTotals.totalAdded}</span>
+                  ) : summaryTotals.totalAdded < 0 ? (
+                    <span className="text-rose-400">{summaryTotals.totalAdded}</span>
+                  ) : (
+                    <span className="text-slate-500">-</span>
+                  )}
+                </td>
+                <td className="py-3.5 px-2 sm:px-2.5 text-center text-slate-200">
+                  {summaryTotals.totalClosing > 0 ? summaryTotals.totalClosing : '-'}
+                </td>
+                <td className="py-3.5 px-3 sm:px-4 text-right text-emerald-400">
+                  KES {summaryTotals.totalAmount.toLocaleString()}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
 
  {/* ============================================================ */}
  {/* SHIFT EXPENSE LIST & FORM (DIRECTLY ABOVE '+ ADD EXPENSE' BUTTON) */}
@@ -919,94 +1073,6 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  </button>
  </div>
 
- {/* SOFT MISSING DETAILS MODAL (OPENED VIA LONG PRESS) */}
- {detailsRow && (
- <div
- className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
- onClick={() => setDetailsProductId(null)}
- >
- <div
- className="bg-[#111622] border border-[#1E2638] rounded-2xl p-5 max-w-xs w-full shadow-2xl space-y-3 font-sans"
- onClick={(e) => e.stopPropagation()}
- >
- <div className="flex items-center justify-between pb-2 border-b border-slate-800">
- <h3 className="text-sm font-bold text-white truncate pr-2">
- {detailsRow.product.name}
- </h3>
- <button
- type="button"
- onClick={() => setDetailsProductId(null)}
- className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
- aria-label="Close details"
- >
- <X className="w-4 h-4" />
- </button>
- </div>
-
- <div className="space-y-2 text-xs">
- {/* Price */}
- <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#0D1117] border border-slate-800/80">
- <span className="text-slate-400">Price</span>
- <span className="font-mono font-bold text-white">
- {detailsRow.isValue
- ? 'Measured by Value'
- : `KES ${detailsRow.sellingPrice.toLocaleString()}`}
- </span>
- </div>
-
- {/* Category */}
- <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#0D1117] border border-slate-800/80">
- <span className="text-slate-400">Category</span>
- <span className="font-mono text-slate-200">
- {detailsRow.product.category || 'General'}
- </span>
- </div>
-
- {/* Sold Stock */}
- <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#0D1117] border border-slate-800/80">
- <span className="text-slate-400">Sold Stock</span>
- <span className="font-mono font-bold text-emerald-400">
- {detailsRow.hasClosingEntered
- ? detailsRow.isValue
- ? `KES ${detailsRow.salesUnits.toLocaleString()}`
- : `${detailsRow.salesUnits} units`
- : '0 units (pending closing)'}
- </span>
- </div>
-
- {/* Added Stock if any */}
- {detailsRow.addedStock > 0 && (
- <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#0D1117] border border-slate-800/80">
- <span className="text-slate-400">Added Stock</span>
- <span className="font-mono font-bold text-cyan-400">
- +{detailsRow.addedStock} {detailsRow.isValue ? 'KES' : 'units'}
- </span>
- </div>
- )}
-
- {/* Audit Adjustment if any */}
- {detailsRow.ssi?.ownerAdjustments !== undefined && detailsRow.ssi.ownerAdjustments !== 0 && (
- <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#0D1117] border border-slate-800/80">
- <span className="text-slate-400">Audit Adjustment</span>
- <span className="font-mono font-bold text-amber-400">
- {detailsRow.ssi.ownerAdjustments > 0
- ? `+${detailsRow.ssi.ownerAdjustments}`
- : detailsRow.ssi.ownerAdjustments}
- </span>
- </div>
- )}
- </div>
-
- <button
- type="button"
- onClick={() => setDetailsProductId(null)}
- className="w-full py-2 rounded-xl bg-[#161F30] hover:bg-[#1C273E] text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
- >
- Done
- </button>
- </div>
- </div>
- )}
  </div>
  )}
 

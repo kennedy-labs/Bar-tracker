@@ -198,8 +198,12 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({ shift: initi
                     <td className="py-2 px-2 text-center text-slate-400">
                       {item.openingPhysicalCount}
                     </td>
-                    <td className="py-2 px-2 text-center text-emerald-400">
-                      +{item.additions + (item.transfersIn || 0)}
+                    <td className={`py-2 px-2 text-center ${item.additions + (item.transfersIn || 0) < 0 ? 'text-rose-400 font-bold' : item.additions + (item.transfersIn || 0) > 0 ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>
+                      {item.additions + (item.transfersIn || 0) > 0
+                        ? `+${item.additions + (item.transfersIn || 0)}`
+                        : item.additions + (item.transfersIn || 0) < 0
+                        ? item.additions + (item.transfersIn || 0)
+                        : '-'}
                     </td>
                     <td className="py-2 px-2 text-center text-xs">
                       {item.ownerAdjustments ? (
