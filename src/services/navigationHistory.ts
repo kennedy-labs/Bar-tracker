@@ -118,7 +118,7 @@ class NavigationHistoryService {
               window.history.back();
               setTimeout(() => {
                 this.isNavigatingBack = false;
-              }, 60);
+              }, 150);
             }
           } catch {
             this.isNavigatingBack = false;
@@ -260,6 +260,12 @@ class NavigationHistoryService {
    * Main PopState event handler triggered when phone hardware/gesture Back button is used.
    */
   private handlePopState(_event: PopStateEvent) {
+    // If popstate was triggered programmatically (e.g. cleanup or programmatic navigation), ignore
+    if (this.isNavigatingBack) {
+      this.isNavigatingBack = false;
+      return;
+    }
+
     // 1. If any modal / dialog / overlay is open, close the topmost modal (undo action)
     if (this.modalStack.length > 0) {
       this.isNavigatingBack = true;
@@ -270,7 +276,7 @@ class NavigationHistoryService {
       }
       setTimeout(() => {
         this.isNavigatingBack = false;
-      }, 60);
+      }, 120);
       return;
     }
 

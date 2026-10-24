@@ -131,9 +131,6 @@ export const CatalogManager: React.FC = () => {
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [expandedItemIds, setExpandedItemIds] = useState<Record<string, boolean>>({});
 
-  // Phone back-button integration: close action menu if open
-  useBackHandler(Boolean(activeMenuId), () => setActiveMenuId(null), 'catalog-item-menu');
-
   const toggleExpand = (productId: string) => {
     setExpandedItemIds((prev) => ({
       ...prev,
@@ -209,8 +206,9 @@ export const CatalogManager: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
+  const [viewingProduct, setViewingProduct] = useState<Product | null>(null);
 
-  // Form State for Add / Edit
+  // Form State for Adding Brand New Drink
   const [name, setName] = useState('');
   const [category, setCategory] = useState<ProductCategory>('BEER');
   const [unit, setUnit] = useState<ProductUnit>('BOTTLE');
@@ -219,6 +217,15 @@ export const CatalogManager: React.FC = () => {
   const [initialStock, setInitialStock] = useState('');
   const [volumeMl, setVolumeMl] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Form State for Dedicated Soft Product Editing
+  const [editName, setEditName] = useState('');
+  const [editCategory, setEditCategory] = useState<ProductCategory>('BEER');
+  const [editUnit, setEditUnit] = useState<ProductUnit>('BOTTLE');
+  const [editSellingPrice, setEditSellingPrice] = useState('');
+  const [editReorderLevel, setEditReorderLevel] = useState('5');
+  const [editVolumeMl, setEditVolumeMl] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Measured Drink Modal States (Weight-based or Value-based Measurement)
   const [showMeasuredModal, setShowMeasuredModal] = useState(false);
@@ -240,6 +247,7 @@ export const CatalogManager: React.FC = () => {
   useBackHandler(showAddModal, () => setShowAddModal(false), 'catalog-add-modal');
   useBackHandler(Boolean(editingProduct), () => setEditingProduct(null), 'catalog-edit-modal');
   useBackHandler(Boolean(deletingProduct), () => setDeletingProduct(null), 'catalog-delete-modal');
+  useBackHandler(Boolean(viewingProduct), () => setViewingProduct(null), 'catalog-view-modal');
   useBackHandler(showMeasuredModal, () => setShowMeasuredModal(false), 'catalog-measured-modal');
   useBackHandler(showWeightCalcModal, () => setShowWeightCalcModal(false), 'catalog-weight-calc-modal');
   useBackHandler(Boolean(adjustingStockProduct), () => setAdjustingStockProduct(null), 'catalog-adjust-stock-modal');
@@ -373,19 +381,17 @@ export const CatalogManager: React.FC = () => {
    }
 
    setEditingProduct(p);
-   setName(p.name);
-   setCategory(p.category);
-   setUnit(p.unit);
-   setSellingPrice(String(p.sellingPrice));
-   setReorderLevel(String(p.reorderLevel || 5));
-   setInitialStock('0');
-   setVolumeMl(p.volumeMl ? String(p.volumeMl) : '');
-   setFormError(null);
-   setShowAddModal(true);
+   setEditName(p.name);
+   setEditCategory(p.category);
+   setEditUnit(p.unit);
+   setEditSellingPrice(p.sellingPrice !== undefined ? String(p.sellingPrice) : '0');
+   setEditReorderLevel(String(p.reorderLevel || 5));
+   setEditVolumeMl(p.volumeMl ? String(p.volumeMl) : '');
+   setEditError(null);
  };
 
- // Save Add or Edit
- const handleSubmitProduct = (e: React.FormEvent) => {
+ // 1. Dedicated Function: Add New Drink to Catalog
+ const handleAddProductSubmit = (e: React.FormEvent) => {
    e.preventDefault();
    setFormError(null);
 
@@ -399,35 +405,60 @@ export const CatalogManager: React.FC = () => {
      return;
    }
 
-   if (isNaN(sell) || sell <= 0) {
-     setFormError('Please enter a valid retail selling price.');
+   if (isNaN(sell) || sell < 0) {
+     setFormError('Please enter a valid retail selling price (KES 0 or higher).');
      return;
    }
 
-   if (editingProduct) {
-     // Updating existing product
-     store.updateProduct(editingProduct.id, {
-       name: name.trim(),
-       category,
-       unit,
-       sellingPrice: sell,
-       reorderLevel: reorder,
-       volumeMl: vol,
-     });
-   } else {
-     // Adding new product
-     store.addProduct({
-       name: name.trim(),
-       category,
-       unit,
-       sellingPrice: sell,
-       reorderLevel: reorder,
-       volumeMl: vol,
-       initialStock: stock,
-     });
-   }
+   store.addProduct({
+     name: name.trim(),
+     category,
+     unit,
+     sellingPrice: sell,
+     reorderLevel: reorder,
+     volumeMl: vol,
+     initialStock: stock,
+   });
+
+   setSavedStockNotice(`Added ${name.trim()} to catalog`);
+   setTimeout(() => setSavedStockNotice(null), 3500);
 
    setShowAddModal(false);
+ };
+
+ // 2. Dedicated Function: Softly Adjust Existing Product Values
+ const handleSaveProductEdit = (e: React.FormEvent) => {
+   e.preventDefault();
+   if (!editingProduct) return;
+   setEditError(null);
+
+   if (!editName.trim()) {
+     setEditError('Please enter a drink name.');
+     return;
+   }
+
+   const sell = editSellingPrice.trim() !== '' ? parseFloat(editSellingPrice) : editingProduct.sellingPrice;
+   if (isNaN(sell) || sell < 0) {
+     setEditError('Please enter a valid selling price (KES 0 or higher).');
+     return;
+   }
+
+   const reorder = parseFloat(editReorderLevel) || 5;
+   const vol = editVolumeMl ? parseInt(editVolumeMl, 10) : undefined;
+
+   // Softly updates values needed without disrupting stock logs or other fields
+   store.updateProduct(editingProduct.id, {
+     name: editName.trim(),
+     category: editCategory,
+     unit: editUnit,
+     sellingPrice: sell,
+     reorderLevel: reorder,
+     volumeMl: vol,
+   });
+
+   setSavedStockNotice(`Updated ${editName.trim()} settings (Price: KES ${sell.toLocaleString()})`);
+   setTimeout(() => setSavedStockNotice(null), 3500);
+
    setEditingProduct(null);
  };
 
@@ -732,17 +763,17 @@ export const CatalogManager: React.FC = () => {
                             onClick={() => setActiveMenuId(null)}
                           />
                           <div className="absolute right-0 top-full mt-1.5 z-50 w-44 rounded-2xl bg-[#0E1420] border border-slate-800 shadow-2xl py-1 text-xs animate-in fade-in zoom-in-95 duration-100 font-sans">
-                            {/* View Details */}
+                            {/* View Details / View Product */}
                             <button
                               type="button"
                               onClick={() => {
-                                toggleExpand(p.id);
+                                setViewingProduct(p);
                                 setActiveMenuId(null);
                               }}
                               className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-200 hover:text-white hover:bg-slate-800/80 transition-colors text-left cursor-pointer"
                             >
                               <Info className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                              <span>{isExpanded ? 'Hide Details' : 'View Details'}</span>
+                              <span>View Product</span>
                             </button>
 
                             {/* Edit Product */}
@@ -839,167 +870,443 @@ export const CatalogManager: React.FC = () => {
         </>
       )}
 
-  {/* 3. MODAL: ADD / EDIT PRODUCT */}
- {showAddModal && (
- <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
- <div className="w-full max-w-lg bg-[#121824] border border-[#1E293B] rounded-3xl p-5 md:p-6 shadow-2xl my-6">
- <div className="flex items-center justify-between pb-3 border-b border-slate-800">
- <div className="flex items-center gap-2.5">
- <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
- {editingProduct ? <Edit2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
- </div>
- <h3 className="text-base font-bold text-white tracking-tight">
- {editingProduct ? 'Edit Drink Information' : 'Add New Drink to Catalog'}
- </h3>
- </div>
- <button
- onClick={() => setShowAddModal(false)}
- className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
- >
- <X className="w-5 h-5" />
- </button>
- </div>
+  {/* 3. MODAL: ADD NEW DRINK (Dedicated function) */}
+  {showAddModal && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+      <div className="w-full max-w-lg bg-[#121824] border border-[#1E293B] rounded-3xl p-5 md:p-6 shadow-2xl my-6">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <Plus className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white tracking-tight">Add New Drink to Catalog</h3>
+              <p className="text-[11px] text-slate-400">Register a new beverage or merchandise line item</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowAddModal(false)}
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
- {formError && (
- <div className="mt-3 p-3 rounded-2xl bg-red-950/80 border border-red-500/50 text-red-300 text-xs flex items-center gap-2">
- <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
- <span>{formError}</span>
- </div>
- )}
+        {formError && (
+          <div className="mt-3 p-3 rounded-2xl bg-red-950/80 border border-red-500/50 text-red-300 text-xs flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+            <span>{formError}</span>
+          </div>
+        )}
 
- <form onSubmit={handleSubmitProduct} className="mt-4 space-y-4">
- {/* Product Name */}
- <div>
- <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
- Drink Name & Volume
- </label>
- <input
- type="text"
- required
- autoFocus
- value={name}
- onChange={(e) => setName(e.target.value)}
- className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
- />
- </div>
+        <form onSubmit={handleAddProductSubmit} className="mt-4 space-y-4">
+          {/* Product Name */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+              Drink Name & Volume <span className="text-emerald-400">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              autoFocus
+              placeholder="e.g. Tusker Lager 500ml"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+            />
+          </div>
 
- {/* Category & Unit */}
- <div className="grid grid-cols-2 gap-3">
- <div>
- <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
- Category
- </label>
- <select
- value={category}
- onChange={(e) => setCategory(e.target.value as ProductCategory)}
- className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
- >
- <option value="BEER">Beer</option>
- <option value="CIDER">Cider</option>
- <option value="SPIRIT">Spirit / Whiskey</option>
- <option value="WINE">Wine</option>
- <option value="SOFT_DRINK">Soft Drink / Soda</option>
- <option value="CIGARETTE">Cigarette</option>
- </select>
- </div>
+          {/* Category & Unit */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                Category
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as ProductCategory)}
+                className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+              >
+                <option value="BEER">Beer</option>
+                <option value="CIDER">Cider</option>
+                <option value="SPIRIT">Spirit / Whiskey</option>
+                <option value="WINE">Wine</option>
+                <option value="SOFT_DRINK">Soft Drink / Soda</option>
+                <option value="CIGARETTE">Cigarette</option>
+              </select>
+            </div>
 
- <div>
- <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
- Serving Unit
- </label>
- <select
- value={unit}
- onChange={(e) => setUnit(e.target.value as ProductUnit)}
- className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
- >
- {units.map((u) => (
- <option key={u.key} value={u.key}>
- {u.label}
- </option>
- ))}
- </select>
- </div>
- </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                Serving Unit
+              </label>
+              <select
+                value={unit}
+                onChange={(e) => setUnit(e.target.value as ProductUnit)}
+                className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+              >
+                {units.map((u) => (
+                  <option key={u.key} value={u.key}>
+                    {u.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
- {/* Selling Price */}
- <div>
-   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-     Selling Price (KES)
-   </label>
-   <div className="relative">
-     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-emerald-400">
-       KES
-     </span>
-     <input
-       type="number"
-       step="any"
-       min="1"
-       required
-       value={sellingPrice}
-       onChange={(e) => setSellingPrice(e.target.value)}
-       className="w-full bg-[#0E1420] border border-emerald-500/80 rounded-xl pl-12 pr-3 py-2 text-sm font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-400"
-     />
-   </div>
- </div>
+          {/* Selling Price */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+              Selling Price (KES) <span className="text-emerald-400">*</span>
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-emerald-400 font-bold">
+                KES
+              </span>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                required
+                placeholder="e.g. 250"
+                value={sellingPrice}
+                onChange={(e) => setSellingPrice(e.target.value)}
+                className="w-full bg-[#0E1420] border border-emerald-500/80 rounded-xl pl-12 pr-3 py-2 text-sm font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-400"
+              />
+            </div>
+          </div>
 
+          {/* Initial Stock & Reorder Alert Level */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                Starting Stock Count
+              </label>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                placeholder="0"
+                value={initialStock}
+                onChange={(e) => setInitialStock(e.target.value)}
+                className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
+              />
+            </div>
 
- {/* Initial Stock & Reorder Alert Level */}
- <div className="grid grid-cols-2 gap-3">
- {!editingProduct && (
- <div>
- <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
- Stock
- </label>
- <input
- type="number"
- step="any"
- min="0"
- value={initialStock}
- onChange={(e) => setInitialStock(e.target.value)}
- className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
- />
- </div>
- )}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                Low Stock Alert Level
+              </label>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                value={reorderLevel}
+                onChange={(e) => setReorderLevel(e.target.value)}
+                className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
+              />
+            </div>
+          </div>
 
- <div>
- <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
- Low Stock Alert Level
- </label>
- <input
- type="number"
- step="any"
- min="0.5"
- value={reorderLevel}
- onChange={(e) => setReorderLevel(e.target.value)}
- className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
- />
- </div>
+          {/* Buttons */}
+          <div className="flex items-center gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowAddModal(false)}
+              className="py-3 px-4 rounded-xl bg-[#0E1420] border border-slate-800 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/50 cursor-pointer"
+            >
+              <Check className="w-4 h-4" />
+              <span>Add Drink</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )}
 
- </div>
+  {/* 4. MODAL: EDIT PRODUCT (Dedicated Soft Adjustment Function) */}
+  {editingProduct && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+      <div className="w-full max-w-lg bg-[#121824] border border-[#1E293B] rounded-3xl p-5 md:p-6 shadow-2xl my-6 space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400">
+              <Edit2 className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white tracking-tight">Edit Drink Details</h3>
+              <p className="text-[11px] text-slate-400">Softly adjust prices, category, or specifications</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setEditingProduct(null)}
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
- {/* Buttons */}
- <div className="flex items-center gap-2 pt-2">
- <button
- type="button"
- onClick={() => setShowAddModal(false)}
- className="py-3 px-4 rounded-xl bg-[#0E1420] border border-slate-800 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
- >
- Cancel
- </button>
- <button
- type="submit"
- className="flex-1 py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/50 cursor-pointer"
- >
- <Check className="w-4 h-4" />
- <span>{editingProduct ? 'Save Drink Changes' : 'Add Drink'}</span>
- </button>
- </div>
- </form>
- </div>
- </div>
- )}
+        {/* Current Live Status Strip */}
+        <div className="p-3 bg-[#0E1420] border border-slate-800 rounded-2xl flex items-center justify-between gap-3 text-xs">
+          <div className="min-w-0">
+            <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Current Shelf Stock</div>
+            <div className="text-sm font-bold text-white mt-0.5 font-mono">
+              {inventory.find((i) => i.productId === editingProduct.id)?.quantityOnHand ?? 0}{' '}
+              <span className="text-xs text-slate-400 font-sans font-normal">{editingProduct.unit.toLowerCase()}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const currentQty = inventory.find((i) => i.productId === editingProduct.id)?.quantityOnHand ?? 0;
+              setAdjustingStockProduct({
+                product: editingProduct,
+                currentStock: currentQty,
+                targetStock: currentQty,
+              });
+              setEditingProduct(null);
+            }}
+            className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition cursor-pointer shrink-0"
+          >
+            Adjust Count
+          </button>
+        </div>
 
- {/* 4. MODAL: CONFIRM ARCHIVE / DELETE */}
+        {editError && (
+          <div className="p-3 rounded-2xl bg-red-950/80 border border-red-500/50 text-red-300 text-xs flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+            <span>{editError}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSaveProductEdit} className="space-y-4">
+          {/* Drink Name */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+              Drink Name
+            </label>
+            <input
+              type="text"
+              required
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-sky-500"
+            />
+          </div>
+
+          {/* Category & Unit */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                Category
+              </label>
+              <select
+                value={editCategory}
+                onChange={(e) => setEditCategory(e.target.value as ProductCategory)}
+                className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+              >
+                <option value="BEER">Beer</option>
+                <option value="CIDER">Cider</option>
+                <option value="SPIRIT">Spirit / Whiskey</option>
+                <option value="WINE">Wine</option>
+                <option value="SOFT_DRINK">Soft Drink / Soda</option>
+                <option value="CIGARETTE">Cigarette</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                Serving Unit
+              </label>
+              <select
+                value={editUnit}
+                onChange={(e) => setEditUnit(e.target.value as ProductUnit)}
+                className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+              >
+                {units.map((u) => (
+                  <option key={u.key} value={u.key}>
+                    {u.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Selling Price */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                Retail Selling Price (KES)
+              </label>
+              {parseFloat(editSellingPrice) === 0 && (
+                <span className="text-[10px] text-amber-400 font-mono">Currently unpriced</span>
+              )}
+            </div>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-emerald-400 font-bold">
+                KES
+              </span>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                required
+                value={editSellingPrice}
+                onChange={(e) => setEditSellingPrice(e.target.value)}
+                className="w-full bg-[#0E1420] border border-emerald-500/80 rounded-xl pl-12 pr-3 py-2.5 text-sm font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-400"
+              />
+            </div>
+          </div>
+
+          {/* Low Stock Alert Level */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+              Low Stock Alert Level (Units)
+            </label>
+            <input
+              type="number"
+              step="any"
+              min="0"
+              value={editReorderLevel}
+              onChange={(e) => setEditReorderLevel(e.target.value)}
+              className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
+            />
+          </div>
+
+          {/* Buttons */}
+          <div className="flex items-center gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setEditingProduct(null)}
+              className="py-3 px-4 rounded-xl bg-[#0E1420] border border-slate-800 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 py-3 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-sky-950/50 cursor-pointer"
+            >
+              <Check className="w-4 h-4" />
+              <span>Save Changes</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )}
+
+  {/* 4. MODAL: VIEW PRODUCT DETAILS */}
+  {viewingProduct && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+      <div className="w-full max-w-lg bg-[#121824] border border-[#1E293B] rounded-3xl p-5 md:p-6 shadow-2xl my-6 space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400">
+              <Info className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white tracking-tight">{viewingProduct.name}</h3>
+              <p className="text-[11px] text-slate-400">Drink Information & Specifications</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setViewingProduct(null)}
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Status Badges */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+          <div className="p-3 bg-[#0E1420] border border-slate-800 rounded-2xl">
+            <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Retail Price</div>
+            <div className="text-sm font-bold text-emerald-400 mt-0.5 font-mono">
+              {viewingProduct.isMeasured && viewingProduct.measurementType === 'VALUE'
+                ? 'Measured'
+                : `KES ${viewingProduct.sellingPrice.toLocaleString()}`}
+            </div>
+          </div>
+
+          <div className="p-3 bg-[#0E1420] border border-slate-800 rounded-2xl">
+            <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Stock on Shelf</div>
+            <div className="text-sm font-bold text-white mt-0.5 font-mono">
+              {inventory.find((i) => i.productId === viewingProduct.id)?.quantityOnHand ?? 0}{' '}
+              <span className="text-xs text-slate-400 font-sans font-normal">{viewingProduct.unit.toLowerCase()}</span>
+            </div>
+          </div>
+
+          <div className="p-3 bg-[#0E1420] border border-slate-800 rounded-2xl col-span-2 sm:col-span-1">
+            <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Category</div>
+            <div className="text-sm font-bold text-slate-200 mt-0.5">
+              {viewingProduct.category}
+            </div>
+          </div>
+        </div>
+
+        {/* Detailed Specs List */}
+        <div className="p-3.5 bg-[#0E1420] border border-slate-800/80 rounded-2xl space-y-2 text-xs">
+          <div className="flex items-center justify-between py-1 border-b border-slate-800/50">
+            <span className="text-slate-400">Serving Unit</span>
+            <span className="font-semibold text-slate-200 uppercase">{viewingProduct.unit}</span>
+          </div>
+          {viewingProduct.volumeMl && (
+            <div className="flex items-center justify-between py-1 border-b border-slate-800/50">
+              <span className="text-slate-400">Volume</span>
+              <span className="font-semibold text-slate-200">{viewingProduct.volumeMl} ml</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between py-1 border-b border-slate-800/50">
+            <span className="text-slate-400">Low Stock Reorder Alert</span>
+            <span className="font-semibold text-amber-400 font-mono">
+              Below {viewingProduct.reorderLevel || 5} units
+            </span>
+          </div>
+          <div className="flex items-center justify-between py-1">
+            <span className="text-slate-400">Status</span>
+            <span className={`font-semibold font-mono ${viewingProduct.isArchived ? 'text-amber-400' : 'text-emerald-400'}`}>
+              {viewingProduct.isArchived ? 'Archived' : 'Active on Counter'}
+            </span>
+          </div>
+        </div>
+
+        {/* Footer Actions */}
+        <div className="flex items-center gap-2 pt-1">
+          <button
+            type="button"
+            onClick={() => setViewingProduct(null)}
+            className="flex-1 py-2.5 px-4 rounded-xl bg-[#0E1420] border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer"
+          >
+            Close
+          </button>
+          {!viewingProduct.isArchived && (
+            <button
+              type="button"
+              onClick={() => {
+                const prod = viewingProduct;
+                setViewingProduct(null);
+                handleOpenEdit(prod);
+              }}
+              className="flex-1 py-2.5 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+            >
+              <Edit2 className="w-4 h-4" />
+              <span>Edit Details</span>
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )}
+
+  {/* 5. MODAL: CONFIRM ARCHIVE / DELETE */}
  {deletingProduct && (
  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
  <div className="w-full max-w-md bg-[#121824] border border-[#1E293B] rounded-3xl p-5 shadow-2xl space-y-4">
