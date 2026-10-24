@@ -21,16 +21,16 @@ export const PWAInstallButton: React.FC<{ className?: string; compact?: boolean 
         <button
           type="button"
           onClick={install}
-          title="Install BarTrack directly on your Android phone as an app"
+          title="Install BarTrack directly on your phone as an app"
           className={
             className ||
-            `flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-600/90 hover:bg-emerald-500 text-white shadow-sm transition-all cursor-pointer ${
-              compact ? 'text-[11px] py-0.5 px-2' : ''
+            `flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-all cursor-pointer active:scale-95 ${
+              compact ? 'text-[11px] py-1 px-2' : ''
             }`
           }
         >
           <Download className="w-3.5 h-3.5 shrink-0" />
-          <span>{compact ? 'Install' : 'Install on Android'}</span>
+          <span>Install</span>
         </button>
       </>
     );
@@ -45,13 +45,13 @@ export const PWAInstallButton: React.FC<{ className?: string; compact?: boolean 
         title="Add BarTrack to your mobile home screen"
         className={
           className ||
-          `flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-surface hover:bg-surface-2 border border-line text-muted hover:text-content transition-colors cursor-pointer ${
-            compact ? 'text-[11px] py-0.5 px-2' : ''
+          `flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium bg-[#131A26] hover:bg-[#1C2638] border border-slate-700/70 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer active:scale-95 ${
+            compact ? 'text-[11px]' : ''
           }`
         }
       >
         <Smartphone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-        <span>{compact ? 'Add App' : 'Add to Home Screen'}</span>
+        <span>Add App</span>
       </button>
 
       {showGuide && (

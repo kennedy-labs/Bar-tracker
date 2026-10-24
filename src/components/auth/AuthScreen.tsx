@@ -13,6 +13,7 @@ import {
   Store,
   Clock,
 } from 'lucide-react';
+import { PWAInstallCard } from '../common/PWAInstallCard';
 
 interface AuthScreenProps {
   onLogin: (user: User) => void;
@@ -427,6 +428,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
             </form>
           </div>
         )}
+
+        {/* Dedicated PWA Install Card for Mobile Staff (Disappears once installed) */}
+        <PWAInstallCard className="mt-3 sm:mt-4" />
       </div>
     </div>
   );
