@@ -50,6 +50,7 @@ import {
   FileText,
   UserCheck,
   Rocket,
+  X,
 } from 'lucide-react';
 
 interface OwnerDashboardProps {
@@ -68,6 +69,23 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const [selectedShiftForAudit, setSelectedShiftForAudit] = useState<Shift | null>(null);
   const [selectedDiscrepancy, setSelectedDiscrepancy] = useState<Discrepancy | null>(null);
   const [isShiftSearchVisible, setIsShiftSearchVisible] = useState(false);
+  const checklistKey = `bar_track_hide_checklist_${currentUser.businessId || 'default'}`;
+  const [showChecklist, setShowChecklist] = useState(() => {
+    try {
+      return localStorage.getItem(checklistKey) !== 'true';
+    } catch {
+      return true;
+    }
+  });
+
+  const handleDismissChecklist = () => {
+    setShowChecklist(false);
+    try {
+      localStorage.setItem(checklistKey, 'true');
+    } catch {
+      // ignore
+    }
+  };
   // Phone back-button integration: close inspect/resolve modals and undo selections
   useBackHandler(Boolean(selectedShiftForAudit), () => setSelectedShiftForAudit(null), 'owner-shift-audit');
   useBackHandler(Boolean(selectedDiscrepancy), () => setSelectedDiscrepancy(null), 'owner-discrepancy-resolve');
@@ -227,8 +245,14 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
           )}
 
           {/* Quick Onboarding / Real Data Setup Card */}
-          {(products.length === 0 || registeredWorkers.length === 0) && (
-            <div className="p-5 rounded-3xl bg-[#121824] border-2 border-emerald-500/40 shadow-xl space-y-4">
+          {showChecklist && (products.length === 0 || registeredWorkers.length === 0) && (
+            <div className="p-5 rounded-3xl bg-[#121824] border-2 border-emerald-500/40 shadow-xl space-y-4 relative">
+              <button 
+                onClick={handleDismissChecklist}
+                className="absolute top-4 right-4 p-1.5 rounded-xl hover:bg-slate-800 text-slate-500 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
               <h3 className="text-base font-bold text-white">Welcome! Setup Checklist</h3>
               <div className="grid grid-cols-1 gap-2">
                 <button
@@ -448,36 +472,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
       )}
 
 
-      {/* 7. STAFF ATTENDANTS MANAGEMENT */}
-      {activeTab === 'staff' && (
-        <div className="space-y-4 sm:space-y-5 animate-in fade-in duration-200">
-          <StaffManager currentUser={currentUser} />
-        </div>
-      )}
 
-      {/* 8. PARTNER BARS MANAGEMENT */}
-      {activeTab === 'partners' && (
-        <div className="space-y-4 sm:space-y-5 animate-in fade-in duration-200">
-          <PartnerBarsManager />
-        </div>
-      )}
-
-      {/* 9. MY PROFILE */}
-      {activeTab === 'profile' && (
-        <div className="space-y-4 sm:space-y-5 animate-in fade-in duration-200">
-          <ProfileManager
-            currentUser={currentUser}
-            onUpdateProfile={onUpdateProfile}
-          />
-        </div>
-      )}
-
-      {/* 10. LIVE LAUNCH */}
-      {activeTab === 'launch' && (
-        <div className="space-y-4 sm:space-y-5 animate-in fade-in duration-200">
-          <LiveLaunchManager currentUser={currentUser} />
-        </div>
-      )}
 
       {/* 3. DISCREPANCY RADAR TAB */}
       {activeTab === 'discrepancies' && (
@@ -639,10 +634,19 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
       )}
 
 
-      {/* 7. STAFF ATTENDANTS MANAGEMENT */}
+      {/* 7. STAFF ATTENDANTS MANAGEMENT (Subtle Overlay) */}
       {activeTab === 'staff' && (
-        <div className="space-y-4 sm:space-y-5 animate-in fade-in duration-200">
-          <StaffManager currentUser={currentUser} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="relative w-full max-w-xl animate-in zoom-in-95 duration-300">
+            <button 
+              onClick={() => setActiveTab('overview')}
+              className="absolute -top-12 right-0 p-2 rounded-full bg-slate-800 text-slate-400 hover:text-white transition-colors"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <StaffManager currentUser={currentUser} />
+          </div>
         </div>
       )}
 

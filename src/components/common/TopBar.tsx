@@ -11,6 +11,7 @@ import {
   RefreshCw,
   FileText,
   ArrowLeft,
+  UserPlus,
 } from 'lucide-react';
 import { BusinessIdentityBadge } from './BusinessIdentityBadge';
 import { EditProfileModal } from './EditProfileModal';
@@ -34,10 +35,12 @@ export const TopBar: React.FC<TopBarProps> = ({
   onUpdateProfile,
 }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // Close settings menu and profile modal on phone back navigation
   useBackHandler(isSettingsOpen, () => setIsSettingsOpen(false), 'topbar-settings-menu');
+  useBackHandler(isProfileMenuOpen, () => setIsProfileMenuOpen(false), 'topbar-profile-menu');
   useBackHandler(isProfileModalOpen, () => setIsProfileModalOpen(false), 'edit-profile-modal');
 
   const isOwner = currentUser?.role === 'OWNER';
@@ -113,16 +116,61 @@ export const TopBar: React.FC<TopBarProps> = ({
             <PWAInstallButton />
           </div>
 
-          {/* Read-Only Owner/User Name Label */}
+          {/* Interactive Profile Icon & Owner/User Name Label */}
           {currentUser && (
-            <div
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs bg-surface border border-line text-muted select-none"
-              title={`Logged in as ${currentUser.name}`}
-            >
-              <UserIcon className="w-3.5 h-3.5 text-brand-strong shrink-0" />
-              <span className="font-medium text-content max-w-[120px] sm:max-w-[160px] truncate">
-                {currentUser.name.replace(/\s*\((?:Proprietor|Procreator|Owner)\)/gi, '').trim()}
-              </span>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all border select-none cursor-pointer ${
+                  isProfileMenuOpen
+                    ? 'bg-surface-2 border-brand-tint text-content'
+                    : 'bg-surface border-line text-muted hover:text-content hover:bg-surface-2'
+                }`}
+                title={`Account: ${currentUser.name}`}
+              >
+                <UserIcon className={`w-3.5 h-3.5 shrink-0 ${isProfileMenuOpen ? 'text-brand-strong' : 'text-brand-strong/60'}`} />
+                <span className="font-medium max-w-[120px] sm:max-w-[160px] truncate">
+                  {currentUser.name.replace(/\s*\((?:Proprietor|Procreator|Owner)\)/gi, '').trim()}
+                </span>
+              </button>
+
+              {/* Profile Context Dropdown */}
+              {isProfileMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsProfileMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-1.5 z-50 w-48 rounded-xl bg-[#121824] border border-[#1E293B] shadow-2xl py-1 text-xs animate-in fade-in zoom-in-95 duration-100">
+                    {isOwner && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsProfileMenuOpen(false);
+                          setActiveTab('staff');
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:text-white hover:bg-slate-800 transition-colors text-left cursor-pointer"
+                      >
+                        <UserPlus className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                        <span className="font-medium">Register Attendant</span>
+                      </button>
+                    )}
+                    
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        setIsProfileModalOpen(true);
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:text-white hover:bg-slate-800 transition-colors text-left cursor-pointer ${isOwner ? 'border-t border-slate-800' : ''}`}
+                    >
+                      <UserIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span className="font-medium">My Profile</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -156,21 +204,9 @@ export const TopBar: React.FC<TopBarProps> = ({
                     type="button"
                     onClick={() => {
                       setIsSettingsOpen(false);
-                      setIsProfileModalOpen(true);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:text-white hover:bg-slate-800 transition-colors text-left cursor-pointer"
-                  >
-                    <UserIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <span className="font-medium">My Profile</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSettingsOpen(false);
                       window.location.reload();
                     }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:text-white hover:bg-slate-800 transition-colors text-left cursor-pointer border-t border-slate-800"
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:text-white hover:bg-slate-800 transition-colors text-left cursor-pointer"
                   >
                     <RefreshCw className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                     <span className="font-medium">Refresh App</span>
