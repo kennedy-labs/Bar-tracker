@@ -1082,11 +1082,9 @@ export const CatalogManager: React.FC = () => {
  <h3 className="text-base font-bold text-white tracking-tight">
  {measuredEditingProduct ? 'Edit Measured Drink' : 'Add Measured Drink'}
  </h3>
- <p className="text-[11px] text-cyan-300">
- {measuredMode === 'WEIGHT'
-   ? 'Drink measured by weight'
-   : 'Continuous drink measured by monetary value (e.g. Muratina, Makali)'}
- </p>
+ {measuredMode === 'WEIGHT' && (
+   <p className="text-[11px] text-cyan-300">Drink measured by weight</p>
+ )}
  </div>
  </div>
  <button
@@ -1143,33 +1141,14 @@ export const CatalogManager: React.FC = () => {
  )}
 
  <form onSubmit={handleSubmitMeasuredProduct} className="space-y-4">
- {/* Quick Preset Staples */}
- {!measuredEditingProduct && (
+ {/* Quick Preset Staples - Show only for Weight mode */}
+ {!measuredEditingProduct && measuredMode === 'WEIGHT' && (
    <div>
      <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-       Quick Staples ({measuredMode === 'WEIGHT' ? 'Keg Tanks' : 'Traditional'})
+       Quick Staples (Keg Tanks)
      </label>
      <div className="flex flex-wrap gap-1.5">
-        {measuredMode === 'WEIGHT' ? null : (
-         [
-           { name: 'Makali', price: '1500' },
-           { name: 'Muratina', price: '1500' },
-           { name: 'Busaa / Local Brew', price: '1200' },
-           { name: 'Palm Wine (Mnazi)', price: '1000' },
-         ].map((preset) => (
-           <button
-             key={preset.name}
-             type="button"
-             onClick={() => {
-               setMeasuredName(preset.name);
-               setMeasuredStock(preset.price);
-             }}
-             className="py-1 px-2.5 rounded-lg bg-[#0E1420] hover:bg-cyan-950 border border-slate-800 hover:border-cyan-700 text-xs text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
-           >
-             +{preset.name}
-           </button>
-         ))
-       )}
+       {/* Keg presets could go here */}
      </div>
    </div>
  )}
@@ -1256,9 +1235,8 @@ export const CatalogManager: React.FC = () => {
        <div className="flex items-center justify-between mb-1">
          <label className="text-xs font-semibold text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
            <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
-           <span>Current Stock on Shelf (KES Value)</span>
+           <span>Price kshs</span>
          </label>
-         <span className="text-[10px] text-cyan-400 font-mono font-semibold">1 KES Stock = 1 KES Selling Worth</span>
        </div>
        <input
          type="number"
@@ -1270,9 +1248,6 @@ export const CatalogManager: React.FC = () => {
          className="w-full bg-[#121824] border border-cyan-500/80 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-400"
          
        />
-       <span className="text-[10px] text-slate-400 mt-1 block">
-         Total KES worth of drink currently remaining on the counter.
-       </span>
      </div>
    </div>
  )}
