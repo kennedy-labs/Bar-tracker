@@ -42,9 +42,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  const [showExpenseModal, setShowExpenseModal] = useState<boolean>(false);
  const [showCloseModal, setShowCloseModal] = useState<boolean>(false);
  const [showWeightModal, setShowWeightModal] = useState<boolean>(false);
- const [justClosedShift, setJustClosedShift] = useState<Shift | null>(null);
  const [toastMessage, setToastMessage] = useState<string | null>(null);
- const [copiedReceipt, setCopiedReceipt] = useState<boolean>(false);
 
  // Inline Expense List & Form state just above '+ Add Expense' button
  const [isInlineExpenseOpen, setIsInlineExpenseOpen] = useState<boolean>(false);
@@ -59,7 +57,6 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
   useBackHandler(isInlineExpenseOpen, () => setIsInlineExpenseOpen(false), 'worker-inline-expense');
   useBackHandler(showCloseModal, () => setShowCloseModal(false), 'worker-close-modal');
   useBackHandler(showWeightModal, () => setShowWeightModal(false), 'worker-weight-modal');
-  useBackHandler(Boolean(justClosedShift), () => setJustClosedShift(null), 'worker-handover-receipt');
 
  // New shift opening inputs if no active shift
  const [openingCashInput, setOpeningCashInput] = useState<string>('0');
@@ -116,6 +113,45 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
      cancelLongPress();
    }
  };
+
+ const expenseLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+ const expenseTouchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+
+ const startExpenseLongPress = (expenseId: string) => {
+   if (expenseLongPressTimerRef.current) clearTimeout(expenseLongPressTimerRef.current);
+   expenseLongPressTimerRef.current = setTimeout(() => {
+     try {
+       if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+         navigator.vibrate?.(40);
+       }
+     } catch (_) {}
+     setDeletingExpenseId(expenseId);
+   }, 500);
+ };
+
+ const cancelExpenseLongPress = () => {
+   if (expenseLongPressTimerRef.current) {
+     clearTimeout(expenseLongPressTimerRef.current);
+     expenseLongPressTimerRef.current = null;
+   }
+ };
+
+ const handleExpenseTouchStart = (expenseId: string, e: React.TouchEvent) => {
+   const t = e.touches[0];
+   expenseTouchStartPosRef.current = { x: t.clientX, y: t.clientY };
+   startExpenseLongPress(expenseId);
+ };
+
+ const handleExpenseTouchMove = (e: React.TouchEvent) => {
+   if (!expenseTouchStartPosRef.current) return;
+   const t = e.touches[0];
+   const dx = Math.abs(t.clientX - expenseTouchStartPosRef.current.x);
+   const dy = Math.abs(t.clientY - expenseTouchStartPosRef.current.y);
+   if (dx > 10 || dy > 10) {
+     cancelExpenseLongPress();
+   }
+ };
+
 
  // Closing cash & M-pesa inputs for handover modal
  const [closingCashInput, setClosingCashInput] = useState<string>('');
@@ -552,6 +588,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  const totalMoneyCollected = netCashCollected + netMpesaCollected;
 
  const hasEnteredDrawer = closingCashInput.trim() !== '' || closingMpesaInput.trim() !== '';
+ const isDrawerFilled = closingCashInput.trim() !== '' && closingMpesaInput.trim() !== '';
  const financialVariance = hasEnteredDrawer
  ? (totalMoneyCollected + totalExpenses) - summaryTotals.totalAmount
  : 0;
@@ -559,6 +596,10 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  // Complete and close shift
  const handleConfirmCloseShift = () => {
  if (!activeShift) return;
+ if (!isDrawerFilled) {
+   showToast('Please enter both Cash and Mpesa before submitting shift.');
+   return;
+ }
 
  const closingCounts: Record<string, number> = {};
  rowDataList.forEach((row) => {
@@ -570,7 +611,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  });
 
  try {
- const closed = store.closeShift({
+ store.closeShift({
  shiftId: activeShift.id,
  closingPhysicalCounts: closingCounts,
  closingCashActual: parsedCashActual,
@@ -578,7 +619,6 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  closingNotes: closingNotesInput,
  });
  setShowCloseModal(false);
- setJustClosedShift(closed);
  } catch (err: any) {
  alert(err.message || 'Error closing shift.');
  }
@@ -1043,7 +1083,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  <div className="space-y-3 pt-2">
    {/* 1. Recorded Expense List */}
    {expenses.length > 0 && (
-     <div className="bg-[#111622] border border-[#1E2638] rounded-2xl overflow-hidden shadow-sm">
+     <div className="bg-[#111622] border border-[#1E2638] rounded-2xl overflow-hidden shadow-sm max-w-sm">
        <button
          type="button"
          onClick={() => setIsExpenseListExpanded((prev) => !prev)}
@@ -1051,9 +1091,6 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
          aria-expanded={isExpenseListExpanded}
        >
          <div className="flex items-center gap-2">
-           <span className="text-xs font-bold text-white tracking-wide">
-             Expense list ({expenses.length})
-           </span>
            {isExpenseListExpanded ? (
              <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
            ) : (
@@ -1068,59 +1105,43 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
        {isExpenseListExpanded && (
          <div className="overflow-x-auto border-t border-[#1E2638]">
          <table className="w-full text-left text-xs border-collapse">
-           <thead>
-             <tr className="bg-[#0D1117]/60 text-slate-400 font-mono text-[11px] border-b border-slate-800/80">
-               <th className="py-2.5 px-3.5 font-bold text-slate-300">Name</th>
-               <th className="py-2.5 px-3 text-right font-bold text-slate-300">Amount</th>
-               <th className="py-2.5 px-3 text-center font-bold text-slate-300 w-24">Time</th>
-               <th className="py-2.5 px-2 text-center w-10"></th>
-             </tr>
-           </thead>
            <tbody className="divide-y divide-slate-800/50 text-xs">
              {expenses.map((exp) => (
-               <tr key={exp.id} className="hover:bg-slate-800/20 transition-colors">
-                 <td className="py-2.5 px-3.5 font-semibold text-slate-100 font-sans">
-                   {exp.description}
+               <tr 
+                 key={exp.id} 
+                 className="hover:bg-slate-800/20 transition-colors select-none group relative"
+                 onMouseDown={() => startExpenseLongPress(exp.id)}
+                 onMouseUp={cancelExpenseLongPress}
+                 onMouseLeave={cancelExpenseLongPress}
+                 onTouchStart={(e) => handleExpenseTouchStart(exp.id, e)}
+                 onTouchEnd={cancelExpenseLongPress}
+                 onTouchMove={handleExpenseTouchMove}
+               >
+                 <td className="py-2.5 px-3.5">
+                   <div className="flex flex-col">
+                     <span className="font-semibold text-slate-100 font-sans">{exp.description}</span>
+                     <span className="text-[10px] text-slate-500 font-mono">
+                       {exp.timestamp
+                         ? new Date(exp.timestamp).toLocaleTimeString([], {
+                             hour: '2-digit',
+                             minute: '2-digit',
+                           })
+                         : '-'}
+                     </span>
+                   </div>
                  </td>
                  <td className="py-2.5 px-3 text-right font-bold text-rose-400 font-mono">
                    KES {exp.amount.toLocaleString()}
                  </td>
-                 <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">
-                   {exp.timestamp
-                     ? new Date(exp.timestamp).toLocaleTimeString([], {
-                         hour: '2-digit',
-                         minute: '2-digit',
-                       })
-                     : '-'}
-                 </td>
-                 <td className="py-2.5 px-2 text-center">
-                   {deletingExpenseId === exp.id ? (
-                     <div className="flex items-center justify-center gap-1">
-                       <button
-                         type="button"
-                         onClick={() => handleDeleteExpense(exp)}
-                         className="p-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold cursor-pointer transition-colors shadow-xs"
-                         title="Confirm"
-                       >
-                         <Check className="w-3 h-3" />
-                       </button>
-                       <button
-                         type="button"
-                         onClick={() => setDeletingExpenseId(null)}
-                         className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] cursor-pointer transition-colors"
-                         title="Cancel"
-                       >
-                         <X className="w-3 h-3" />
-                       </button>
-                     </div>
-                   ) : (
+                 <td className="py-2.5 px-2 text-center w-12">
+                   {deletingExpenseId === exp.id && (
                      <button
                        type="button"
-                       onClick={() => setDeletingExpenseId(exp.id)}
-                       className="p-1 text-slate-500 hover:text-rose-400 rounded transition-colors cursor-pointer"
+                       onClick={() => handleDeleteExpense(exp)}
+                       className="p-1.5 rounded-lg bg-rose-600/20 text-rose-400 hover:bg-rose-500 transition-colors animate-in zoom-in duration-150"
                        title="Delete"
                      >
-                       <X className="w-3.5 h-3.5" />
+                       <Trash2 className="w-3.5 h-3.5" />
                      </button>
                    )}
                  </td>
@@ -1135,18 +1156,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
 
    {/* 2. Inline Expense Form (Forms right above the '+ Add Expense' button when toggled) */}
    {isInlineExpenseOpen && (
-     <div className="bg-[#111622] border border-[#1E2638] rounded-2xl p-4 sm:p-5 shadow-lg space-y-3.5 animate-in fade-in duration-150">
-       <div className="flex items-center justify-between pb-2.5 border-b border-slate-800">
-         <h3 className="text-xs font-bold text-white tracking-tight">Add Expense</h3>
-         <button
-           type="button"
-           onClick={() => setIsInlineExpenseOpen(false)}
-           className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-           title="Close"
-         >
-           <X className="w-4 h-4" />
-         </button>
-       </div>
+     <div className="bg-[#111622] border border-[#1E2638] rounded-2xl p-4 shadow-lg space-y-3.5 animate-in fade-in duration-150 max-w-sm">
 
        <form onSubmit={handleSaveInlineExpense} className="space-y-3">
          <div className="space-y-3">
@@ -1225,16 +1235,68 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
    </div>
  </div>
 
- {/* 2. Isolated Shift Submission Bar (Compact 1/4 size button at bottom right) */}
- <div className="mt-5 pt-4 border-t border-[#1E2638] flex justify-end">
- <button
- type="button"
- onClick={() => setShowCloseModal(true)}
- className="py-1.5 px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
- >
- <LogOut className="w-3.5 h-3.5" />
- <span>End Shift</span>
- </button>
+ {/* Subtly show Expected Amount */}
+
+ <div className="flex justify-start px-1 mt-2 mb-1">
+
+   <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 font-mono">
+
+     Expected: kes {(cashFloat + mpesaFloat + summaryTotals.totalAmount - totalExpenses).toLocaleString()}
+
+   </span>
+
+ </div>
+
+
+
+ {/* 2. Isolated Shift Submission Bar (Minimal bottom-left cash/mpesa form + compact bottom-right End Shift button) */}
+ <div className="mt-5 pt-4 border-t border-[#1E2638] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+   {/* Minimal Simple Entry Form on Bottom-Left */}
+   <div className="flex items-center gap-4">
+     <div className="flex items-center gap-2">
+       <label className="text-xs font-medium text-slate-400 select-none">Cash:</label>
+       <input
+         type="number"
+         step="any"
+         min="0"
+         value={closingCashInput}
+         onChange={(e) => setClosingCashInput(e.target.value)}
+         className="w-24 sm:w-28 bg-[#0D1117] border border-slate-800 focus:border-slate-600 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none"
+       />
+     </div>
+
+     <div className="flex items-center gap-2">
+       <label className="text-xs font-medium text-slate-400 select-none">Mpesa:</label>
+       <input
+         type="number"
+         step="any"
+         min="0"
+         value={closingMpesaInput}
+         onChange={(e) => setClosingMpesaInput(e.target.value)}
+         className="w-24 sm:w-28 bg-[#0D1117] border border-slate-800 focus:border-slate-600 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none"
+       />
+     </div>
+   </div>
+
+   {/* Compact 1/4 Size End Shift Button on Bottom-Right */}
+   <div className="flex justify-end">
+     <button
+       type="button"
+       onClick={() => {
+         if (!isDrawerFilled) {
+           showToast('Please enter both Cash and Mpesa before ending shift.');
+           return;
+         }
+         setShowCloseModal(true);
+       }}
+       disabled={!isDrawerFilled}
+       title={!isDrawerFilled ? 'Fill Cash and Mpesa to end shift' : 'End Shift'}
+       className="py-1.5 px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+     >
+       <LogOut className="w-3.5 h-3.5" />
+       <span>End Shift</span>
+     </button>
+   </div>
  </div>
 
  </div>
@@ -1260,285 +1322,43 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  />
  )}
 
- {/* ============================================================ */}
- {/* 6. MODAL: CLOSE SHIFT & RECONCILE (FOCUSED & LINEAR) */}
- {/* ============================================================ */}
- {showCloseModal && activeShift && (
- <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
- <div className="w-full max-w-lg bg-[#111622] border border-[#1E2638] rounded-2xl p-5 md:p-6 shadow-xl space-y-4 my-auto">
- <div>
- <h2 className="text-base font-bold text-white tracking-tight">Shift Financial Reconciliation</h2>
- <p className="text-xs text-slate-400 mt-0.5 font-mono">Active Shift</p>
- </div>
-
- {/* Expected Revenue Summary */}
- <div className="p-3.5 rounded-xl bg-[#0D1117] border border-slate-800 space-y-1.5 text-xs font-mono">
- <div className="flex justify-between text-slate-400 font-sans">
- <span>Drinks Sold from Counter:</span>
- <span className="font-bold text-white font-mono">{summaryTotals.totalSold} units</span>
- </div>
- <div className="flex justify-between text-slate-400 font-sans">
- <span>Expected Sales Revenue:</span>
- <span className="font-bold text-emerald-400 font-mono text-sm">
- KES {summaryTotals.totalAmount.toLocaleString()}
- </span>
- </div>
- {totalExpenses > 0 && (
- <div className="flex justify-between text-slate-400 font-sans pt-1 border-t border-slate-800/80">
- <span>Shift Expenses Paid (Cash):</span>
- <span className="text-rose-400 font-mono">
- -KES {totalExpenses.toLocaleString()}
- </span>
- </div>
- )}
- </div>
-
- {/* Cash Drawer & M-Pesa Inputs */}
- <div className="space-y-3">
- <div>
- <label className="text-xs font-medium text-slate-300 block mb-1">
- Physical Cash in Drawer (KES)
- </label>
- <input
- type="number"
- inputMode="decimal"
- min="0"
- value={closingCashInput}
- onChange={(e) => setClosingCashInput(e.target.value)}
- className="w-full bg-[#0D1117] border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-slate-600"
- />
- 
- </div>
-
- <div>
- <label className="text-xs font-medium text-slate-300 block mb-1">
- M-Pesa Till Balance (KES)
- </label>
- <input
- type="number"
- inputMode="decimal"
- min="0"
- value={closingMpesaInput}
- onChange={(e) => setClosingMpesaInput(e.target.value)}
- className="w-full bg-[#0D1117] border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-slate-600"
- />
- 
- </div>
-
- <div>
- <label className="text-xs font-medium text-slate-300 block mb-1">
- Closing Notes (Optional)
- </label>
- <input
- type="text"
- value={closingNotesInput}
- onChange={(e) => setClosingNotesInput(e.target.value)}
- className="w-full bg-[#0D1117] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-600"
- />
- </div>
- </div>
-
- {/* Reconciliation Equation Outcome */}
- {hasEnteredDrawer && (
- <div className="p-3 rounded-xl bg-[#0D1117] border border-slate-800 flex items-center justify-between text-xs font-mono">
- <span className="font-sans text-slate-400">Handover Balance:</span>
- <span
- className={`font-bold ${
- financialVariance === 0
- ? 'text-emerald-400'
- : financialVariance < 0
- ? 'text-rose-400'
- : 'text-amber-400'
- }`}
- >
- {financialVariance === 0
- ? 'Balanced (KES 0)'
- : financialVariance < 0
- ? `-KES ${Math.abs(financialVariance).toLocaleString()} (Shortage)`
- : `+KES ${financialVariance.toLocaleString()} (Surplus)`}
- </span>
- </div>
- )}
-
- {/* Actions */}
- <div className="flex items-center justify-end gap-2 pt-2">
- <button
- onClick={() => setShowCloseModal(false)}
- className="py-2 px-4 rounded-xl text-xs font-medium text-slate-400 hover:text-white transition-colors cursor-pointer"
- >
- Cancel
- </button>
- <button
- onClick={handleConfirmCloseShift}
- className="py-2 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors cursor-pointer"
- >
- Confirm & Close Shift
- </button>
- </div>
- </div>
- </div>
- )}
-
- {/* ============================================================ */}
- {/* 7. MODAL: SHIFT HANDOVER RECEIPT (CLEAN, MINIMAL, WHATSAPP-READY) */}
- {/* ============================================================ */}
   {/* ============================================================ */}
-  {/* MODAL: ADJUST OPENING STOCK FOR ACTIVE SHIFT */}
+  {/* 6. MODAL: CLOSE SHIFT CONFIRMATION (MINIMAL) */}
   {/* ============================================================ */}
-  {editOpeningProductId && activeShift && (() => {
-    const row = rowDataList.find((r) => r.product.id === editOpeningProductId);
-    if (!row) return null;
-    return (
-      <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-        <div className="w-full max-w-sm bg-[#111622] border border-[#1E2638] rounded-2xl p-5 shadow-xl space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-            <div>
-              <h3 className="text-sm font-bold text-white tracking-tight">Adjust Opening Stock</h3>
-              <p className="text-xs text-slate-400 font-sans mt-0.5">{row.product.name}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setEditOpeningProductId(null)}
-              className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Opening Count
-              </label>
-              <input
-                type="number"
-                step="any"
-                min="0"
-                autoFocus
-                value={editOpeningInput}
-                onChange={(e) => setEditOpeningInput(e.target.value)}
-                className="w-full bg-[#0D1117] border border-slate-800 rounded-xl px-3 py-2.5 text-base font-mono font-bold text-white focus:outline-none focus:border-slate-600"
-              />
-              <p className="text-[10px] text-slate-500 mt-1">
-                Adjusting this updates the starting count for this shift without ending or resetting the shift.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={() => setEditOpeningProductId(null)}
-              className="py-1.5 px-3 rounded-xl text-xs font-medium text-slate-400 hover:text-white transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const val = parseFloat(editOpeningInput);
-                if (isNaN(val) || val < 0) {
-                  showToast('Please enter a valid opening count.');
-                  return;
-                }
-                store.updateShiftStockItemRow({
-                  shiftId: activeShift.id,
-                  productId: row.product.id,
-                  openingPhysicalCount: val,
-                });
-                setEditOpeningProductId(null);
-                showToast(`Opening stock for ${row.product.name} updated to ${val}.`);
-              }}
-              className="py-1.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors cursor-pointer shadow-md shadow-emerald-950/40"
-            >
-              Save
-            </button>
-          </div>
+  {showCloseModal && activeShift && (
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="w-full max-w-sm bg-[#111622] border border-[#1E2638] rounded-2xl p-6 shadow-xl space-y-6 text-center">
+        <div className="space-y-1">
+          <h2 className="text-lg font-bold text-white tracking-tight">Are you sure?</h2>
+          <p className={`text-xs font-mono font-bold ${
+            financialVariance === 0 ? 'text-emerald-500' : 
+            financialVariance < 0 ? 'text-rose-400' : 'text-amber-400'
+          }`}>
+            {financialVariance === 0 ? 'Matched' : 
+             financialVariance < 0 ? `Short: ${Math.abs(financialVariance).toLocaleString()}` : 
+             `Tip: ${financialVariance.toLocaleString()}`}
+          </p>
+        </div>
+        
+        <div className="flex items-center justify-between gap-4 pt-2">
+          <button
+            onClick={() => setShowCloseModal(false)}
+            className="flex-1 py-2.5 px-4 rounded-xl text-xs font-medium text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirmCloseShift}
+            className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors cursor-pointer"
+          >
+            Confirm
+          </button>
         </div>
       </div>
-    );
-  })()}
+    </div>
+  )}
 
-  {justClosedShift && (
- <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
- <div className="w-full max-w-md bg-[#111622] border border-[#1E2638] rounded-2xl p-5 md:p-6 shadow-xl space-y-4 my-auto">
- <div className="text-center space-y-1 pb-3 border-b border-slate-800">
- <h2 className="text-base font-bold text-white tracking-tight">Shift Handover Receipt</h2>
- <p className="text-xs text-slate-400 font-mono">
- Closed Shift · Attendant: {justClosedShift.workerName}
- </p>
- </div>
-
- <div className="space-y-2 text-xs font-mono p-3 rounded-xl bg-[#0D1117] border border-slate-800 text-slate-300">
- <div className="flex justify-between">
- <span className="font-sans text-slate-400">Drinks Sold:</span>
- <span className="text-white font-bold">{justClosedShift.recordedSalesCount || 0}</span>
- </div>
- <div className="flex justify-between">
-   <span className="font-sans text-slate-400">Sales Revenue:</span>
-   <span className="text-emerald-400 font-bold">
-     KES {(justClosedShift.expectedSalesRevenue || 0).toLocaleString()}
-   </span>
- </div>
- <div className="flex justify-between">
-   <span className="font-sans text-slate-400">Expenses Deducted:</span>
-   <span className="text-rose-400">
-     -KES {(justClosedShift.totalExpenses || 0).toLocaleString()}
-   </span>
- </div>
- <div className="pt-2 border-t border-slate-800/80 flex justify-between font-bold">
- <span className="font-sans text-slate-400">Net Money Returned:</span>
- <span className="text-white">
- KES {((justClosedShift.calculatedCashIncome || 0) + (justClosedShift.calculatedMpesaIncome || 0)).toLocaleString()}
- </span>
- </div>
- <div className="flex justify-between font-bold pt-1">
- <span className="font-sans text-slate-400">Variance:</span>
- <span
- className={
- (justClosedShift.financialVariance || 0) === 0
- ? 'text-emerald-400'
- : (justClosedShift.financialVariance || 0) < 0
- ? 'text-rose-400'
- : 'text-amber-400'
- }
- >
- {(justClosedShift.financialVariance || 0) === 0
- ? 'Balanced (KES 0)'
- : (justClosedShift.financialVariance || 0) < 0
- ? `-KES ${Math.abs(justClosedShift.financialVariance || 0).toLocaleString()}`
- : `+KES ${(justClosedShift.financialVariance || 0).toLocaleString()}`}
- </span>
- </div>
- </div>
-
- <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
- <button
-   onClick={() => {
-     const report = `📊 SHIFT HANDOVER REPORT\nAttendant: ${justClosedShift.workerName}\nDate: ${new Date(justClosedShift.closedAt || '').toLocaleString()}\n\nDrinks Sold: ${justClosedShift.recordedSalesCount || 0}\nSales Revenue: KES ${(justClosedShift.expectedSalesRevenue || 0).toLocaleString()}\nExpenses: KES ${(justClosedShift.totalExpenses || 0).toLocaleString()}\nCash Returned: KES ${(justClosedShift.calculatedCashIncome || 0).toLocaleString()}\nM-Pesa Income: KES ${(justClosedShift.calculatedMpesaIncome || 0).toLocaleString()}\nVariance: KES ${(justClosedShift.financialVariance || 0).toLocaleString()}`;
-     navigator.clipboard.writeText(report);
-     setCopiedReceipt(true);
-     setTimeout(() => setCopiedReceipt(false), 2500);
-   }}
- className="w-full py-2.5 px-4 rounded-xl bg-[#161F30] hover:bg-[#1B263C] text-slate-200 text-xs font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer"
- >
- {copiedReceipt ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5 text-slate-400" />}
- <span>{copiedReceipt ? 'Copied WhatsApp Report' : 'Copy WhatsApp Report'}</span>
- </button>
-
- <button
- onClick={() => setJustClosedShift(null)}
- className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
- >
- <span>Done</span>
- <ArrowRight className="w-3.5 h-3.5" />
- </button>
- </div>
- </div>
- </div>
- )}
-
- {/* Weight & Keg Scale Valuation Modal */}
+    {/* Weight & Keg Scale Valuation Modal */}
  <WeightCalculatorModal
    isOpen={showWeightModal}
    onClose={() => setShowWeightModal(false)}
