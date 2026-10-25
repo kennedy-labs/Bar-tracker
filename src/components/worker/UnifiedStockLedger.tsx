@@ -543,64 +543,50 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  /* SCENARIO 2: ACTIVE SHIFT WORKSPACE (CLEAN LINEAR COUNTER) */
  /* ============================================================ */
  <div className="space-y-4">
- {/* 1. Shift Header Strip (Minimal, Calm, Clear) */}
- <div className="bg-[#111622] border border-[#1E2638] rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-3">
- <div>
- <div className="text-xs text-slate-400">
- <span>Started {new Date(activeShift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
- </div>
- <div className="text-[11px] text-slate-500 font-mono mt-0.5">
- Cash Float: KES {activeShift.openingCashFloat.toLocaleString()} · M-Pesa Float: KES {activeShift.openingMpesaBalance.toLocaleString()}
- </div>
- </div>
- </div>
+ 
 
  {/* 2. Quiet 4-Metric Summary Strip */}
 
- {/* 3. Filter & Search Bar */}
- <div className="bg-[#111622] border border-[#1E2638] rounded-2xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
- <div className="relative flex-1 max-w-sm">
- <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
- <input
- type="text"
- value={searchQuery}
- onChange={(e) => setSearchQuery(e.target.value)}
- className="w-full bg-[#0D1117] border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-slate-700"
- />
- </div>
+   {/* 3. Filter Categories Bar & Subtle Floating Search */}
+  <div className="flex items-center justify-between gap-3 bg-[#111622] border border-[#1E2638] rounded-2xl p-3">
+  <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+  <button
+  onClick={() => setSelectedCategory('ALL')}
+  className={`px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+  selectedCategory === 'ALL'
+  ? 'bg-[#161F30] text-white font-semibold'
+  : 'text-slate-400 hover:text-slate-200'
+  }`}
+  >
+  All ({products.length})
+  </button>
+  {categories.map((cat) => (
+  <button
+  key={cat}
+  onClick={() => setSelectedCategory(cat)}
+  className={`px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+  selectedCategory.toLowerCase() === cat.toLowerCase()
+  ? 'bg-[#161F30] text-white font-semibold'
+  : 'text-slate-400 hover:text-slate-200'
+  }`}
+  >
+  {cat}
+  </button>
+  ))}
+  </div>
 
- <div className="flex items-center gap-2 flex-wrap">
-
-
- <div className="h-4 w-px bg-slate-800 hidden sm:block" />
-
- <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
- <button
- onClick={() => setSelectedCategory('ALL')}
- className={`px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
- selectedCategory === 'ALL'
- ? 'bg-[#161F30] text-white font-semibold'
- : 'text-slate-400 hover:text-slate-200'
- }`}
- >
- All ({products.length})
- </button>
- {categories.map((cat) => (
- <button
- key={cat}
- onClick={() => setSelectedCategory(cat)}
- className={`px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
- selectedCategory.toLowerCase() === cat.toLowerCase()
- ? 'bg-[#161F30] text-white font-semibold'
- : 'text-slate-400 hover:text-slate-200'
- }`}
- >
- {cat}
- </button>
- ))}
- </div>
- </div>
- </div>
+  {/* Subtle Floating Search Bar */}
+  <div className="relative w-40 sm:w-56 shrink-0">
+  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+  <input
+  type="text"
+  placeholder="Search drink..."
+  value={searchQuery}
+  onChange={(e) => setSearchQuery(e.target.value)}
+  className="w-full bg-[#0D1117] border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-slate-700 shadow-sm"
+  />
+  </div>
+  </div>
 
       {/* 4. THE CORE STOCK LEDGER TABLE (THE "ONE LIST") */}
       <div className="bg-[#111622] border border-[#1E2638] rounded-2xl overflow-hidden shadow-sm">
@@ -615,8 +601,14 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                 <th className="py-3 px-2 sm:px-2.5 text-center font-bold text-slate-100 w-24 sm:w-28">
                   <div className="leading-tight">Add</div>
                 </th>
+                <th className="py-3 px-2 sm:px-2.5 text-center font-bold text-emerald-400 w-20 sm:w-24">
+                  <div className="leading-tight">Total</div>
+                </th>
                 <th className="py-3 px-2 sm:px-2.5 text-center font-bold text-slate-100 w-22 sm:w-26">
                   <div className="leading-tight">Closing</div>
+                </th>
+                <th className="py-3 px-2 sm:px-2.5 text-center font-bold text-sky-400 w-20 sm:w-24">
+                  <div className="leading-tight">Sold</div>
                 </th>
                 <th className="py-3 px-3 sm:px-4 text-right font-bold text-slate-100 w-28 sm:w-32">
                   <div className="leading-tight">Amount</div>
@@ -799,6 +791,11 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                           )}
                         </td>
 
+                        {/* Read-only Total Stock Column */}
+                        <td className="py-3 px-2 sm:px-2.5 text-center font-mono font-bold text-emerald-400 text-xs sm:text-sm bg-emerald-950/5">
+                          {row.totalStock}
+                        </td>
+
                         {/* 3. Closing Stock Input */}
                         <td
                           className="py-2.5 px-2 sm:px-2.5 text-center"
@@ -822,6 +819,11 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                             title="Closing stock count at shift handover"
                             className={`w-15 sm:w-18 text-center py-2 px-1 rounded-lg bg-[#0D1117] border text-xs sm:text-sm font-semibold focus:outline-none ${row.hasClosingEntered ? "border-slate-500 text-white font-bold" : "border-slate-800 text-slate-400 focus:border-slate-600"}`}
                           />
+                        </td>
+
+                        {/* Read-only Sold Units Column */}
+                        <td className="py-3 px-2 sm:px-2.5 text-center font-mono font-bold text-sky-400 text-xs sm:text-sm bg-sky-950/5">
+                          {row.hasClosingEntered ? row.salesUnits : '-'}
                         </td>
 
                         {/* 4. Amount (Expected sales for that item) */}
@@ -966,25 +968,15 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
             {/* Grand Totals Footer */}
             <tfoot className="bg-[#0D1117] font-mono text-xs sm:text-sm font-bold border-t border-[#1E2638]">
               <tr>
-                <td className="py-3.5 px-3 sm:px-4 text-white">
-                  TOTAL ({rowDataList.length} items)
+                <td className="py-3 px-3 sm:px-4 text-white">
+                  TOTAL
                 </td>
-                <td className="py-3.5 px-2 sm:px-2.5 text-center text-slate-200">
-                  {summaryTotals.totalOpening}
-                </td>
-                <td className="py-3.5 px-2 sm:px-2.5 text-center font-bold">
-                  {summaryTotals.totalAdded > 0 ? (
-                    <span className="text-emerald-400">+{summaryTotals.totalAdded}</span>
-                  ) : summaryTotals.totalAdded < 0 ? (
-                    <span className="text-rose-400">{summaryTotals.totalAdded}</span>
-                  ) : (
-                    <span className="text-slate-500">-</span>
-                  )}
-                </td>
-                <td className="py-3.5 px-2 sm:px-2.5 text-center text-slate-200">
-                  {summaryTotals.totalClosing > 0 ? summaryTotals.totalClosing : '-'}
-                </td>
-                <td className="py-3.5 px-3 sm:px-4 text-right text-emerald-400">
+                <td className="py-3 px-2 sm:px-2.5"></td>
+                <td className="py-3 px-2 sm:px-2.5"></td>
+                <td className="py-3 px-2 sm:px-2.5"></td>
+                <td className="py-3 px-2 sm:px-2.5"></td>
+                <td className="py-3 px-2 sm:px-2.5"></td>
+                <td className="py-3 px-3 sm:px-4 text-right text-emerald-400">
                   KES {summaryTotals.totalAmount.toLocaleString()}
                 </td>
               </tr>
@@ -1163,31 +1155,32 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
      </div>
    )}
 
-   {/* 3. The 'Add Expense' Button Row */}
+   {/* 3. The 'Add Expense' Button Row (Compact Ghost Icon Button) */}
    <div className="flex items-center gap-2">
      <button
        type="button"
        onClick={() => setIsInlineExpenseOpen((prev) => !prev)}
-       className={`py-2 px-3.5 rounded-xl border text-xs font-bold inline-flex items-center gap-2 transition-colors cursor-pointer shadow-sm ${
+       title={isInlineExpenseOpen ? 'Close expense form' : 'Add shift expense'}
+       aria-label={isInlineExpenseOpen ? 'Close expense form' : 'Add shift expense'}
+       className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors cursor-pointer shadow-xs ${
          isInlineExpenseOpen
-           ? 'bg-[#1C273E] border-slate-700 text-slate-200'
-           : 'bg-[#161F30] hover:bg-[#1C273E] border-slate-800 text-slate-200'
+           ? 'bg-[#1C273E] border-amber-500/50 text-amber-300 ring-1 ring-amber-500/20'
+           : 'bg-[#111622] hover:bg-[#161F30] border-[#1E2638] hover:border-slate-700 text-slate-400 hover:text-amber-400'
        }`}
      >
-       <Receipt className="w-4 h-4 text-amber-400" />
-       <span>{isInlineExpenseOpen ? 'Close Expense Form' : '+ Add Expense'}</span>
+       <Receipt className="w-4 h-4" />
      </button>
    </div>
  </div>
 
- {/* 2. Isolated Shift Submission Bar (Acts as the final submit button at bottom right) */}
- <div className="mt-8 pt-6 border-t border-[#1E2638] flex justify-end">
+ {/* 2. Isolated Shift Submission Bar (Compact 1/4 size button at bottom right) */}
+ <div className="mt-5 pt-4 border-t border-[#1E2638] flex justify-end">
  <button
  type="button"
  onClick={() => setShowCloseModal(true)}
- className="w-full sm:w-auto py-3 px-8 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-sm font-bold flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-emerald-950/40 cursor-pointer"
+ className="py-1.5 px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
  >
- <LogOut className="w-4 h-4" />
+ <LogOut className="w-3.5 h-3.5" />
  <span>End Shift</span>
  </button>
  </div>
