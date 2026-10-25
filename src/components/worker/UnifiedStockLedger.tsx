@@ -61,14 +61,13 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  // New shift opening inputs if no active shift
  const [openingCashInput, setOpeningCashInput] = useState<string>('0');
  const [openingMpesaInput, setOpeningMpesaInput] = useState<string>('0');
+ const [adjustmentModes, setAdjustmentModes] = useState<Record<string, 'ADD' | 'SUBTRACT'>>({});
 
  // Selected item for soft missing details modal (Price, Category, Sold Stock)
  // Inline collapsible details drop-down row & option menu popup
  const [expandedDetailsId, setExpandedDetailsId] = useState<string | null>(null);
- const [optionMenuProductId, setOptionMenuProductId] = useState<string | null>(null);
- useBackHandler(Boolean(expandedDetailsId || optionMenuProductId), () => {
+ useBackHandler(Boolean(expandedDetailsId), () => {
    setExpandedDetailsId(null);
-   setOptionMenuProductId(null);
  }, 'worker-item-details');
 
  // Selected item for adjusting opening stock during an active shift
@@ -76,43 +75,6 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  const [editOpeningInput, setEditOpeningInput] = useState<string>('');
  useBackHandler(Boolean(editOpeningProductId), () => setEditOpeningProductId(null), 'worker-edit-opening');
 
- const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
- const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
-
- const startLongPress = (productId: string) => {
-   if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-   longPressTimerRef.current = setTimeout(() => {
-     try {
-       if (typeof window !== 'undefined' && 'vibrate' in navigator) {
-         navigator.vibrate?.(40);
-       }
-     } catch (_) {}
-     setOptionMenuProductId(productId);
-   }, 450);
- };
-
- const cancelLongPress = () => {
-   if (longPressTimerRef.current) {
-     clearTimeout(longPressTimerRef.current);
-     longPressTimerRef.current = null;
-   }
- };
-
- const handleTouchStart = (productId: string, e: React.TouchEvent) => {
-   const t = e.touches[0];
-   touchStartPosRef.current = { x: t.clientX, y: t.clientY };
-   startLongPress(productId);
- };
-
- const handleTouchMove = (e: React.TouchEvent) => {
-   if (!touchStartPosRef.current || !longPressTimerRef.current) return;
-   const t = e.touches[0];
-   const dx = Math.abs(t.clientX - touchStartPosRef.current.x);
-   const dy = Math.abs(t.clientY - touchStartPosRef.current.y);
-   if (dx > 10 || dy > 10) {
-     cancelLongPress();
-   }
- };
 
  const expenseLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
  const expenseTouchStartPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -723,78 +685,23 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                       <tr className="transition-colors hover:bg-slate-900/30">
                         {/* 1. Name: Long press or tap item name / empty space to show option to view details */}
                         <td
-                          className="py-3.5 px-3 sm:px-4 font-sans relative cursor-pointer select-none group"
-                          onTouchStart={(e) => handleTouchStart(p.id, e)}
-                          onTouchMove={handleTouchMove}
-                          onTouchEnd={cancelLongPress}
-                          onTouchCancel={cancelLongPress}
-                          onMouseDown={() => startLongPress(p.id)}
-                          onMouseUp={cancelLongPress}
-                          onMouseLeave={cancelLongPress}
-                          onContextMenu={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setOptionMenuProductId(p.id);
-                          }}
-                          onClick={() => {
-                            if (expandedDetailsId === p.id) {
-                              setExpandedDetailsId(null);
-                              setOptionMenuProductId(null);
-                            } else if (optionMenuProductId === p.id) {
-                              setOptionMenuProductId(null);
-                            } else {
-                              setOptionMenuProductId(p.id);
-                            }
-                          }}
-                          title="Long press or tap to view details"
+                          className="py-3 px-3 sm:px-4 text-left group relative cursor-pointer hover:bg-slate-800/40 transition-colors"
+                          onClick={() => setExpandedDetailsId(expandedDetailsId === p.id ? null : p.id)}
+                          title="Click to toggle category"
                         >
-                          <div className="flex items-center justify-between gap-1.5">
+                          <div className="flex flex-col gap-0.5">
                             <span className="font-semibold text-slate-100 truncate text-[13px] sm:text-[15px]">
                               {p.name}
                             </span>
-                            {expandedDetailsId === p.id ? (
-                              <ChevronUp className="w-4 h-4 text-emerald-400 shrink-0" />
-                            ) : (
-                              <ChevronDown className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 transition-colors shrink-0" />
+                            {expandedDetailsId === p.id && (
+                              <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold animate-in fade-in slide-in-from-top-1 duration-200">
+                                {p.category || 'General'}
+                              </span>
                             )}
                           </div>
                           {!p.isMeasured && p.unit !== 'KG' && p.unit !== 'VALUE_KES' && (
                             <div className="text-[11px] text-slate-400 font-mono mt-0.5 tracking-tight">
                               KES {(p.sellingPrice || 0).toLocaleString()}
-                            </div>
-                          )}
-
-                          {/* Subtle Option Popup Menu when longpressed or tapped */}
-                          {optionMenuProductId === p.id && (
-                            <div
-                              className="absolute left-3 top-full mt-1 z-30 bg-[#161F30] border border-emerald-500/60 shadow-2xl rounded-xl p-1.5 flex items-center gap-1.5 animate-in fade-in zoom-in-95"
-                              onClick={(e) => e.stopPropagation()}
-                              onMouseDown={(e) => e.stopPropagation()}
-                              onTouchStart={(e) => e.stopPropagation()}
-                            >
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setExpandedDetailsId(expandedDetailsId === p.id ? null : p.id);
-                                  setOptionMenuProductId(null);
-                                }}
-                                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs sm:text-[13px] font-semibold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
-                              >
-                                <Info className="w-3.5 h-3.5" />
-                                <span>{expandedDetailsId === p.id ? 'Hide Details' : 'View Details'}</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setOptionMenuProductId(null);
-                                }}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-                                title="Close"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
                             </div>
                           )}
                         </td>
@@ -848,16 +755,26 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                                 handleCellChange(p.id, 'added', val);
                               }
                             }}
-                            onTouchStart={(e) => e.stopPropagation()}
-                            onContextMenu={(e) => e.stopPropagation()}
+                            onMouseDown={(e) => {
+                                const timer = setTimeout(() => {
+                                    setAdjustmentModes(prev => ({
+                                        ...prev,
+                                        [p.id]: prev[p.id] === 'SUBTRACT' ? 'ADD' : 'SUBTRACT'
+                                    }));
+                                    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+                                        navigator.vibrate?.(40);
+                                    }
+                                }, 500);
+                                (e.target as any)._pressTimer = timer;
+                            }}
+                            onMouseUp={(e) => clearTimeout((e.target as any)._pressTimer)}
+                            onMouseLeave={(e) => clearTimeout((e.target as any)._pressTimer)}
                             placeholder="0"
-                            title="Add stock (+ or enter negative e.g. -5 to subtract)"
+                            title="Tap to add, long press to toggle add/subtract mode"
                             className={`w-15 sm:w-18 text-center py-2 px-1 rounded-lg bg-[#0D1117] border text-xs sm:text-sm font-semibold focus:outline-none transition-colors ${
-                              (cellInputStrings[p.id]?.added !== undefined && cellInputStrings[p.id]?.added?.startsWith('-')) || (cellInputStrings[p.id]?.added === undefined && row.addedStock < 0)
-                                ? 'border-rose-600/70 text-rose-300 bg-rose-950/30 focus:border-rose-500 focus:ring-1 focus:ring-rose-500'
-                                : (cellInputStrings[p.id]?.added !== undefined && parseFloat(cellInputStrings[p.id]?.added || '0') > 0) || (cellInputStrings[p.id]?.added === undefined && row.addedStock > 0)
-                                ? 'border-emerald-600/70 text-emerald-300 bg-emerald-950/20 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500'
-                                : 'border-slate-800 text-slate-300 placeholder:text-slate-600 focus:border-slate-600'
+                              (adjustmentModes[p.id] || 'ADD') === 'SUBTRACT'
+                                ? 'border-rose-600/70 text-rose-300 bg-rose-950/30 focus:border-rose-500'
+                                : 'border-emerald-600/70 text-emerald-300 bg-emerald-950/20 focus:border-emerald-500'
                             }`}
                           />
                           {/* If stock is reduced (< 0), show subtle trigger button for optional note */}
@@ -978,79 +895,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                         </tr>
                       )}
 
-                      {/* Minimal subtle drop-down directly beneath product row */}
-                      {expandedDetailsId === p.id && (
-                        <tr key={`${p.id}-dropdown`} className="bg-[#0b0e14]/90 border-b border-slate-800/80 animate-in fade-in duration-150">
-                          <td colSpan={5} className="py-3 px-3 sm:px-4">
-                            <div className="p-3.5 rounded-xl bg-[#111622] border border-[#1E2638] space-y-2.5 text-xs sm:text-[13px] font-sans shadow-inner">
-                              <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
-                                <span className="font-semibold text-slate-100 text-xs sm:text-sm flex items-center gap-1.5">
-                                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                                  {p.name}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => setExpandedDetailsId(null)}
-                                  className="px-2.5 py-1 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex items-center gap-1"
-                                >
-                                  <span>Close</span>
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
 
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                                <div className="bg-[#0D1117] p-2.5 rounded-lg border border-slate-800/80">
-                                  <div className="text-[11px] text-slate-400 uppercase font-mono tracking-wider">Price</div>
-                                  <div className="font-mono font-bold text-white text-xs sm:text-sm mt-0.5">
-                                    {row.isValue ? 'By Value' : `KES ${row.sellingPrice.toLocaleString()}`}
-                                  </div>
-                                </div>
-
-                                <div className="bg-[#0D1117] p-2.5 rounded-lg border border-slate-800/80">
-                                  <div className="text-[11px] text-slate-400 uppercase font-mono tracking-wider">Category</div>
-                                  <div className="font-mono text-slate-200 text-xs sm:text-sm mt-0.5 truncate">
-                                    {p.category || 'General'}
-                                  </div>
-                                </div>
-
-                                <div className="bg-[#0D1117] p-2.5 rounded-lg border border-slate-800/80">
-                                  <div className="text-[11px] text-slate-400 uppercase font-mono tracking-wider">Sold Stock</div>
-                                  <div className="font-mono font-bold text-emerald-400 text-xs sm:text-sm mt-0.5">
-                                    {row.hasClosingEntered
-                                      ? row.isValue
-                                        ? `KES ${row.salesUnits.toLocaleString()}`
-                                        : `${row.salesUnits} units`
-                                      : '0 (pending closing)'}
-                                  </div>
-                                </div>
-
-                                <div className="bg-[#0D1117] p-2.5 rounded-lg border border-slate-800/80">
-                                  <div className="text-[11px] text-slate-400 uppercase font-mono tracking-wider">
-                                    {row.addedStock < 0 ? 'Stock Reduced' : 'Stock Added'}
-                                  </div>
-                                  <div className={`font-mono font-bold text-xs sm:text-sm mt-0.5 ${row.addedStock > 0 ? 'text-emerald-400' : row.addedStock < 0 ? 'text-rose-400' : 'text-slate-500'}`}>
-                                    {row.addedStock > 0 ? `+${row.addedStock}` : row.addedStock < 0 ? row.addedStock : '0'} {row.isValue ? 'KES' : 'units'}
-                                  </div>
-                                  {row.adjustmentNote && (
-                                    <div className="text-[11px] text-amber-300 font-sans mt-1 truncate" title={row.adjustmentNote}>
-                                      Note: {row.adjustmentNote}
-                                    </div>
-                                  )}
-                                </div>
-
-                                {row.ssi?.ownerAdjustments !== undefined && row.ssi.ownerAdjustments !== 0 && (
-                                  <div className="bg-[#0D1117] p-2.5 rounded-lg border border-slate-800/80 col-span-2 sm:col-span-4 flex items-center justify-between">
-                                    <span className="text-[11px] text-slate-400 uppercase font-mono">Owner Audit Adjust</span>
-                                    <span className="font-mono font-bold text-amber-400 text-xs sm:text-sm">
-                                      {row.ssi.ownerAdjustments > 0 ? `+${row.ssi.ownerAdjustments}` : row.ssi.ownerAdjustments}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
                     </React.Fragment>
                   );
                 })
@@ -1357,6 +1202,81 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
       </div>
     </div>
   )}
+
+   {/* MODAL: ADJUST OPENING STOCK FOR ACTIVE SHIFT */}
+   {editOpeningProductId && activeShift && (() => {
+     const row = rowDataList.find((r) => r.product.id === editOpeningProductId);
+     if (!row) return null;
+     return (
+       <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+         <div className="w-full max-w-sm bg-[#111622] border border-[#1E2638] rounded-2xl p-5 shadow-xl space-y-4">
+           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+             <div>
+               <h3 className="text-sm font-bold text-white tracking-tight">Adjust Opening Stock</h3>
+               <p className="text-xs text-slate-400 font-sans mt-0.5">{row.product.name}</p>
+             </div>
+             <button
+               type="button"
+               onClick={() => setEditOpeningProductId(null)}
+               className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+             >
+               <X className="w-4 h-4" />
+             </button>
+           </div>
+
+           <div className="space-y-3">
+             <div>
+               <label className="block text-xs font-semibold text-slate-300 mb-1">
+                 Opening Count
+               </label>
+               <input
+                 type="number"
+                 step="any"
+                 min="0"
+                 autoFocus
+                 value={editOpeningInput}
+                 onChange={(e) => setEditOpeningInput(e.target.value)}
+                 className="w-full bg-[#0D1117] border border-slate-800 rounded-xl px-3 py-2.5 text-base font-mono font-bold text-white focus:outline-none focus:border-slate-600"
+               />
+               <p className="text-[10px] text-slate-500 mt-1">
+                 Adjusting this updates the starting count for this shift without ending or resetting the shift.
+               </p>
+             </div>
+           </div>
+
+           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+             <button
+               type="button"
+               onClick={() => setEditOpeningProductId(null)}
+               className="py-1.5 px-3 rounded-xl text-xs font-medium text-slate-400 hover:text-white transition-colors cursor-pointer"
+             >
+               Cancel
+             </button>
+             <button
+               type="button"
+               onClick={() => {
+                 const val = parseFloat(editOpeningInput);
+                 if (isNaN(val) || val < 0) {
+                   showToast('Please enter a valid opening count.');
+                   return;
+                 }
+                 store.updateShiftStockItemRow({
+                   shiftId: activeShift.id,
+                   productId: row.product.id,
+                   openingPhysicalCount: val,
+                 });
+                 setEditOpeningProductId(null);
+                 showToast(`Opening stock for ${row.product.name} updated to ${val}.`);
+               }}
+               className="py-1.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors cursor-pointer shadow-md shadow-emerald-950/40"
+             >
+               Save
+             </button>
+           </div>
+         </div>
+       </div>
+     );
+   })()}
 
     {/* Weight & Keg Scale Valuation Modal */}
  <WeightCalculatorModal
