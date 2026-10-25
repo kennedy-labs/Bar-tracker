@@ -4,6 +4,7 @@ import { store } from '../../services/store';
 import { ShiftExpenseModal } from './ShiftExpenseModal';
 import { ShiftOpeningWizard } from './ShiftOpeningWizard';
 import { IncomingTransferBanner } from '../common/IncomingTransferBanner';
+import { intelligentMatch } from '../../utils/searchMatcher';
 import {
  Search,
  CheckCircle2,
@@ -51,6 +52,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  const [expenseDesc, setExpenseDesc] = useState<string>('');
  const [expenseAmount, setExpenseAmount] = useState<string>('');
  const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
+ const syncTimeoutRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Phone back-button integration: undoes modal opening & returns to counter sheet
   useBackHandler(showExpenseModal, () => setShowExpenseModal(false), 'worker-expense-modal');
@@ -217,9 +219,9 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  return Array.from(set).sort();
  }, [products]);
 
- // Computed row data for each beverage
+ // Computed row data for each beverage (sorted alphabetically)
  const rowDataList = useMemo(() => {
-   return products.map((product) => {
+   const list = products.map((product) => {
      const ssi = shiftStockItems.find((s) => s.productId === product.id);
      const inv = inventory.find((i) => i.productId === product.id);
 
@@ -227,11 +229,13 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
        (product.isMeasured && product.measurementType === 'VALUE') ||
        product.unit === 'VALUE_KES';
 
-     // 1. Opening stock:
-      // When shift is active, ssi.openingPhysicalCount is the authoritative count.
-      // Owner stock adjustments directly update this count, keeping attendant in lockstep.
+     // 1. Opening stock: check active typed cellInputStrings first, then ssi / inventory
       let openingStock = 0;
-      if (activeShift) {
+      const rawOpening = cellInputStrings[product.id]?.opening;
+      if (rawOpening !== undefined && rawOpening.trim() !== '') {
+        const parsed = parseFloat(rawOpening.trim());
+        openingStock = !isNaN(parsed) ? Math.max(0, parsed) : 0;
+      } else if (activeShift) {
         openingStock = ssi?.openingPhysicalCount !== undefined
           ? ssi.openingPhysicalCount
           : (inv ? Number(inv.quantityOnHand || 0) : 0);
@@ -239,8 +243,20 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
         openingStock = inv ? Number(inv.quantityOnHand || 0) : 0;
       }
 
-      // 2. Added stock & owner adjustments
-      const addedStock = ssi?.additions !== undefined ? ssi.additions : 0;
+      // 2. Added stock: real-time live from cell inputs
+      let addedStock = 0;
+      const rawAdded = cellInputStrings[product.id]?.added;
+      if (rawAdded !== undefined) {
+        const trimmedAdded = rawAdded.trim();
+        if (trimmedAdded === '' || trimmedAdded === '-') {
+          addedStock = 0;
+        } else {
+          const parsed = parseFloat(trimmedAdded);
+          addedStock = !isNaN(parsed) ? parsed : 0;
+        }
+      } else {
+        addedStock = ssi?.additions !== undefined ? ssi.additions : 0;
+      }
       const ownerAdjustments = ssi?.ownerAdjustments !== undefined ? ssi.ownerAdjustments : 0;
 
       // 3. Total stock = Opening + Added + TransfersIn - TransfersOut - Damages + OwnerAdjustments
@@ -252,10 +268,22 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
         Number(ssi?.damages || 0) +
         Number(ownerAdjustments || 0);
 
-      // 4. Closing stock
-      const closingStock = ssi?.closingPhysicalCount !== undefined
-        ? ssi.closingPhysicalCount
-        : undefined;
+      // 4. Closing stock: real-time live from cell inputs
+      let closingStock: number | undefined = undefined;
+      const rawClosing = cellInputStrings[product.id]?.closing;
+      if (rawClosing !== undefined) {
+        const trimmedClosing = rawClosing.trim();
+        if (trimmedClosing !== '') {
+          const parsed = parseFloat(trimmedClosing);
+          if (!isNaN(parsed)) {
+            closingStock = Math.max(0, parsed);
+          }
+        }
+      } else {
+        closingStock = ssi?.closingPhysicalCount !== undefined
+          ? ssi.closingPhysicalCount
+          : undefined;
+      }
 
      // 5. Sales = Total - Closing (if entered)
      let salesUnits = 0;
@@ -293,7 +321,8 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
        adjustmentNote: ssi?.adjustmentNote,
      };
    });
- }, [products, shiftStockItems, inventory, activeShift]);
+   return list.sort((a, b) => a.product.name.localeCompare(b.product.name, undefined, { sensitivity: 'base' }));
+ }, [products, shiftStockItems, inventory, activeShift, cellInputStrings]);
 
  // Selected row for soft missing details modal
 
@@ -301,9 +330,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  const filteredRows = useMemo(() => {
  return rowDataList.filter((row) => {
  const p = row.product;
- const matchesSearch =
- p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
- p.category.toLowerCase().includes(searchQuery.toLowerCase());
+ const matchesSearch = intelligentMatch(searchQuery, p.name);
  if (!matchesSearch) return false;
 
  if (selectedCategory !== 'ALL' && p.category.toLowerCase() !== selectedCategory.toLowerCase()) {
@@ -340,13 +367,13 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
    };
  }, [rowDataList]);
 
-  // Handle cell edit commit to store & Neon
+  // Handle cell edit commit to store & Neon (Live calculation + background auto-sync)
   const handleCellChange = (
     productId: string,
     field: 'opening' | 'added' | 'closing',
     valueStr: string
   ) => {
-    // Only buffer input locally while attendant is actively typing
+    // 1. Immediately update state so all math (Total, Sold, Amount, Footer) recalculates live on every keystroke
     setCellInputStrings((prev) => ({
       ...prev,
       [productId]: {
@@ -354,9 +381,61 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
         [field]: valueStr,
       },
     }));
+
+    if (!activeShift) return;
+
+    // 2. Debounce persist to store so changes are saved in the background even before blurring
+    const syncKey = `${productId}_${field}`;
+    if (syncTimeoutRef.current[syncKey]) {
+      clearTimeout(syncTimeoutRef.current[syncKey]);
+    }
+
+    syncTimeoutRef.current[syncKey] = setTimeout(() => {
+      const trimmed = valueStr.trim();
+      let num: number | undefined;
+      if (trimmed === '' || trimmed === '-') {
+        num = field === 'added' ? 0 : undefined;
+      } else {
+        const parsed = parseFloat(trimmed);
+        if (!isNaN(parsed)) {
+          num = field === 'added' ? parsed : Math.max(0, parsed);
+        }
+      }
+
+      if (field === 'opening') {
+        store.updateShiftStockItemRow({
+          shiftId: activeShift.id,
+          productId,
+          openingPhysicalCount: num !== undefined ? num : 0,
+        });
+      } else if (field === 'added') {
+        store.updateShiftStockItemRow({
+          shiftId: activeShift.id,
+          productId,
+          additions: num !== undefined ? num : 0,
+        });
+        if (num !== undefined && num < 0) {
+          setReductionNoteProductId(productId);
+        } else if (num !== undefined && num >= 0 && reductionNoteProductId === productId) {
+          setReductionNoteProductId(null);
+        }
+      } else if (field === 'closing') {
+        store.updateShiftStockItemRow({
+          shiftId: activeShift.id,
+          productId,
+          closingPhysicalCount: num,
+        });
+      }
+    }, 600);
   };
 
   const handleCellBlur = (productId: string, field: 'opening' | 'added' | 'closing') => {
+    const syncKey = `${productId}_${field}`;
+    if (syncTimeoutRef.current[syncKey]) {
+      clearTimeout(syncTimeoutRef.current[syncKey]);
+      delete syncTimeoutRef.current[syncKey];
+    }
+
     const rawVal = cellInputStrings[productId]?.[field];
     if (rawVal === undefined) return;
 
@@ -547,45 +626,18 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
 
  {/* 2. Quiet 4-Metric Summary Strip */}
 
-   {/* 3. Filter Categories Bar & Subtle Floating Search */}
-  <div className="flex items-center justify-between gap-3 bg-[#111622] border border-[#1E2638] rounded-2xl p-3">
-  <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
-  <button
-  onClick={() => setSelectedCategory('ALL')}
-  className={`px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-  selectedCategory === 'ALL'
-  ? 'bg-[#161F30] text-white font-semibold'
-  : 'text-slate-400 hover:text-slate-200'
-  }`}
-  >
-  All ({products.length})
-  </button>
-  {categories.map((cat) => (
-  <button
-  key={cat}
-  onClick={() => setSelectedCategory(cat)}
-  className={`px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-  selectedCategory.toLowerCase() === cat.toLowerCase()
-  ? 'bg-[#161F30] text-white font-semibold'
-  : 'text-slate-400 hover:text-slate-200'
-  }`}
-  >
-  {cat}
-  </button>
-  ))}
-  </div>
-
   {/* Subtle Floating Search Bar */}
-  <div className="relative w-40 sm:w-56 shrink-0">
-  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-  <input
-  type="text"
-  placeholder="Search drink..."
-  value={searchQuery}
-  onChange={(e) => setSearchQuery(e.target.value)}
-  className="w-full bg-[#0D1117] border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-slate-700 shadow-sm"
-  />
-  </div>
+  <div className="flex justify-end">
+    <div className="relative w-44 sm:w-60">
+      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+      <input
+        type="text"
+        placeholder="Search drink..."
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        className="w-full bg-[#111622] border border-[#1E2638] rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-slate-700 shadow-sm"
+      />
+    </div>
   </div>
 
       {/* 4. THE CORE STOCK LEDGER TABLE (THE "ONE LIST") */}

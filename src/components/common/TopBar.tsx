@@ -113,8 +113,8 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         {/* Zone 3: Read-Only Owner Name & 3-Dot Settings Menu */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* PWA Install Button (Header) - Visible on mobile & desktop until installed */}
-          <PWAInstallButton compact />
+          {/* PWA Install Button (Header) - Hidden on attendant counter page */}
+          {isOwner && activeTab !== 'counter' && <PWAInstallButton compact />}
 
           {/* Interactive Profile Icon & Owner/User Name Label */}
           {currentUser && (

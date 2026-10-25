@@ -24,11 +24,15 @@ export const WeightCalculatorModal: React.FC<WeightCalculatorModalProps> = ({
 
   const [selectedProductId, setSelectedProductId] = useState<string>(initialProductId || (weightProducts[0]?.id || 'custom'));
   const [tankName, setTankName] = useState<string>('Keg Draft Tank');
-  const [fullWeightKg, setFullWeightKg] = useState<number>(60);
+  const [fullWeightStr, setFullWeightStr] = useState<string>('60');
   const [tareWeightKg, setTareWeightKg] = useState<number>(0);
-  const [pricePerKg, setPricePerKg] = useState<number>(150);
-  const [currentWeightKg, setCurrentWeightKg] = useState<number>(31);
+  const [pricePerKgStr, setPricePerKgStr] = useState<string>('150');
+  const [currentWeightStr, setCurrentWeightStr] = useState<string>('31');
   const [appliedMessage, setAppliedMessage] = useState<string | null>(null);
+
+  const fullWeightKg = parseFloat(fullWeightStr) || 0;
+  const pricePerKg = parseFloat(pricePerKgStr) || 0;
+  const currentWeightKg = parseFloat(currentWeightStr) || 0;
 
   useEffect(() => {
     if (initialProductId) {
@@ -41,12 +45,12 @@ export const WeightCalculatorModal: React.FC<WeightCalculatorModalProps> = ({
       const prod = products.find((p) => p.id === selectedProductId);
       if (prod) {
         setTankName(prod.name);
-        setFullWeightKg(prod.fullWeightKg || 60);
+        setFullWeightStr(String(prod.fullWeightKg || 60));
         setTareWeightKg(prod.emptyWeightKg || 0);
-        setPricePerKg(prod.pricePerKg || prod.sellingPrice || 150);
+        setPricePerKgStr(String(prod.pricePerKg || prod.sellingPrice || 150));
         const inv = store.getInventory().find((i) => i.productId === prod.id);
         if (inv && inv.quantityOnHand !== undefined) {
-          setCurrentWeightKg(inv.quantityOnHand);
+          setCurrentWeightStr(String(inv.quantityOnHand));
         }
       }
     }
@@ -152,10 +156,10 @@ export const WeightCalculatorModal: React.FC<WeightCalculatorModalProps> = ({
                 onClick={() => {
                   setSelectedProductId('custom');
                   setTankName(pr.name);
-                  setFullWeightKg(pr.fullWeightKg);
+                  setFullWeightStr(String(pr.fullWeightKg));
                   setTareWeightKg(pr.emptyWeightKg);
-                  setPricePerKg(pr.pricePerKg);
-                  setCurrentWeightKg(31);
+                  setPricePerKgStr(String(pr.pricePerKg));
+                  setCurrentWeightStr('31');
                 }}
                 className="p-2 rounded-xl bg-[#0E1420] hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-600 text-left transition-colors cursor-pointer"
               >
@@ -178,8 +182,8 @@ export const WeightCalculatorModal: React.FC<WeightCalculatorModalProps> = ({
               type="number"
               step="any"
               min="1"
-              value={fullWeightKg}
-              onChange={(e) => setFullWeightKg(parseFloat(e.target.value) || 0)}
+              value={fullWeightStr}
+              onChange={(e) => setFullWeightStr(e.target.value)}
               className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono font-bold text-white focus:outline-none focus:border-cyan-500"
             />
           </div>
@@ -192,8 +196,8 @@ export const WeightCalculatorModal: React.FC<WeightCalculatorModalProps> = ({
               type="number"
               step="any"
               min="0"
-              value={pricePerKg}
-              onChange={(e) => setPricePerKg(parseFloat(e.target.value) || 0)}
+              value={pricePerKgStr}
+              onChange={(e) => setPricePerKgStr(e.target.value)}
               className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono font-bold text-white focus:outline-none focus:border-cyan-500"
             />
           </div>
@@ -206,8 +210,8 @@ export const WeightCalculatorModal: React.FC<WeightCalculatorModalProps> = ({
               type="number"
               step="any"
               min="0"
-              value={currentWeightKg}
-              onChange={(e) => setCurrentWeightKg(Math.max(0, parseFloat(e.target.value) || 0))}
+              value={currentWeightStr}
+              onChange={(e) => setCurrentWeightStr(e.target.value)}
               className="w-full bg-[#0E1420] border border-cyan-500 rounded-xl px-3 py-2 text-xs font-mono font-bold text-white focus:outline-none focus:border-cyan-400"
             />
           </div>
@@ -227,7 +231,7 @@ export const WeightCalculatorModal: React.FC<WeightCalculatorModalProps> = ({
             <button
               key={item.label}
               type="button"
-              onClick={() => setCurrentWeightKg(item.val)}
+              onClick={() => setCurrentWeightStr(String(item.val))}
               className={`px-2.5 py-1 rounded-lg text-xs font-mono font-semibold transition-colors cursor-pointer ${
                 currentWeightKg === item.val
                   ? 'bg-cyan-500 text-slate-950 font-bold'

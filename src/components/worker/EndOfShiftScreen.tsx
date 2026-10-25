@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Shift, ShiftStockItem, Expense } from '../../types';
 import { store } from '../../services/store';
+import { intelligentMatch } from '../../utils/searchMatcher';
 import {
  ClipboardCheck,
  CheckCircle2,
@@ -256,7 +257,7 @@ Generated via Bar Track System`;
  // -------------------------------------------------------------
  if (activeShift) {
  const filteredItems = shiftStockItems
- .filter((item) => item.productName.toLowerCase().includes(searchQuery.toLowerCase()))
+ .filter((item) => intelligentMatch(searchQuery, item.productName))
  .sort((a, b) => a.productName.localeCompare(b.productName));
 
  return (
