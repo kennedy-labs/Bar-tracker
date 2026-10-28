@@ -83,9 +83,9 @@ async function startServer() {
     return isNaN(num) ? 0 : num;
   }
 
-  // Vite middleware for development
+  // Vite middleware for development (HMR disabled in container environment)
   const vite = await createViteServer({
-    server: { middlewareMode: true },
+    server: { middlewareMode: true, hmr: false },
     appType: 'spa',
   });
 

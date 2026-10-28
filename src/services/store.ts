@@ -102,6 +102,12 @@ class StoreService {
     return this.localModifications.get(id);
   }
 
+  public isLocallyModified(id: string, windowMs = 45000): boolean {
+    if (!id) return false;
+    const modTime = this.localModifications.get(id);
+    return !!(modTime && Date.now() - modTime < windowMs);
+  }
+
   // Step 4: Timestamp-Based Conflict Resolution Helper
   // Compares incoming cloud changes with local records using updatedAt timestamps and in-flight modification locks
   public shouldAcceptCloudChange(localDoc: any, incomingDoc: any): boolean {
@@ -109,12 +115,9 @@ class StoreService {
     if (!incomingDoc) return false;
 
     const docId = incomingDoc.id || localDoc.id;
-    if (docId && this.localModifications.has(docId)) {
-      const modTime = this.localModifications.get(docId)!;
-      // Protect recent local in-flight edits for 6 seconds
-      if (Date.now() - modTime < 6000) {
-        return false;
-      }
+    if (docId && this.isLocallyModified(docId, 45000)) {
+      // Protect recent local in-flight edits for 45 seconds against stale cloud echoes
+      return false;
     }
 
     const incomingTs =
@@ -613,9 +616,29 @@ class StoreService {
           const incomingDocs = snapshot.docs.map((d) => d.data() as any);
           const currentLocal = this.get<any[]>(key, []);
           const otherBizDocs = currentLocal.filter((item) => item && item.businessId && item.businessId !== bizId);
+          const currentBizDocs = currentLocal.filter((item) => !item.businessId || item.businessId === bizId);
+
+          const mergedMap = new Map<string, any>();
+          incomingDocs.forEach((doc) => {
+            if (doc && doc.id) mergedMap.set(doc.id, doc);
+          });
+
+          // Protect local changes against stale cloud snapshots
+          currentBizDocs.forEach((localDoc) => {
+            if (localDoc && localDoc.id) {
+              const incoming = mergedMap.get(localDoc.id);
+              if (incoming) {
+                if (!this.shouldAcceptCloudChange(localDoc, incoming)) {
+                  mergedMap.set(localDoc.id, localDoc);
+                }
+              } else if (this.isLocallyModified(localDoc.id, 45000)) {
+                mergedMap.set(localDoc.id, localDoc);
+              }
+            }
+          });
 
           this.isRemoteMutating = true;
-          this.set(key, [...otherBizDocs, ...incomingDocs], false);
+          this.set(key, [...otherBizDocs, ...Array.from(mergedMap.values())], false);
           this.isRemoteMutating = false;
           this.notifySubscribersOnly();
         },
@@ -653,9 +676,33 @@ class StoreService {
     const unsubInv = onSnapshot(
       invQ,
       (snapshot) => {
-        const items = snapshot.docs.map((d) => d.data() as InventoryItem);
+        const incomingItems = snapshot.docs.map((d) => d.data() as InventoryItem);
         const currentMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
-        currentMap[bizId] = items;
+        const localItems = currentMap[bizId] || [];
+
+        const mergedMap = new Map<string, InventoryItem>();
+        incomingItems.forEach((item) => {
+          if (item) {
+            const id = item.id || `inv-${bizId}-${item.productId}`;
+            mergedMap.set(id, { ...item, id });
+          }
+        });
+
+        localItems.forEach((localItem) => {
+          if (localItem) {
+            const id = localItem.id || `inv-${bizId}-${localItem.productId}`;
+            const incoming = mergedMap.get(id);
+            if (incoming) {
+              if (!this.shouldAcceptCloudChange(localItem, incoming)) {
+                mergedMap.set(id, localItem);
+              }
+            } else if (this.isLocallyModified(id, 45000)) {
+              mergedMap.set(id, localItem);
+            }
+          }
+        });
+
+        currentMap[bizId] = Array.from(mergedMap.values());
         this.isRemoteMutating = true;
         this.set(STORAGE_KEYS.INVENTORY_MAP, currentMap, false);
         this.isRemoteMutating = false;
@@ -2434,17 +2481,27 @@ class StoreService {
 
     const nowIso = new Date().toISOString();
     (ssi as any).updatedAt = nowIso;
+    const currentBizId = this.getCurrentBusinessId();
+    if (currentBizId && !ssi.businessId) {
+      ssi.businessId = currentBizId;
+    }
     this.recordLocalModification(ssi.id);
-    this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
+    this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs, false);
     this.saveToFirestore(FIRESTORE_COLLECTIONS.SHIFT_STOCK_ITEMS, ssi.id, ssi);
 
-    // Keep inventory in sync
+    // Keep inventory in sync for this specific product only
     const currentInventory = this.getInventory();
     const inv = currentInventory.find((i) => i.productId === params.productId);
     if (inv) {
       inv.quantityOnHand = ssi.closingPhysicalCount !== undefined ? ssi.closingPhysicalCount : available;
-      inv.updatedAt = new Date().toISOString();
-      this.saveCurrentInventory(currentInventory);
+      inv.updatedAt = nowIso;
+      const invId = inv.id || `inv-${currentBizId}-${inv.productId}`;
+      inv.id = invId;
+      this.recordLocalModification(invId);
+      const invMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
+      invMap[currentBizId] = currentInventory;
+      this.set(STORAGE_KEYS.INVENTORY_MAP, invMap, false);
+      this.saveToFirestore(FIRESTORE_COLLECTIONS.INVENTORY, invId, { ...inv, id: invId, businessId: currentBizId });
     }
 
     // Keep StockAdditionRecord in sync if additions were edited or note was added
@@ -2453,6 +2510,7 @@ class StoreService {
       const additions = this.get<StockAdditionRecord[]>(STORAGE_KEYS.STOCK_ADDITIONS, []);
       const recIdx = additions.findIndex((a) => a.shiftId === params.shiftId && a.productId === params.productId);
       const currentAdditions = params.additions !== undefined ? params.additions : (ssi.additions || 0);
+      let targetRecord: StockAdditionRecord | null = null;
       if (currentAdditions !== 0) {
         const isReduction = currentAdditions < 0;
         if (recIdx !== -1) {
@@ -2461,7 +2519,8 @@ class StoreService {
           if (params.adjustmentNote !== undefined) {
             additions[recIdx].reason = params.adjustmentNote;
           }
-          additions[recIdx].timestamp = new Date().toISOString();
+          additions[recIdx].timestamp = nowIso;
+          targetRecord = additions[recIdx];
         } else {
           const newRecord: StockAdditionRecord = {
             id: `add-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -2473,23 +2532,101 @@ class StoreService {
             adjustmentType: isReduction ? 'REDUCE' : 'ADD',
             reason: params.adjustmentNote,
             workerName: shift ? shift.workerName : 'Attendant',
-            timestamp: new Date().toISOString(),
+            timestamp: nowIso,
             status: 'SAVED_LOCKED',
             isImmutable: true,
-            savedAt: new Date().toISOString(),
+            savedAt: nowIso,
             savedBy: shift ? shift.workerName : 'Attendant',
           };
           additions.unshift(newRecord);
+          targetRecord = newRecord;
         }
       } else if (currentAdditions === 0 && recIdx !== -1) {
         additions.splice(recIdx, 1);
       }
-      this.set(STORAGE_KEYS.STOCK_ADDITIONS, additions);
+      this.set(STORAGE_KEYS.STOCK_ADDITIONS, additions, false);
+      if (targetRecord) {
+        this.saveToFirestore(FIRESTORE_COLLECTIONS.STOCK_ADDITIONS, targetRecord.id, targetRecord);
+      }
     }
 
     this.enqueueOfflineAction('updateShiftStockItemRow', params);
     this.notify();
-    this.triggerCloudSync();
+  }
+
+  public bulkUpdateShiftClosingStock(
+    shiftId: string,
+    updates: Array<{ productId: string; closingPhysicalCount: number }>
+  ): void {
+    if (!updates || updates.length === 0) return;
+    const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
+    const products = this.getProducts();
+    const currentInventory = this.getInventory();
+    const currentBizId = this.getCurrentBusinessId();
+    const nowIso = new Date().toISOString();
+
+    const updatedSSIs: ShiftStockItem[] = [];
+    const updatedInvs: InventoryItem[] = [];
+
+    updates.forEach(({ productId, closingPhysicalCount }) => {
+      const product = products.find((p) => p.id === productId);
+      if (!product) return;
+
+      let ssi = allSSIs.find((item) => item.shiftId === shiftId && item.productId === productId);
+      const inv = currentInventory.find((i) => i.productId === productId);
+      const defaultOpen = inv ? Number(inv.quantityOnHand || 0) : 0;
+      const validClosing = Math.max(0, closingPhysicalCount);
+
+      if (!ssi) {
+        ssi = this.buildShiftStockItem(shiftId, product, defaultOpen, {
+          closingPhysicalCount: validClosing,
+        });
+        allSSIs.push(ssi);
+      } else {
+        ssi.closingPhysicalCount = validClosing;
+      }
+
+      const available =
+        Number(ssi.openingPhysicalCount || 0) +
+        Number(ssi.additions || 0) +
+        Number(ssi.transfersIn || 0) -
+        Number(ssi.transfersOut || 0) -
+        Number(ssi.damages || 0) +
+        Number(ssi.ownerAdjustments || 0);
+
+      ssi.recordedSales = Math.round(Math.max(0, available - validClosing) * 100) / 100;
+      (ssi as any).updatedAt = nowIso;
+      if (currentBizId && !ssi.businessId) {
+        ssi.businessId = currentBizId;
+      }
+      this.recordLocalModification(ssi.id);
+      updatedSSIs.push(ssi);
+
+      if (inv) {
+        inv.quantityOnHand = validClosing;
+        inv.updatedAt = nowIso;
+        const invId = inv.id || `inv-${currentBizId}-${inv.productId}`;
+        inv.id = invId;
+        this.recordLocalModification(invId);
+        updatedInvs.push(inv);
+      }
+    });
+
+    this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs, false);
+    const invMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
+    invMap[currentBizId] = currentInventory;
+    this.set(STORAGE_KEYS.INVENTORY_MAP, invMap, false);
+
+    updatedSSIs.forEach((ssi) => {
+      this.saveToFirestore(FIRESTORE_COLLECTIONS.SHIFT_STOCK_ITEMS, ssi.id, ssi);
+    });
+    updatedInvs.forEach((inv) => {
+      const invId = inv.id || `inv-${currentBizId}-${inv.productId}`;
+      this.saveToFirestore(FIRESTORE_COLLECTIONS.INVENTORY, invId, { ...inv, id: invId, businessId: currentBizId });
+    });
+
+    this.enqueueOfflineAction('bulkUpdateShiftClosingStock', { shiftId, updates });
+    this.notify();
   }
 
   public batchUpdateShiftStockItems(

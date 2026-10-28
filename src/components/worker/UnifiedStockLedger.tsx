@@ -50,7 +50,6 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  const [expenseDesc, setExpenseDesc] = useState<string>('');
  const [expenseAmount, setExpenseAmount] = useState<string>('');
  const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
- const syncTimeoutRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Phone back-button integration: undoes modal opening & returns to counter sheet
   useBackHandler(showExpenseModal, () => setShowExpenseModal(false), 'worker-expense-modal');
@@ -123,6 +122,32 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  // Minimal subtle form state for optional stock reduction note
  const [reductionNoteProductId, setReductionNoteProductId] = useState<string | null>(null);
  const [noteInputStrings, setNoteInputStrings] = useState<Record<string, string>>({});
+
+ // Long-press state on Closing column header for autofilling unsold drinks
+ const [showAutofillClosing, setShowAutofillClosing] = useState<boolean>(false);
+ const closingHeaderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+ const closingHeaderTouchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+
+ useBackHandler(Boolean(showAutofillClosing), () => setShowAutofillClosing(false), 'worker-autofill-closing');
+
+ const startClosingHeaderPress = () => {
+   if (closingHeaderTimerRef.current) clearTimeout(closingHeaderTimerRef.current);
+   closingHeaderTimerRef.current = setTimeout(() => {
+     try {
+       if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+         navigator.vibrate?.(40);
+       }
+     } catch (_) {}
+     setShowAutofillClosing(true);
+   }, 500);
+ };
+
+ const cancelClosingHeaderPress = () => {
+   if (closingHeaderTimerRef.current) {
+     clearTimeout(closingHeaderTimerRef.current);
+     closingHeaderTimerRef.current = null;
+   }
+ };
 
   const [, setStoreTick] = useState<number>(0);
 
@@ -338,6 +363,36 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  });
  }, [rowDataList, searchQuery, selectedCategory]);
 
+ const unfilledRows = useMemo(() => {
+   return rowDataList.filter((r) => !r.hasClosingEntered);
+ }, [rowDataList]);
+
+ const handleAutofillUnsold = () => {
+   if (!activeShift) return;
+   setShowAutofillClosing(false);
+
+   const itemsToUpdate = rowDataList.filter((r) => !r.hasClosingEntered);
+   if (itemsToUpdate.length === 0) return;
+
+   const updates: Array<{ productId: string; closingPhysicalCount: number }> = [];
+   const nextStrings = { ...cellInputStrings };
+
+   itemsToUpdate.forEach((row) => {
+     const val = row.totalStock;
+     updates.push({
+       productId: row.product.id,
+       closingPhysicalCount: val,
+     });
+     nextStrings[row.product.id] = {
+       ...nextStrings[row.product.id],
+       closing: String(val),
+     };
+   });
+
+   setCellInputStrings(nextStrings);
+   store.bulkUpdateShiftClosingStock(activeShift.id, updates);
+ };
+
  // Grand summary totals
  const summaryTotals = useMemo(() => {
    let totalOpening = 0;
@@ -365,13 +420,13 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
    };
  }, [rowDataList]);
 
-  // Handle cell edit commit to store & Neon (Live calculation + background auto-sync)
+  // Handle cell edit - instant local keystrokes, no premature network sync
   const handleCellChange = (
     productId: string,
     field: 'opening' | 'added' | 'closing',
     valueStr: string
   ) => {
-    // 1. Immediately update state so all math (Total, Sold, Amount, Footer) recalculates live on every keystroke
+    // Pure local update: immediate math (Total, Sold, Amount, Footer) on every keystroke with 0ms lag
     setCellInputStrings((prev) => ({
       ...prev,
       [productId]: {
@@ -379,118 +434,78 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
         [field]: valueStr,
       },
     }));
-
-    if (!activeShift) return;
-
-    // 2. Debounce persist to store so changes are saved in the background even before blurring
-    const syncKey = `${productId}_${field}`;
-    if (syncTimeoutRef.current[syncKey]) {
-      clearTimeout(syncTimeoutRef.current[syncKey]);
-    }
-
-    syncTimeoutRef.current[syncKey] = setTimeout(() => {
-      const trimmed = valueStr.trim();
-      let num: number | undefined;
-      if (trimmed === '' || trimmed === '-') {
-        num = field === 'added' ? 0 : undefined;
-      } else {
-        const parsed = parseFloat(trimmed);
-        if (!isNaN(parsed)) {
-          num = field === 'added' ? parsed : Math.max(0, parsed);
-        }
-      }
-
-      if (field === 'opening') {
-        store.updateShiftStockItemRow({
-          shiftId: activeShift.id,
-          productId,
-          openingPhysicalCount: num !== undefined ? num : 0,
-        });
-      } else if (field === 'added') {
-        store.updateShiftStockItemRow({
-          shiftId: activeShift.id,
-          productId,
-          additions: num !== undefined ? num : 0,
-        });
-        if (num !== undefined && num < 0) {
-          setReductionNoteProductId(productId);
-        } else if (num !== undefined && num >= 0 && reductionNoteProductId === productId) {
-          setReductionNoteProductId(null);
-        }
-      } else if (field === 'closing') {
-        store.updateShiftStockItemRow({
-          shiftId: activeShift.id,
-          productId,
-          closingPhysicalCount: num,
-        });
-      }
-    }, 600);
   };
 
   const handleCellBlur = (productId: string, field: 'opening' | 'added' | 'closing') => {
-    const syncKey = `${productId}_${field}`;
-    if (syncTimeoutRef.current[syncKey]) {
-      clearTimeout(syncTimeoutRef.current[syncKey]);
-      delete syncTimeoutRef.current[syncKey];
-    }
-
     const rawVal = cellInputStrings[productId]?.[field];
     if (rawVal === undefined) return;
 
     const trimmed = rawVal.trim();
-   let num: number | undefined;
-   if (trimmed === '' || trimmed === '-') {
-     num = field === 'added' ? 0 : undefined;
-   } else {
-     const parsed = parseFloat(trimmed);
-     if (!isNaN(parsed)) {
-       num = field === 'added' ? parsed : Math.max(0, parsed);
-     }
-   }
+    let num: number | undefined;
+    if (trimmed === '' || trimmed === '-') {
+      num = field === 'added' ? 0 : undefined;
+    } else {
+      const parsed = parseFloat(trimmed);
+      if (!isNaN(parsed)) {
+        num = field === 'added' ? parsed : Math.max(0, parsed);
+      }
+    }
 
     if (!activeShift) {
       // In pre-shift shelf preview, keep the input buffered until the shift opens
       return;
     }
 
+    const ssi = shiftStockItems.find((s) => s.productId === productId);
+
     if (field === 'opening') {
-      store.updateShiftStockItemRow({
-        shiftId: activeShift.id,
-        productId,
-        openingPhysicalCount: num !== undefined ? num : 0,
-      });
+      const currentVal = ssi?.openingPhysicalCount ?? 0;
+      const targetVal = num !== undefined ? num : 0;
+      if (currentVal !== targetVal) {
+        store.updateShiftStockItemRow({
+          shiftId: activeShift.id,
+          productId,
+          openingPhysicalCount: targetVal,
+        });
+      }
     } else if (field === 'added') {
-      store.updateShiftStockItemRow({
-        shiftId: activeShift.id,
-        productId,
-        additions: num !== undefined ? num : 0,
-      });
-      // When attendant reduces stock (< 0), open minimal subtle prompt for optional note
-      if (num !== undefined && num < 0) {
-        setReductionNoteProductId(productId);
-      } else if (num !== undefined && num >= 0 && reductionNoteProductId === productId) {
-        setReductionNoteProductId(null);
+      const currentVal = ssi?.additions ?? 0;
+      const targetVal = num !== undefined ? num : 0;
+      if (currentVal !== targetVal) {
+        store.updateShiftStockItemRow({
+          shiftId: activeShift.id,
+          productId,
+          additions: targetVal,
+        });
+        // When attendant reduces stock (< 0), open minimal subtle prompt for optional note
+        if (targetVal < 0) {
+          setReductionNoteProductId(productId);
+        } else if (targetVal >= 0 && reductionNoteProductId === productId) {
+          setReductionNoteProductId(null);
+        }
       }
     } else if (field === 'closing') {
-      store.updateShiftStockItemRow({
-        shiftId: activeShift.id,
-        productId,
-        closingPhysicalCount: num,
-      });
+      const currentVal = ssi?.closingPhysicalCount;
+      if (currentVal !== num) {
+        store.updateShiftStockItemRow({
+          shiftId: activeShift.id,
+          productId,
+          closingPhysicalCount: num,
+        });
+      }
     }
 
-    // Clear input buffer once committed so store becomes single source of truth
+    // Retain the formatted value in cellInputStrings so the value never disappears or flickers
     setCellInputStrings((prev) => {
-      if (!prev[productId]) return prev;
-      const copy = { ...prev };
-      const prodCopy = { ...copy[productId] };
-      delete prodCopy[field];
-      if (Object.keys(prodCopy).length === 0) {
-        delete copy[productId];
-      } else {
-        copy[productId] = prodCopy;
-      }
-      return copy;
+      const current = prev[productId];
+      if (!current) return prev;
+      return {
+        ...prev,
+        [productId]: {
+          ...current,
+          [field]: num !== undefined ? String(num) : '',
+        },
+      };
     });
   };
 
@@ -658,8 +673,76 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                 <th className="py-3 px-2 sm:px-2.5 text-center font-bold text-emerald-400 w-20 sm:w-24">
                   <div className="leading-tight">Total</div>
                 </th>
-                <th className="py-3 px-2 sm:px-2.5 text-center font-bold text-slate-100 w-22 sm:w-26">
-                  <div className="leading-tight">Closing</div>
+                <th
+                  className="py-3 px-2 sm:px-2.5 text-center font-bold text-slate-100 w-22 sm:w-26 relative select-none cursor-pointer"
+                  title="Long press to autofill unsold drinks"
+                  onMouseDown={(e) => {
+                    if (e.button === 0) startClosingHeaderPress();
+                  }}
+                  onMouseUp={cancelClosingHeaderPress}
+                  onMouseLeave={cancelClosingHeaderPress}
+                  onTouchStart={(e) => {
+                    const t = e.touches[0];
+                    closingHeaderTouchStartPosRef.current = { x: t.clientX, y: t.clientY };
+                    startClosingHeaderPress();
+                  }}
+                  onTouchMove={(e) => {
+                    if (!closingHeaderTouchStartPosRef.current) return;
+                    const t = e.touches[0];
+                    const dx = Math.abs(t.clientX - closingHeaderTouchStartPosRef.current.x);
+                    const dy = Math.abs(t.clientY - closingHeaderTouchStartPosRef.current.y);
+                    if (dx > 10 || dy > 10) {
+                      cancelClosingHeaderPress();
+                    }
+                  }}
+                  onTouchEnd={cancelClosingHeaderPress}
+                  onTouchCancel={cancelClosingHeaderPress}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setShowAutofillClosing(true);
+                  }}
+                >
+                  <div className="leading-tight flex items-center justify-center gap-1">
+                    <span>Closing</span>
+                  </div>
+
+                  {showAutofillClosing && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40 cursor-default"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowAutofillClosing(false);
+                        }}
+                      />
+                      <div
+                        className="absolute z-50 top-full left-1/2 -translate-x-1/2 mt-1.5 bg-[#161D2B] border border-[#2B3855] rounded-lg shadow-2xl p-1 flex items-center gap-1.5 whitespace-nowrap animate-in fade-in zoom-in-95 duration-150"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAutofillUnsold();
+                          }}
+                          className="px-2.5 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded cursor-pointer transition-colors shadow-sm"
+                        >
+                          Autofill Unsold ({unfilledRows.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowAutofillClosing(false);
+                          }}
+                          className="px-1.5 py-1 text-xs text-slate-400 hover:text-white rounded hover:bg-slate-700/50 cursor-pointer"
+                          title="Cancel"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </th>
                 <th className="py-3 px-2 sm:px-2.5 text-center font-bold text-sky-400 w-20 sm:w-24">
                   <div className="leading-tight">Sold</div>
@@ -822,6 +905,11 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                             value={cellInputStrings[p.id]?.closing !== undefined ? cellInputStrings[p.id]?.closing : (row.closingStock !== undefined ? row.closingStock : '')}
                             onFocus={(e) => e.target.select()}
                             onBlur={() => handleCellBlur(p.id, 'closing')}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                (e.target as HTMLInputElement).blur();
+                              }
+                            }}
                             onChange={(e) => handleCellChange(p.id, 'closing', e.target.value)}
                             onTouchStart={(e) => e.stopPropagation()}
                             onContextMenu={(e) => e.stopPropagation()}
