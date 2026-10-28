@@ -127,19 +127,22 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  const [showAutofillClosing, setShowAutofillClosing] = useState<boolean>(false);
  const closingHeaderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
  const closingHeaderTouchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+ const closingHeaderLongPressedRef = useRef<boolean>(false);
 
  useBackHandler(Boolean(showAutofillClosing), () => setShowAutofillClosing(false), 'worker-autofill-closing');
 
  const startClosingHeaderPress = () => {
    if (closingHeaderTimerRef.current) clearTimeout(closingHeaderTimerRef.current);
+   closingHeaderLongPressedRef.current = false;
    closingHeaderTimerRef.current = setTimeout(() => {
+     closingHeaderLongPressedRef.current = true;
      try {
        if (typeof window !== 'undefined' && 'vibrate' in navigator) {
-         navigator.vibrate?.(40);
+         navigator.vibrate?.(50);
        }
      } catch (_) {}
      setShowAutofillClosing(true);
-   }, 500);
+   }, 400);
  };
 
  const cancelClosingHeaderPress = () => {
@@ -674,8 +677,17 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                   <div className="leading-tight">Total</div>
                 </th>
                 <th
-                  className="py-3 px-2 sm:px-2.5 text-center font-bold text-slate-100 w-22 sm:w-26 relative select-none cursor-pointer"
-                  title="Long press to autofill unsold drinks"
+                  className="py-3 px-2 sm:px-2.5 text-center font-bold text-slate-100 w-22 sm:w-26 select-none cursor-pointer active:bg-slate-800/60 transition-colors"
+                  style={{
+                    WebkitTouchCallout: 'none',
+                    WebkitUserSelect: 'none',
+                    userSelect: 'none',
+                    touchAction: 'manipulation',
+                  }}
+                  title="Tap or hold to autofill unsold drinks"
+                  onClick={() => {
+                    setShowAutofillClosing(true);
+                  }}
                   onMouseDown={(e) => {
                     if (e.button === 0) startClosingHeaderPress();
                   }}
@@ -691,11 +703,16 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                     const t = e.touches[0];
                     const dx = Math.abs(t.clientX - closingHeaderTouchStartPosRef.current.x);
                     const dy = Math.abs(t.clientY - closingHeaderTouchStartPosRef.current.y);
-                    if (dx > 10 || dy > 10) {
+                    if (dx > 25 || dy > 25) {
                       cancelClosingHeaderPress();
                     }
                   }}
-                  onTouchEnd={cancelClosingHeaderPress}
+                  onTouchEnd={(e) => {
+                    cancelClosingHeaderPress();
+                    if (closingHeaderLongPressedRef.current) {
+                      e.preventDefault();
+                    }
+                  }}
                   onTouchCancel={cancelClosingHeaderPress}
                   onContextMenu={(e) => {
                     e.preventDefault();
@@ -705,44 +722,6 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                   <div className="leading-tight flex items-center justify-center gap-1">
                     <span>Closing</span>
                   </div>
-
-                  {showAutofillClosing && (
-                    <>
-                      <div
-                        className="fixed inset-0 z-40 cursor-default"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShowAutofillClosing(false);
-                        }}
-                      />
-                      <div
-                        className="absolute z-50 top-full left-1/2 -translate-x-1/2 mt-1.5 bg-[#161D2B] border border-[#2B3855] rounded-lg shadow-2xl p-1 flex items-center gap-1.5 whitespace-nowrap animate-in fade-in zoom-in-95 duration-150"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAutofillUnsold();
-                          }}
-                          className="px-2.5 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded cursor-pointer transition-colors shadow-sm"
-                        >
-                          Autofill Unsold ({unfilledRows.length})
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowAutofillClosing(false);
-                          }}
-                          className="px-1.5 py-1 text-xs text-slate-400 hover:text-white rounded hover:bg-slate-700/50 cursor-pointer"
-                          title="Cancel"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </>
-                  )}
                 </th>
                 <th className="py-3 px-2 sm:px-2.5 text-center font-bold text-sky-400 w-20 sm:w-24">
                   <div className="leading-tight">Sold</div>
@@ -1233,6 +1212,64 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  </div>
 
  </div>
+ )}
+
+ {/* Phone-first Floating Autofill Action Pill */}
+ {showAutofillClosing && activeShift && (
+   <>
+     <div
+       className="fixed inset-0 z-40 bg-black/50 backdrop-blur-xs transition-opacity"
+       onClick={() => setShowAutofillClosing(false)}
+       onTouchEnd={(e) => {
+         e.preventDefault();
+         setShowAutofillClosing(false);
+       }}
+     />
+     <div className="fixed inset-x-0 bottom-6 z-50 flex justify-center px-4 pointer-events-none animate-in fade-in slide-in-from-bottom-4 duration-200">
+       <div
+         className="pointer-events-auto bg-[#161D2B] border border-[#2B3855] text-white rounded-2xl shadow-2xl p-3 flex items-center justify-between gap-3 max-w-sm w-full mx-auto"
+         onClick={(e) => e.stopPropagation()}
+       >
+         <div className="flex-1 min-w-0">
+           <div className="text-xs font-bold text-slate-100 truncate">Autofill Unsold Drinks</div>
+           <div className="text-[11px] text-slate-400">Match {unfilledRows.length} remaining drinks with total</div>
+         </div>
+         <div className="flex items-center gap-1.5 shrink-0">
+           <button
+             type="button"
+             onClick={(e) => {
+               e.stopPropagation();
+               handleAutofillUnsold();
+             }}
+             onTouchEnd={(e) => {
+               e.stopPropagation();
+               e.preventDefault();
+               handleAutofillUnsold();
+             }}
+             className="px-3.5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl cursor-pointer transition-all shadow-md active:scale-95"
+           >
+             Fill ({unfilledRows.length})
+           </button>
+           <button
+             type="button"
+             onClick={(e) => {
+               e.stopPropagation();
+               setShowAutofillClosing(false);
+             }}
+             onTouchEnd={(e) => {
+               e.stopPropagation();
+               e.preventDefault();
+               setShowAutofillClosing(false);
+             }}
+             className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 active:bg-slate-700 cursor-pointer"
+             title="Cancel"
+           >
+             ✕
+           </button>
+         </div>
+       </div>
+     </div>
+   </>
  )}
 
  {/* ============================================================ */}
