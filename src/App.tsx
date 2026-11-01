@@ -207,6 +207,7 @@ export default function App() {
         currentUser={currentUser}
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
+        onLogout={handleLogout}
         onSuccess={(updated) => {
           handleUpdateProfile(updated);
         }}

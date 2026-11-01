@@ -12,9 +12,11 @@ import {
   FileText,
   ArrowLeft,
   UserPlus,
+  DollarSign,
 } from 'lucide-react';
 import { BusinessIdentityBadge } from './BusinessIdentityBadge';
 import { EditProfileModal } from './EditProfileModal';
+import { LoanModal } from './LoanModal';
 import { PWAInstallButton } from './PWAInstallPrompt';
 import { useBackHandler, navigationHistory } from '../../services/navigationHistory';
 
@@ -37,10 +39,12 @@ export const TopBar: React.FC<TopBarProps> = ({
 }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
 
   // Close settings menu and profile menu on phone back navigation
   useBackHandler(isSettingsOpen, () => setIsSettingsOpen(false), 'topbar-settings-menu');
   useBackHandler(isProfileMenuOpen, () => setIsProfileMenuOpen(false), 'topbar-profile-menu');
+  useBackHandler(isLoanModalOpen, () => setIsLoanModalOpen(false), 'loan-modal');
 
   const isOwner = currentUser?.role === 'OWNER';
 
@@ -203,24 +207,12 @@ export const TopBar: React.FC<TopBarProps> = ({
                     type="button"
                     onClick={() => {
                       setIsSettingsOpen(false);
-                      window.location.reload();
+                      setIsLoanModalOpen(true);
                     }}
                     className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:text-white hover:bg-slate-800 transition-colors text-left cursor-pointer"
                   >
-                    <RefreshCw className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                    <span className="font-medium">Refresh App</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSettingsOpen(false);
-                      onLogout();
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-red-400 hover:text-red-300 hover:bg-red-950/30 transition-colors text-left cursor-pointer border-t border-slate-800"
-                  >
-                    <LogOut className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                    <span className="font-medium">Log Out</span>
+                    <DollarSign className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span className="font-medium">Loans</span>
                   </button>
                 </div>
               </>
@@ -253,6 +245,12 @@ export const TopBar: React.FC<TopBarProps> = ({
           })}
         </nav>
       )}
+
+      {/* Loan Modal */}
+      <LoanModal
+        isOpen={isLoanModalOpen}
+        onClose={() => setIsLoanModalOpen(false)}
+      />
     </header>
   );
 };

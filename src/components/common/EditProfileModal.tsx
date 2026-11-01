@@ -20,6 +20,7 @@ interface EditProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (updatedUser: User) => void;
+  onLogout: () => void;
 }
 
 export const EditProfileModal: React.FC<EditProfileModalProps> = ({
@@ -27,6 +28,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  onLogout,
 }) => {
   if (!isOpen) return null;
 
@@ -498,32 +500,41 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           </div>
 
           {/* Form Actions */}
-          <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-800">
+          <div className="pt-3 flex items-center justify-between gap-3 border-t border-slate-800">
             <button
               type="button"
-              onClick={onClose}
-              disabled={isSaving}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer"
+              onClick={onLogout}
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-red-950/30 transition-colors cursor-pointer"
             >
-              Cancel
+              Log Out
             </button>
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <>
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Save Changes</span>
-                </>
-              )}
-            </button>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isSaving}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Save Changes</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </form>
       </div>

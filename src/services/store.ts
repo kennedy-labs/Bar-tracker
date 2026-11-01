@@ -18,6 +18,7 @@ import {
   InterBusinessTransfer,
   StockAdditionRecord,
   HandoverDraft,
+  Loan,
 } from '../types';
 import { authService } from './auth';
 import { db, handleFirestoreError, OperationType } from './firebase';
@@ -49,6 +50,7 @@ const FIRESTORE_COLLECTIONS = {
   MPESA_ACCOUNTS: 'mpesaAccounts',
   INTER_TRANSFERS: 'interTransfers',
   STOCK_MOVEMENTS: 'stockMovements',
+  LOANS: 'loans',
 };
 
 const STORAGE_KEYS = {
@@ -72,6 +74,7 @@ const STORAGE_KEYS = {
   DISCREPANCIES: 'bar_track_discrepancies',
   EVENTS_MAP: 'bar_track_events_map',
   MPESA_TXNS: 'bar_track_mpesa_txns',
+  LOANS: 'bar_track_loans',
   OFFLINE_QUEUE: 'bar_track_offline_queue',
   IS_ONLINE: 'bar_track_is_online',
 };
@@ -550,6 +553,10 @@ class StoreService {
       } else if (key === STORAGE_KEYS.INTER_TRANSFERS && Array.isArray(value)) {
         (value as InterBusinessTransfer[]).forEach((t) => {
           if (t && t.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.INTER_TRANSFERS, t.id, t);
+        });
+      } else if (key === STORAGE_KEYS.LOANS && Array.isArray(value)) {
+        (value as Loan[]).forEach((l) => {
+          if (l && l.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.LOANS, l.id, l);
         });
       }
     } catch (e) {
@@ -3433,6 +3440,35 @@ class StoreService {
 
     this.notify();
     return expense;
+  }
+
+  public recordLoan(params: { name: string; amount: number; note?: string }): Loan {
+    const loan: Loan = {
+      id: `loan-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      businessId: this.getCurrentBusinessId(),
+      name: params.name,
+      amount: Number(params.amount) || 0,
+      note: params.note,
+      createdAt: new Date().toISOString(),
+      status: 'ACTIVE',
+    };
+    const loans = this.get<Loan[]>(STORAGE_KEYS.LOANS, []);
+    loans.push(loan);
+    this.set(STORAGE_KEYS.LOANS, loans);
+    this.saveToFirestore(FIRESTORE_COLLECTIONS.LOANS, loan.id, loan);
+    this.notify();
+    return loan;
+  }
+
+  public getLoans(): Loan[] {
+    return this.get<Loan[]>(STORAGE_KEYS.LOANS, []);
+  }
+
+  public deleteLoan(loanId: string): void {
+    const loans = this.get<Loan[]>(STORAGE_KEYS.LOANS, []);
+    this.set(STORAGE_KEYS.LOANS, loans.filter((l) => l.id !== loanId));
+    this.deleteFromFirestore(FIRESTORE_COLLECTIONS.LOANS, loanId);
+    this.notify();
   }
 
   public deleteExpense(expenseId: string): boolean {

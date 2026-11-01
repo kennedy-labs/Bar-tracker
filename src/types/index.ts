@@ -313,6 +313,16 @@ export interface OperationalEvent {
   currency?: string;
 }
 
+export interface Loan {
+  id: string;
+  businessId?: string;
+  name: string;
+  amount: number;
+  note?: string;
+  createdAt: string;
+  status: 'ACTIVE' | 'PAID';
+}
+
 export interface User {
   id: string;
   businessId?: string;
@@ -353,6 +363,18 @@ export interface BusinessPartner {
 }
 
 export type TransferStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
+
+export type LoanStatus = 'ACTIVE' | 'PAID';
+
+export interface Loan {
+  id: string;
+  businessId?: string;
+  name: string;
+  amount: number;
+  note?: string;
+  status: LoanStatus;
+  createdAt: string;
+}
 
 export interface InterBusinessTransfer {
   id: string;
