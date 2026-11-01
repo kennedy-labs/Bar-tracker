@@ -1427,14 +1427,47 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  </div>
  {/* 2. Isolated Shift Submission Bar (Minimal bottom-left cash/mpesa form + compact bottom-right End Shift button) */}
  <div className="mt-5 pt-4 border-t border-[#1E2638] space-y-3">
-   {/* Subtly show Expected Amount */}
-    <div className="flex flex-col gap-0.5 px-1">
-      <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 font-mono">
-        Coins: kes {coinsFloat.toLocaleString()}
-      </span>
-     <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 font-mono">
-        Expected: kes {(coinsFloat + cashFloat + mpesaFloat + summaryTotals.totalAmount - totalExpenses).toLocaleString()}     </span>
-   </div>
+    {/* Dominant Live Responding Expected / Remaining Card */}
+    {(() => {
+      const totalExpectedTarget = coinsFloat + cashFloat + mpesaFloat + summaryTotals.totalAmount - totalExpenses;
+      const totalEnteredMoney = parsedCoinsActual + parsedCashActual + parsedMpesaClosing;
+      const remainingExpected = totalExpectedTarget - totalEnteredMoney;
+
+      return (
+        <div className="p-3 sm:p-4 rounded-2xl bg-gradient-to-br from-emerald-950/60 via-[#131B2E] to-[#0E1420] border-2 border-emerald-500/50 shadow-xl space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[11px] font-mono uppercase tracking-wider text-emerald-400 font-bold">
+                Live Expected Balance
+              </span>
+            </div>
+            <span className="text-xs font-mono text-slate-400">
+              Target: <strong className="text-white">KES {totalExpectedTarget.toLocaleString()}</strong>
+            </span>
+          </div>
+
+          <div className="flex items-baseline justify-between gap-2">
+            <div>
+              <div className="text-2xl sm:text-3xl font-black text-emerald-300 font-mono tracking-tight">
+                KES {Math.abs(remainingExpected).toLocaleString()}
+                {remainingExpected < 0 && <span className="text-xs text-amber-400 ml-1.5 font-sans font-bold">(Surplus)</span>}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-0.5">
+                {remainingExpected > 0 ? 'Remaining expected to account for' : remainingExpected === 0 ? 'Fully balanced!' : 'Entered exceeds target'}
+              </div>
+            </div>
+
+            {totalEnteredMoney > 0 && (
+              <div className="text-right font-mono bg-[#0D1117] px-3 py-1.5 rounded-xl border border-slate-800 shrink-0">
+                <span className="text-[10px] text-slate-400 block uppercase">Entered So Far</span>
+                <span className="text-sm font-bold text-emerald-400">KES {totalEnteredMoney.toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    })()}
 
     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
       {/* Vertical Mini Drop-down for Coins, Cash, M-Pesa */}
