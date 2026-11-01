@@ -1428,7 +1428,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
  {/* 2. Isolated Shift Submission Bar (Minimal bottom-left cash/mpesa form + compact bottom-right End Shift button) */}
   <div className="mt-5 pt-4 border-t border-[#1E2638] space-y-2">
     <div className="px-1 text-[11px] font-mono font-medium text-slate-400 tracking-wide">
-      entry coins
+      entry coins: KES {coinsFloat.toLocaleString()}
     </div>
 
     {/* Dominant Live Responding Expected / Remaining Card */}
