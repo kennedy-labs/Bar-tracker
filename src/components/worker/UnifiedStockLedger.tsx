@@ -1441,9 +1441,9 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
         <div className="p-3 sm:p-4 rounded-2xl bg-gradient-to-br from-emerald-950/60 via-[#131B2E] to-[#0E1420] border-2 border-emerald-500/50 shadow-xl space-y-2">
           <div className="flex items-baseline justify-between gap-2">
             <div>
-              <div className="text-2xl sm:text-3xl font-black text-emerald-300 font-mono tracking-tight">
+              <div className={`text-2xl sm:text-3xl font-black font-mono tracking-tight ${remainingExpected > 0 ? 'text-rose-400' : remainingExpected === 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
                 KES {Math.abs(remainingExpected).toLocaleString()}
-                {remainingExpected < 0 && <span className="text-xs text-amber-400 ml-1.5 font-sans font-bold">(Surplus)</span>}
+                {remainingExpected < 0 && <span className="text-xs text-amber-400 ml-1.5 font-sans font-bold">(Tip)</span>}
               </div>
               <div className="text-[11px] text-slate-400 mt-0.5">
                 {remainingExpected > 0 ? 'Remaining expected to account for' : remainingExpected === 0 ? 'Fully balanced!' : 'Entered exceeds target'}
