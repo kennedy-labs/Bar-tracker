@@ -206,8 +206,14 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-lg max-h-[90vh] bg-[#0E1420] border border-[#1E293B] rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col my-6">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto"
+      onClick={onClose}
+    >
+      <div 
+        className="relative w-full max-w-lg max-h-[90vh] bg-[#0E1420] border border-[#1E293B] rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col my-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-slate-800/80 flex items-center justify-between bg-[#121824] shrink-0">
           <div className="flex items-center gap-3">
