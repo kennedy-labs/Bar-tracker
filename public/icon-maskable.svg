@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgMask" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="50%" stop-color="#0B0F17" />
+      <stop offset="100%" stop-color="#030712" />
+    </linearGradient>
+    <linearGradient id="emeraldGradMask" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34D399" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <linearGradient id="cyanGradMask" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#0284C7" />
+    </linearGradient>
+  </defs>
+
+  <!-- Full-bleed background for Android squircle / circle mask -->
+  <rect width="512" height="512" fill="url(#bgMask)" />
+
+  <!-- Content scaled and centered to stay within Android 80% safe zone circle (center 256, 256, radius 180) -->
+  <g transform="translate(256, 256) scale(0.76) translate(-256, -256)">
+    <!-- Hexagon backdrop -->
+    <path d="M256 100 L370 166 L370 298 L256 364 L142 298 L142 166 Z" fill="#131B2E" stroke="#334155" stroke-width="4" />
+    <path d="M256 120 L350 176 L350 288 L256 344 L162 288 L162 176 Z" fill="none" stroke="url(#emeraldGradMask)" stroke-width="5" opacity="0.8" />
+
+    <!-- Bottle Neck -->
+    <rect x="242" y="148" width="28" height="42" rx="4" fill="url(#cyanGradMask)" />
+    <rect x="238" y="142" width="36" height="10" rx="3" fill="#E2E8F0" />
+
+    <!-- Bottle Body -->
+    <path d="M236 190 C220 206 210 226 210 252 L210 306 C210 312 214 316 220 316 L292 316 C298 316 302 312 302 306 L302 252 C302 226 292 206 276 190 Z" fill="url(#emeraldGradMask)" />
+    <path d="M216 260 C236 266 276 254 296 260 L296 308 C296 311 293 313 290 313 L222 313 C219 313 216 311 216 308 Z" fill="#10B981" opacity="0.9" />
+
+    <!-- Reconcile bars -->
+    <rect x="228" y="278" width="8" height="26" rx="2" fill="#FFFFFF" opacity="0.95" />
+    <rect x="242" y="268" width="8" height="36" rx="2" fill="#FFFFFF" opacity="0.95" />
+    <rect x="256" y="260" width="8" height="44" rx="2" fill="#FFFFFF" opacity="0.95" />
+    <rect x="270" y="272" width="8" height="32" rx="2" fill="#FFFFFF" opacity="0.95" />
+
+    <!-- Wordmark -->
+    <text x="256" y="415" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="36" font-weight="800" fill="#F8FAFC" text-anchor="middle" letter-spacing="4">BAR TRACK</text>
+    <text x="256" y="442" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="600" fill="#10B981" text-anchor="middle" letter-spacing="2">OPERATIONS</text>
+  </g>
+</svg>
