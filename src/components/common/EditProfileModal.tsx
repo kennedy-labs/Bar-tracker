@@ -207,9 +207,9 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-[#0E1420] border border-[#1E293B] rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden my-6">
+      <div className="relative w-full max-w-lg max-h-[90vh] bg-[#0E1420] border border-[#1E293B] rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col my-6">
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-800/80 flex items-center justify-between bg-[#121824]">
+        <div className="p-4 sm:p-5 border-b border-slate-800/80 flex items-center justify-between bg-[#121824] shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-slate-800/90 border border-slate-700/80 flex items-center justify-center text-slate-200">
               <UserIcon className="w-5 h-5 text-emerald-400" />
@@ -247,7 +247,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
           {error && (
             <div className="p-3 rounded-xl bg-red-950/70 border border-red-800 text-red-300 text-xs flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
