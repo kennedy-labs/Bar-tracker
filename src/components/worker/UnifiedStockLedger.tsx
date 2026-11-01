@@ -1426,7 +1426,11 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
    </div>
  </div>
  {/* 2. Isolated Shift Submission Bar (Minimal bottom-left cash/mpesa form + compact bottom-right End Shift button) */}
- <div className="mt-5 pt-4 border-t border-[#1E2638] space-y-3">
+  <div className="mt-5 pt-4 border-t border-[#1E2638] space-y-2">
+    <div className="px-1 text-[11px] font-mono font-medium text-slate-400 tracking-wide">
+      entry coins
+    </div>
+
     {/* Dominant Live Responding Expected / Remaining Card */}
     {(() => {
       const totalExpectedTarget = coinsFloat + cashFloat + mpesaFloat + summaryTotals.totalAmount - totalExpenses;
@@ -1435,18 +1439,6 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
 
       return (
         <div className="p-3 sm:p-4 rounded-2xl bg-gradient-to-br from-emerald-950/60 via-[#131B2E] to-[#0E1420] border-2 border-emerald-500/50 shadow-xl space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[11px] font-mono uppercase tracking-wider text-emerald-400 font-bold">
-                Live Expected Balance
-              </span>
-            </div>
-            <span className="text-xs font-mono text-slate-400">
-              Target: <strong className="text-white">KES {totalExpectedTarget.toLocaleString()}</strong>
-            </span>
-          </div>
-
           <div className="flex items-baseline justify-between gap-2">
             <div>
               <div className="text-2xl sm:text-3xl font-black text-emerald-300 font-mono tracking-tight">
