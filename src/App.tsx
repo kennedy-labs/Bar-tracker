@@ -6,6 +6,7 @@ import { AuthScreen } from './components/auth/AuthScreen';
 import { TopBar } from './components/common/TopBar';
 import { WorkerTerminal } from './components/worker/WorkerTerminal';
 import { OwnerDashboard } from './components/owner/OwnerDashboard';
+import { EditProfileModal } from './components/common/EditProfileModal';
 
 
 import { navigationHistory } from './services/navigationHistory';
@@ -162,6 +163,7 @@ export default function App() {
     authService.createSession(updatedUser);
   };
 
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const discrepancies = store.getDiscrepancies({ status: 'FLAGGED' });
 
   // If not logged in, show production Authentication Screen
@@ -179,6 +181,7 @@ export default function App() {
         setActiveTab={handleTabChange}
         pendingDiscrepanciesCount={discrepancies.length}
         onUpdateProfile={handleUpdateProfile}
+        onOpenProfile={() => setIsProfileModalOpen(true)}
       />
 
       {/* Main Workspace Body */}
@@ -198,6 +201,16 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Root-Level Edit Profile Modal (Ensures it appears on top of all workspace lists & content) */}
+      <EditProfileModal
+        currentUser={currentUser}
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        onSuccess={(updated) => {
+          handleUpdateProfile(updated);
+        }}
+      />
     </div>
   );
 }

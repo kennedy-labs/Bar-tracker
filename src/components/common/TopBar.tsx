@@ -25,6 +25,7 @@ interface TopBarProps {
   setActiveTab: (tab: string) => void;
   pendingDiscrepanciesCount?: number;
   onUpdateProfile?: (updatedUser: User) => void;
+  onOpenProfile: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -32,16 +33,14 @@ export const TopBar: React.FC<TopBarProps> = ({
   onLogout,
   activeTab,
   setActiveTab,
-  onUpdateProfile,
+  onOpenProfile,
 }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
-  // Close settings menu and profile modal on phone back navigation
+  // Close settings menu and profile menu on phone back navigation
   useBackHandler(isSettingsOpen, () => setIsSettingsOpen(false), 'topbar-settings-menu');
   useBackHandler(isProfileMenuOpen, () => setIsProfileMenuOpen(false), 'topbar-profile-menu');
-  useBackHandler(isProfileModalOpen, () => setIsProfileModalOpen(false), 'edit-profile-modal');
 
   const isOwner = currentUser?.role === 'OWNER';
 
@@ -161,7 +160,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                       type="button"
                       onClick={() => {
                         setIsProfileMenuOpen(false);
-                        setIsProfileModalOpen(true);
+                        onOpenProfile();
                       }}
                       className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:text-white hover:bg-slate-800 transition-colors text-left cursor-pointer ${isOwner ? 'border-t border-slate-800' : ''}`}
                     >
@@ -253,20 +252,6 @@ export const TopBar: React.FC<TopBarProps> = ({
             );
           })}
         </nav>
-      )}
-
-      {/* Edit Profile Modal Triggered from Settings */}
-      {currentUser && (
-        <EditProfileModal
-          currentUser={currentUser}
-          isOpen={isProfileModalOpen}
-          onClose={() => setIsProfileModalOpen(false)}
-          onSuccess={(updated) => {
-            if (onUpdateProfile) {
-              onUpdateProfile(updated);
-            }
-          }}
-        />
       )}
     </header>
   );
