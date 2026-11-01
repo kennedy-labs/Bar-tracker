@@ -2534,7 +2534,13 @@ class StoreService {
         ssi.openingPhysicalCount = Math.max(0, params.openingPhysicalCount);
       }
       if (params.additions !== undefined) {
-        ssi.additions = Number(params.additions);
+        const oldAdditions = Number(ssi.additions || 0);
+        const newAdditions = Number(params.additions);
+        const delta = newAdditions - oldAdditions;
+        ssi.additions = newAdditions;
+        if (ssi.closingPhysicalCount !== undefined && ssi.closingPhysicalCount !== null && delta !== 0) {
+          ssi.closingPhysicalCount = Math.max(0, Number(ssi.closingPhysicalCount) + delta);
+        }
       }
       if ('closingPhysicalCount' in params) {
         ssi.closingPhysicalCount =
@@ -3062,6 +3068,9 @@ class StoreService {
     // Apply to SSI additions
     (ssi as any).updatedAt = nowIso;
     ssi.additions = (ssi.additions || 0) + effectiveQty;
+    if (ssi.closingPhysicalCount !== undefined && ssi.closingPhysicalCount !== null) {
+      ssi.closingPhysicalCount = Math.max(0, Number(ssi.closingPhysicalCount) + effectiveQty);
+    }
     this.recordLocalModification(ssi.id);
     this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
     this.saveToFirestore(FIRESTORE_COLLECTIONS.SHIFT_STOCK_ITEMS, ssi.id, ssi);
