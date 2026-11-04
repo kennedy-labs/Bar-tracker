@@ -59,20 +59,6 @@ export default function App() {
     return 'start';
   });
 
-  // Connect tab changes with phone back-button navigation
-  useEffect(() => {
-    navigationHistory.setInitialTab(activeTab);
-    const unsub = navigationHistory.subscribeTabChange((prevTab) => {
-      setActiveTab(prevTab);
-      try {
-        sessionStorage.setItem('bar_tracker_active_tab', prevTab);
-      } catch {
-        // ignore
-      }
-    });
-    return unsub;
-  }, []);
-
   const handleTabChange = (newTab: string) => {
     if (newTab !== activeTab) {
       navigationHistory.pushTab(newTab);
@@ -85,55 +71,12 @@ export default function App() {
     }
   };
 
-  // Strict route/tab authorization guard: prevent cross-role tab penetration
-  useEffect(() => {
-    if (!currentUser) return;
-    const ownerTabs = [
-      'overview',
-      'shifts',
-      'stock',
-      'settings',
-      'catalog',
-      'partners',
-      'staff',
-      'profile',
-    ];
-    const workerTabs = ['counter', 'history'];
-
-    if (currentUser.role === 'WORKER' && !workerTabs.includes(activeTab)) {
-      handleTabChange('counter');
-    } else if (currentUser.role === 'OWNER' && (workerTabs.includes(activeTab) || activeTab === 'mpesa')) {
-      handleTabChange('overview');
-    }
-  }, [currentUser, activeTab]);
-
-  // tick triggers re-render whenever store state mutates
-  const [, setTick] = useState<number>(0);
-
-  useEffect(() => {
-    const unsubscribe = store.subscribe(() => {
-      setTick((t) => t + 1);
-      // Auto-guard worker to counter sheet or history
-      const user = authService.getActiveSession();
-      if (user?.role === 'WORKER') {
-        if (activeTab !== 'counter' && activeTab !== 'history') {
-          handleTabChange('counter');
-        }
-      }
-    });
-    return unsubscribe;
-  }, [activeTab]);
-
-  useEffect(() => {
-    const handleHash = () => {
-      const hash = window.location.hash.toLowerCase();
-      if (hash.includes('signup') || hash.includes('register')) {
-        setCurrentUser(null);
-      }
-    };
-    window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
-  }, []);
+  const handleLogout = () => {
+    authService.destroySession();
+    store.clearActiveSessionCache();
+    setCurrentUser(null);
+    handleTabChange('start');
+  };
 
   const handleLogin = (user: User) => {
     // Re-verify authoritative user
@@ -151,17 +94,75 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
-    authService.destroySession();
-    store.clearActiveSessionCache();
-    setCurrentUser(null);
-    handleTabChange('start');
-  };
-
   const handleUpdateProfile = (updatedUser: User) => {
     setCurrentUser(updatedUser);
     authService.createSession(updatedUser);
   };
+
+  // Connect tab changes with phone back-button navigation
+
+  // tick triggers re-render whenever store state mutates
+  const [, setTick] = useState<number>(0);
+  useEffect(() => {
+    const unsubscribe = store.subscribe(() => {
+      setTick((t) => t + 1);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Connect tab changes with phone back-button navigation
+  useEffect(() => {
+    navigationHistory.setInitialTab(activeTab);
+    const unsub = navigationHistory.subscribeTabChange((prevTab) => {
+      setActiveTab(prevTab);
+      try {
+        sessionStorage.setItem('bar_tracker_active_tab', prevTab);
+      } catch {
+        // ignore
+      }
+    });
+    return unsub;
+  }, []);
+
+  // Strict route/tab authorization guard: prevent cross-role tab penetration
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Asynchronous Authoritative Role Verification
+    // Prevents local storage role escalation / tampering
+    const verifyUser = async () => {
+      const authoritative = await store.verifyAuthoritativeUser(currentUser.id);
+      if (!authoritative || authoritative.isArchived) {
+        handleLogout();
+        return;
+      }
+      if (authoritative.role !== currentUser.role) {
+        // Role mismatch: update state and session to authoritative record
+        setCurrentUser(authoritative);
+        authService.createSession(authoritative);
+      }
+    };
+    verifyUser();
+
+    const ownerTabs = [
+      'overview',
+      'shifts',
+      'stock',
+      'settings',
+      'catalog',
+      'partners',
+      'staff',
+      'profile',
+      'launch',
+    ];
+    const workerTabs = ['counter', 'history'];
+
+    if (currentUser.role === 'WORKER' && !workerTabs.includes(activeTab)) {
+      handleTabChange('counter');
+    } else if (currentUser.role === 'OWNER' && (workerTabs.includes(activeTab) || activeTab === 'mpesa')) {
+      handleTabChange('overview');
+    }
+  }, [currentUser, activeTab]);
 
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const discrepancies = store.getDiscrepancies({ status: 'FLAGGED' });

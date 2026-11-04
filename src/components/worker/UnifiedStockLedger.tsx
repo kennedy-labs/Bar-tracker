@@ -101,15 +101,12 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
   // Mini Add Input State (medium + icon near item name)
   const [miniAddProductId, setMiniAddProductId] = useState<string | null>(null);
   const [miniAddQty, setMiniAddQty] = useState<string>('');
-  const [miniAddMode, setMiniAddMode] = useState<'ADD' | 'SUBTRACT'>('ADD');
   const [miniAddNote, setMiniAddNote] = useState<string>('');
   const miniAddContainerRef = useRef<HTMLDivElement | null>(null);
   const miniAddProductIdRef = useRef<string | null>(miniAddProductId);
   miniAddProductIdRef.current = miniAddProductId;
   const miniAddQtyRef = useRef<string>(miniAddQty);
   miniAddQtyRef.current = miniAddQty;
-  const miniAddModeRef = useRef<'ADD' | 'SUBTRACT'>(miniAddMode);
-  miniAddModeRef.current = miniAddMode;
   const miniAddNoteRef = useRef<string>(miniAddNote);
   miniAddNoteRef.current = miniAddNote;
 
@@ -257,21 +254,29 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
    if (!targetId) return;
 
    const trimmed = miniAddQtyRef.current.trim();
-   const qty = parseFloat(trimmed);
+   if (!trimmed || trimmed === '-' || trimmed === '+') {
+     setMiniAddProductId(null);
+     setMiniAddQty('');
+     setMiniAddNote('');
+     return;
+   }
 
-   if (activeShift && !isNaN(qty) && qty > 0) {
+   const num = parseFloat(trimmed);
+
+   if (activeShift && !isNaN(num) && num !== 0) {
      try {
-       const mode = miniAddModeRef.current;
+       const isReduction = num < 0;
+       const absQty = Math.abs(num);
        const note = miniAddNoteRef.current.trim();
        store.recordStockAdjustment({
          shiftId: activeShift.id,
          productId: targetId,
-         quantity: qty,
-         type: mode === 'SUBTRACT' ? 'REDUCE' : 'ADD',
+         quantity: absQty,
+         type: isReduction ? 'REDUCE' : 'ADD',
          reason: note || '',
          workerName: currentUser.name || activeShift.workerName,
        });
-       showToast(mode === 'SUBTRACT' ? `Reduced -${qty}` : `Added +${qty}`);
+       showToast(isReduction ? `Reduced -${absQty}` : `Added +${absQty}`);
      } catch (err: any) {
        showToast(err.message || 'Error recording stock');
      }
@@ -280,7 +285,6 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
    setMiniAddProductId(null);
    setMiniAddQty('');
    setMiniAddNote('');
-   setMiniAddMode('ADD');
  };
 
  const handleToggleMiniAdd = (productId: string) => {
@@ -292,7 +296,6 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
      }
      setMiniAddProductId(productId);
      setMiniAddQty('');
-     setMiniAddMode('ADD');
      setMiniAddNote('');
    }
  };
@@ -464,34 +467,24 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
         Number(ssi?.damages || 0) +
         Number(ownerAdjustments || 0);
 
-      // 4. Sales and Closing stock: real-time live from cell inputs
+      // 4. Sales and Closing stock: Sales is the single source of truth
       let salesUnits = 0;
       let closingStock: number | undefined = undefined;
       let hasOverage = false;
 
       const rawSales = cellInputStrings[product.id]?.sales;
-      const rawClosing = cellInputStrings[product.id]?.closing;
 
       if (rawSales !== undefined) {
         const trimmedSales = rawSales.trim();
         if (trimmedSales !== '') {
           const parsed = parseFloat(trimmedSales);
           if (!isNaN(parsed)) {
-            // Enforce rule: cannot sell more than total stock
-            salesUnits = Math.min(totalStock, Math.max(0, parsed));
+            salesUnits = Math.max(0, parsed);
             closingStock = Math.max(0, totalStock - salesUnits);
           }
         }
-      } else if (rawClosing !== undefined) {
-        const trimmedClosing = rawClosing.trim();
-        if (trimmedClosing !== '') {
-          const parsed = parseFloat(trimmedClosing);
-          if (!isNaN(parsed)) {
-            closingStock = Math.max(0, parsed);
-            salesUnits = Math.round(Math.max(0, totalStock - closingStock) * 100) / 100;
-          }
-        }
       } else if (ssi?.closingPhysicalCount !== undefined) {
+        // Fallback for legacy saved closing count if no sales input is active
         closingStock = ssi.closingPhysicalCount;
         salesUnits = Math.round(Math.max(0, totalStock - closingStock) * 100) / 100;
       }
@@ -664,10 +657,9 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
       const row = rowDataList.find((r) => r.product.id === productId);
       const totalStock = row ? row.totalStock : (ssi?.openingPhysicalCount || 0) + (ssi?.additions || 0);
       
-      // Enforce the rule: cap sales at totalStock
       let finalSales = num;
-      if (finalSales !== undefined && finalSales > totalStock) {
-        finalSales = totalStock;
+      if (finalSales !== undefined && finalSales < 0) {
+        finalSales = 0;
       }
       
       const targetClosing = finalSales !== undefined ? Math.max(0, totalStock - finalSales) : undefined;
@@ -679,30 +671,15 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
           closingPhysicalCount: targetClosing,
         });
       }
-      // Update num so the formatted value in cellInputStrings is capped
       num = finalSales;
-    } else if (field === 'closing') {
-      const currentVal = ssi?.closingPhysicalCount;
-      if (currentVal !== num) {
-        store.updateShiftStockItemRow({
-          shiftId: activeShift.id,
-          productId,
-          closingPhysicalCount: num,
-        });
-      }
     }
 
-    // Retain the formatted value in cellInputStrings and clear the opposing field to prevent collision
     setCellInputStrings((prev) => {
       const current = prev[productId];
       if (!current) return prev;
       const updated = { ...current };
-      updated[field] = num !== undefined ? String(num) : '';
-      if (field === 'sales') {
-        delete updated.closing;
-      } else if (field === 'closing') {
-        delete updated.sales;
-      }
+      updated.sales = num !== undefined ? String(num) : '';
+      delete updated.closing;
       return {
         ...prev,
         [productId]: updated,
@@ -860,7 +837,7 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                 <th className="py-3 px-2 sm:px-2.5 text-center font-bold text-slate-100 w-20 sm:w-24">
                   <div className="leading-tight">Opening</div>
                 </th>
-                <th className="py-3 px-2 sm:px-2.5 text-center font-bold text-slate-100 w-24 sm:w-28">
+                <th className="py-3 px-2 sm:px-2.5 text-center font-bold text-slate-100 w-28 sm:w-32">
                   <div className="leading-tight">Add</div>
                 </th>
                 <th className="py-3 px-2 sm:px-2.5 text-center font-bold text-emerald-400 w-20 sm:w-24">
@@ -993,78 +970,47 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                           {miniAddProductId === p.id ? (
                             <div
                               ref={miniAddContainerRef}
-                              className="p-1.5 rounded-lg bg-[#090D14] border border-slate-700/90 flex flex-col items-center gap-1.5 shadow-xl animate-in fade-in zoom-in-95 duration-150 cursor-default min-w-[70px] max-w-[95px] mx-auto z-10"
+                              className="p-2 rounded-xl bg-[#090D14] border border-slate-700/90 flex flex-col items-center gap-1.5 shadow-xl animate-in fade-in zoom-in-95 duration-150 cursor-default min-w-[95px] max-w-[125px] mx-auto z-10"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              {/* + icon sitting on TOP of the input field (tap or hold to toggle - for subtract) */}
-                              <button
-                                type="button"
-                                onClick={() => setMiniAddMode((m) => (m === 'ADD' ? 'SUBTRACT' : 'ADD'))}
-                                onMouseDown={(e) => {
-                                  const timer = setTimeout(() => {
-                                    setMiniAddMode((m) => (m === 'ADD' ? 'SUBTRACT' : 'ADD'));
-                                    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
-                                      navigator.vibrate?.(40);
-                                    }
-                                  }, 450);
-                                  (e.target as any)._pressTimer = timer;
-                                }}
-                                onMouseUp={(e) => clearTimeout((e.target as any)._pressTimer)}
-                                onMouseLeave={(e) => clearTimeout((e.target as any)._pressTimer)}
-                                onTouchStart={(e) => {
-                                  const timer = setTimeout(() => {
-                                    setMiniAddMode((m) => (m === 'ADD' ? 'SUBTRACT' : 'ADD'));
-                                    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
-                                      navigator.vibrate?.(40);
-                                    }
-                                  }, 450);
-                                  (e.target as any)._pressTimer = timer;
-                                }}
-                                onTouchEnd={(e) => clearTimeout((e.target as any)._pressTimer)}
-                                className={`h-5 px-2 rounded font-bold text-xs flex items-center justify-center transition-all cursor-pointer select-none border leading-none shrink-0 ${
-                                  miniAddMode === 'SUBTRACT'
-                                    ? 'bg-rose-950/80 border-rose-600 text-rose-300'
-                                    : 'bg-emerald-950/80 border-emerald-600 text-emerald-300'
-                                }`}
-                                title="Tap or hold to switch between Add (+) and Subtract (-)"
-                              >
-                                {miniAddMode === 'SUBTRACT' ? '-' : '+'}
-                              </button>
-
-                              {/* Quantity input directly underneath + icon */}
+                              {/* Quantity input: visual size improved for fast use, allows typing '-' directly for reduction */}
                               <input
-                                type="number"
-                                step="any"
-                                inputMode="decimal"
+                                type="text"
+                                inputMode="text"
                                 autoFocus
                                 placeholder="0"
                                 value={miniAddQty}
-                                onChange={(e) => setMiniAddQty(e.target.value)}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val === '' || val === '-' || val === '+' || /^[-+]?\d*\.?\d*$/.test(val)) {
+                                    setMiniAddQty(val);
+                                  }
+                                }}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') handleSaveMiniAdd(p.id);
                                   if (e.key === 'Escape') setMiniAddProductId(null);
                                 }}
-                                className={`w-14 h-7 text-center rounded-md bg-[#111622] border font-mono font-bold text-xs focus:outline-none transition-colors ${
-                                  miniAddMode === 'SUBTRACT'
-                                    ? 'border-rose-600/70 text-rose-300 focus:border-rose-500'
-                                    : 'border-emerald-600/70 text-emerald-300 focus:border-emerald-500'
+                                className={`w-full h-8 px-2 text-center rounded-lg bg-[#111622] border font-mono font-bold text-sm sm:text-base focus:outline-none transition-colors ${
+                                  miniAddQty.startsWith('-')
+                                    ? 'border-rose-500/80 text-rose-300 focus:border-rose-400'
+                                    : miniAddQty && miniAddQty !== '+'
+                                    ? 'border-emerald-500/80 text-emerald-300 focus:border-emerald-400'
+                                    : 'border-slate-700 text-white focus:border-sky-500'
                                 }`}
                               />
 
-                              {/* Optional note when in subtract mode */}
-                              {miniAddMode === 'SUBTRACT' && (
-                                <input
-                                  type="text"
-                                  placeholder="Note (optional)"
-                                  value={miniAddNote}
-                                  onChange={(e) => setMiniAddNote(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleSaveMiniAdd(p.id);
-                                    if (e.key === 'Escape') setMiniAddProductId(null);
-                                  }}
-                                  className="w-full h-6 px-1.5 text-[10px] rounded-md bg-[#111622] border border-rose-800/60 text-rose-200 placeholder:text-rose-500/40 focus:outline-none focus:border-rose-500"
-                                />
-                              )}
+                              {/* Optional note for adding or reducing stock */}
+                              <input
+                                type="text"
+                                placeholder="Note (optional)"
+                                value={miniAddNote}
+                                onChange={(e) => setMiniAddNote(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveMiniAdd(p.id);
+                                  if (e.key === 'Escape') setMiniAddProductId(null);
+                                }}
+                                className="w-full h-6 px-1.5 text-[11px] rounded-md bg-[#111622] border border-slate-700/80 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-sky-500"
+                              />
                             </div>
                           ) : (
                             <div className="flex flex-col items-center justify-center gap-1">
@@ -1108,19 +1054,31 @@ export const UnifiedStockLedger: React.FC<UnifiedStockLedgerProps> = ({
                                     onMouseLeave={(e) => clearTimeout((e.target as any)._pressTimer)}
                                     title="Tap or long press to edit / delete events"
                                   >
-                                    {itemEvents.map((ev) => (
-                                      <span
-                                        key={ev.id}
-                                        className={`text-[10px] sm:text-[11px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                                          ev.quantity >= 0
-                                            ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60'
-                                            : 'bg-rose-950/60 text-rose-300 border border-rose-800/60'
-                                        }`}
-                                        title={ev.reason && !isDefaultReason(ev.reason) ? ev.reason : (ev.quantity >= 0 ? `+${ev.quantity}` : `${ev.quantity}`)}
-                                      >
-                                        {ev.quantity >= 0 ? `+${ev.quantity}` : ev.quantity}
-                                      </span>
-                                    ))}
+                                    {itemEvents.map((ev) => {
+                                      const hasNote = Boolean(ev.reason && !isDefaultReason(ev.reason) && ev.reason.trim());
+                                      return (
+                                        <div key={ev.id} className="flex flex-col items-center">
+                                          <span
+                                            className={`text-[10px] sm:text-[11px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                                              ev.quantity >= 0
+                                                ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60'
+                                                : 'bg-rose-950/60 text-rose-300 border border-rose-800/60'
+                                            }`}
+                                            title={hasNote ? ev.reason : (ev.quantity >= 0 ? `+${ev.quantity}` : `${ev.quantity}`)}
+                                          >
+                                            {ev.quantity >= 0 ? `+${ev.quantity}` : ev.quantity}
+                                          </span>
+                                          {hasNote && (
+                                            <span
+                                              className="text-[9px] text-slate-400 font-sans truncate max-w-[75px] mt-0.5 px-1 bg-slate-900/80 rounded border border-slate-800/80 leading-tight"
+                                              title={ev.reason}
+                                            >
+                                              {ev.reason}
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 );
                               })()}

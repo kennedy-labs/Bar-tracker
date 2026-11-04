@@ -25,6 +25,22 @@ export class ErrorBoundary extends Component<Props, State> {
 
   private handleSafeReset = () => {
     try {
+      // Preserve credentials and business identity before clearing corrupted/over-quota cache
+      const activeSession = localStorage.getItem('bartracker_active_session');
+      const sessionUser = localStorage.getItem('bartracker_session_user');
+      const activeBizId = localStorage.getItem('bar_track_current_biz_id');
+      const offlineQueue = localStorage.getItem('bar_track_offline_queue');
+
+      // Purge bloated and corrupted local keys
+      localStorage.clear();
+      sessionStorage.clear();
+
+      // Restore credentials
+      if (activeSession) localStorage.setItem('bartracker_active_session', activeSession);
+      if (sessionUser) localStorage.setItem('bartracker_session_user', sessionUser);
+      if (activeBizId) localStorage.setItem('bar_track_current_biz_id', activeBizId);
+      if (offlineQueue) localStorage.setItem('bar_track_offline_queue', offlineQueue);
+
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then((registrations) => {
           registrations.forEach((r) => r.unregister());
@@ -35,7 +51,6 @@ export class ErrorBoundary extends Component<Props, State> {
           names.forEach((name) => caches.delete(name));
         });
       }
-      sessionStorage.clear();
     } catch (e) {
       console.warn('Storage cleanup note:', e);
     }

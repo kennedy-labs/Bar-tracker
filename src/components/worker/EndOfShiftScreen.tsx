@@ -391,7 +391,7 @@ Generated via Bar Track System`;
  )}
  {item.additions > 0 && (
  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-emerald-950/80 text-emerald-400 border border-emerald-800 shrink-0">
- +{item.additions} added
+ +{item.additions} added{item.adjustmentNote ? ` (${item.adjustmentNote})` : ''}
  </span>
  )}
  {item.additions < 0 && (

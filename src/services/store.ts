@@ -111,8 +111,7 @@ class StoreService {
     return !!(modTime && Date.now() - modTime < windowMs);
   }
 
-  // Step 4: Timestamp-Based Conflict Resolution Helper
-  // Compares incoming cloud changes with local records using updatedAt timestamps and in-flight modification locks
+  // Step 4: Timestamp-Based Conflict Resolution & Field-Level Merge Helper
   public shouldAcceptCloudChange(localDoc: any, incomingDoc: any): boolean {
     if (!localDoc) return true;
     if (!incomingDoc) return false;
@@ -120,6 +119,15 @@ class StoreService {
     const docId = incomingDoc.id || localDoc.id;
     if (docId && this.isLocallyModified(docId, 45000)) {
       // Protect recent local in-flight edits for 45 seconds against stale cloud echoes
+      // Perform field-level merge: preserve local properties that were modified more recently
+      Object.keys(localDoc).forEach((key) => {
+        if (key !== 'updatedAt' && localDoc[key] !== incomingDoc[key]) {
+          // If local has a non-empty value and incoming is empty/zero, keep local
+          if (localDoc[key] !== undefined && localDoc[key] !== null && (incomingDoc[key] === undefined || incomingDoc[key] === null)) {
+            incomingDoc[key] = localDoc[key];
+          }
+        }
+      });
       return false;
     }
 
@@ -210,8 +218,11 @@ class StoreService {
           this.memoryStore.set(key, parsed);
           return parsed ?? defaultValue;
         }
-      } catch {
-        // fallback
+      } catch (parseErr) {
+        console.warn(`Corrupted localStorage key "${key}" detected. Clearing invalid entry.`, parseErr);
+        try {
+          localStorage.removeItem(key);
+        } catch (_) {}
       }
     }
     return defaultValue;
@@ -222,52 +233,91 @@ class StoreService {
     try {
       localStorage.setItem(key, JSON.stringify(value));
     } catch (err) {
-      console.warn(`localStorage quota warning on ${key}. Initiating smart rolling-window prune...`, err);
+      console.warn(`localStorage quota exceeded for key "${key}". Initiating safe progressive prune...`, err);
       try {
-        // 1. Prune local storage events older than 3 days
-        const eventsRaw = localStorage.getItem(STORAGE_KEYS.EVENTS_MAP);
-        if (eventsRaw) {
-          const eventsMap = JSON.parse(eventsRaw) as Record<string, any[]>;
-          const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
-          Object.keys(eventsMap).forEach((biz) => {
-            eventsMap[biz] = (eventsMap[biz] || []).filter(
-              (e: any) => new Date(e.timestamp).getTime() > cutoff
-            );
-          });
-          localStorage.setItem(STORAGE_KEYS.EVENTS_MAP, JSON.stringify(eventsMap));
-        }
+        // Tier 1: Evict non-essential logs and movements
+        localStorage.removeItem(STORAGE_KEYS.EVENTS_MAP);
+        localStorage.removeItem(STORAGE_KEYS.STOCK_MOVEMENTS);
 
-        // 2. Prune shiftStockItems in local storage to only recent 14-day shifts and active shifts
-        const itemsRaw = localStorage.getItem(STORAGE_KEYS.SHIFT_STOCK_ITEMS);
+        // Tier 2: Prune historical shifts map: keep active shift + last 5 closed shifts only
         const shiftsRaw = localStorage.getItem(STORAGE_KEYS.SHIFTS_MAP);
-        if (itemsRaw && shiftsRaw) {
-          const shiftsMap = JSON.parse(shiftsRaw) as Record<string, Shift[]>;
-          const activeOrRecentShiftIds = new Set<string>();
-          Object.values(shiftsMap).forEach((shifts) => {
-            shifts.forEach((s) => {
-              if (s.status === 'ACTIVE' || new Date(s.openedAt).getTime() > Date.now() - 14 * 24 * 60 * 60 * 1000) {
-                activeOrRecentShiftIds.add(s.id);
-              }
+        const keptShiftIds = new Set<string>();
+        if (shiftsRaw) {
+          try {
+            const shiftsMap = JSON.parse(shiftsRaw) as Record<string, Shift[]>;
+            Object.keys(shiftsMap).forEach((biz) => {
+              const list = shiftsMap[biz] || [];
+              const active = list.filter((s) => s.status === 'ACTIVE' || s.status === 'OPENING_VERIFICATION');
+              const closed = list.filter((s) => s.status !== 'ACTIVE' && s.status !== 'OPENING_VERIFICATION')
+                                 .sort((a, b) => new Date(b.openedAt).getTime() - new Date(a.openedAt).getTime())
+                                 .slice(0, 5);
+              shiftsMap[biz] = [...active, ...closed];
+              shiftsMap[biz].forEach((s) => keptShiftIds.add(s.id));
             });
-          });
-          const allItems = JSON.parse(itemsRaw) as ShiftStockItem[];
-          const trimmed = allItems.filter((i) => activeOrRecentShiftIds.has(i.shiftId));
-          localStorage.setItem(STORAGE_KEYS.SHIFT_STOCK_ITEMS, JSON.stringify(trimmed));
+            localStorage.setItem(STORAGE_KEYS.SHIFTS_MAP, JSON.stringify(shiftsMap));
+          } catch (_) {}
         }
 
-        // 3. Prune historical stockMovements in local storage older than 7 days
-        const movRaw = localStorage.getItem(STORAGE_KEYS.STOCK_MOVEMENTS);
-        if (movRaw) {
-          const movs = JSON.parse(movRaw) as any[];
-          const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-          const trimmedMovs = movs.filter((m) => new Date(m.timestamp).getTime() > cutoff);
-          localStorage.setItem(STORAGE_KEYS.STOCK_MOVEMENTS, JSON.stringify(trimmedMovs));
+        // Tier 3: Prune shiftStockItems: keep only items belonging to kept shifts
+        const itemsRaw = localStorage.getItem(STORAGE_KEYS.SHIFT_STOCK_ITEMS);
+        if (itemsRaw && keptShiftIds.size > 0) {
+          try {
+            const allItems = JSON.parse(itemsRaw) as ShiftStockItem[];
+            const trimmed = allItems.filter((i) => keptShiftIds.has(i.shiftId));
+            localStorage.setItem(STORAGE_KEYS.SHIFT_STOCK_ITEMS, JSON.stringify(trimmed));
+          } catch (_) {}
         }
 
-        // 4. Retry saving target key
+        // Tier 4: Prune stockAdditions: keep only additions for kept shifts
+        const additionsRaw = localStorage.getItem(STORAGE_KEYS.STOCK_ADDITIONS);
+        if (additionsRaw && keptShiftIds.size > 0) {
+          try {
+            const allAdditions = JSON.parse(additionsRaw) as StockAdditionRecord[];
+            const trimmedAdditions = allAdditions.filter((a) => keptShiftIds.has(a.shiftId));
+            localStorage.setItem(STORAGE_KEYS.STOCK_ADDITIONS, JSON.stringify(trimmedAdditions));
+          } catch (_) {}
+        }
+
+        // Tier 5: Prune expenses: keep only expenses for kept shifts
+        const expensesRaw = localStorage.getItem(STORAGE_KEYS.EXPENSES);
+        if (expensesRaw && keptShiftIds.size > 0) {
+          try {
+            const allExpenses = JSON.parse(expensesRaw) as Expense[];
+            const trimmedExpenses = allExpenses.filter((e) => keptShiftIds.has(e.shiftId));
+            localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(trimmedExpenses));
+          } catch (_) {}
+        }
+
+        // Retry saving target key
         localStorage.setItem(key, JSON.stringify(value));
-      } catch (innerErr) {
-        console.error('Critical quota error: Unable to fit payload into localStorage even after pruning', innerErr);
+      } catch (pruneErr) {
+        console.warn('Storage quota still full after first prune. Invoking emergency cache reduction...', pruneErr);
+        try {
+          // Emergency step: retain ONLY active shift in local cache; all others remain in Firestore
+          const shiftsRaw = localStorage.getItem(STORAGE_KEYS.SHIFTS_MAP);
+          const activeIds = new Set<string>();
+          if (shiftsRaw) {
+            try {
+              const shiftsMap = JSON.parse(shiftsRaw) as Record<string, Shift[]>;
+              Object.keys(shiftsMap).forEach((biz) => {
+                shiftsMap[biz] = (shiftsMap[biz] || []).filter((s) => s.status === 'ACTIVE' || s.status === 'OPENING_VERIFICATION');
+                shiftsMap[biz].forEach((s) => activeIds.add(s.id));
+              });
+              localStorage.setItem(STORAGE_KEYS.SHIFTS_MAP, JSON.stringify(shiftsMap));
+            } catch (_) {}
+          }
+          const itemsRaw = localStorage.getItem(STORAGE_KEYS.SHIFT_STOCK_ITEMS);
+          if (itemsRaw) {
+            try {
+              const allItems = JSON.parse(itemsRaw) as ShiftStockItem[];
+              localStorage.setItem(STORAGE_KEYS.SHIFT_STOCK_ITEMS, JSON.stringify(allItems.filter((i) => activeIds.has(i.shiftId))));
+            } catch (_) {}
+          }
+          localStorage.setItem(key, JSON.stringify(value));
+        } catch (emergencyErr) {
+          // Graceful fallback: value remains safely accessible in memoryStore without halting execution
+          console.error('Safe storage fallback: writing to localStorage bypassed. Data active in memoryStore.', emergencyErr);
+        }
       }
     }
   }
@@ -327,8 +377,11 @@ class StoreService {
           if (val !== null) {
             this.memoryStore.set(k, JSON.parse(val));
           }
-        } catch {
-          // ignore
+        } catch (err) {
+          console.warn(`Purging unparseable key "${k}" during loadFromStorage`, err);
+          try {
+            localStorage.removeItem(k);
+          } catch (_) {}
         }
       }
     });
@@ -1703,6 +1756,33 @@ class StoreService {
     );
     if (!user) return null;
     return user;
+  }
+
+  /**
+   * Authority Verification: Fetches the Authoritative User record from Firestore
+   * to prevent localStorage Role escalation/tampering.
+   */
+  public async verifyAuthoritativeUser(userId: string): Promise<User | null> {
+    if (!db || !userId) return null;
+    try {
+      const uDoc = await getDoc(doc(db, FIRESTORE_COLLECTIONS.USERS, userId));
+      if (uDoc.exists()) {
+        const uData = uDoc.data() as User;
+        // Update local users list with the authoritative data
+        const users = this.getUsers();
+        const idx = users.findIndex((u) => u.id === uData.id);
+        if (idx >= 0) {
+          users[idx] = uData;
+        } else {
+          users.push(uData);
+        }
+        this.set(STORAGE_KEYS.USERS, users, false);
+        return uData;
+      }
+    } catch (e) {
+      console.error('Authoritative user verification failed:', e);
+    }
+    return null;
   }
 
   public async authenticateUser(usernameInput: string, credentialInput: string, businessNameInput?: string): Promise<User | null> {
@@ -3593,9 +3673,10 @@ class StoreService {
       };
     });
 
-    const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
-    const financialVariance =
-      totalIncomeReturned + totalExpenses - expectedSalesRevenue;
+    const totalExpenses = expenses.reduce((sum, e) => sum + Math.round(e.amount * 100), 0);
+    const rawFinancialVariance = Math.round(totalIncomeReturned * 100) + totalExpenses - Math.round(expectedSalesRevenue * 100);
+    // Negligible threshold: sub-shilling variances (< KES 0.50) are normalized to zero to eliminate floating-point ghost cents
+    const financialVariance = Math.abs(rawFinancialVariance) < 50 ? 0 : rawFinancialVariance / 100;
 
     return {
       shift,
