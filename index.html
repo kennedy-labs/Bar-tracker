@@ -89,22 +89,40 @@
         };
 
         window.addEventListener('error', function(event) {
+          var msg = event.message || (event.error && event.error.message) || '';
+          if (typeof msg === 'string' && (
+            msg.includes('WebSocket') ||
+            msg.includes('closed without opened') ||
+            msg.includes('@vite/client') ||
+            msg.includes('ResizeObserver') ||
+            msg.includes('Script error')
+          )) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            return;
+          }
           if (!window.__appMounted) {
-            var msg = event.message || (event.error && event.error.message);
-            if (msg && (msg.includes('ResizeObserver') || msg.includes('Script error'))) return;
             window.__renderStartupRecovery(msg);
           }
-        });
+        }, true);
 
         window.addEventListener('unhandledrejection', function(event) {
+          var reasonMsg = event.reason ? (event.reason.message || String(event.reason)) : '';
+          if (typeof reasonMsg === 'string' && (
+            reasonMsg.includes('WebSocket') ||
+            reasonMsg.includes('closed without opened') ||
+            reasonMsg.includes('@vite/client') ||
+            reasonMsg.includes('Missing or insufficient permissions') ||
+            reasonMsg.includes('offline')
+          )) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            return;
+          }
           if (!window.__appMounted) {
-            var reasonMsg = event.reason ? (event.reason.message || String(event.reason)) : '';
-            if (reasonMsg.includes('Missing or insufficient permissions') || reasonMsg.includes('offline')) {
-              return;
-            }
             window.__renderStartupRecovery(reasonMsg);
           }
-        });
+        }, true);
 
         setTimeout(function() {
           if (!window.__appMounted) {

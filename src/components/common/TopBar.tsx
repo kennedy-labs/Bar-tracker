@@ -75,15 +75,6 @@ export const TopBar: React.FC<TopBarProps> = ({
     return activeTab === itemId;
   };
 
-  const handleBackClick = () => {
-    // On attendant active counter page or when no backward navigation is possible, show the logout button
-    if (!isOwner || activeTab === 'counter' || !navigationHistory.canGoBack()) {
-      setShowLogoutMenu((prev) => !prev);
-      return;
-    }
-    navigationHistory.triggerBack();
-  };
-
   return (
     <header className="sticky top-0 z-40 bg-ink/95 backdrop-blur-md border-b border-line px-3 sm:px-4 md:px-6 py-2.5">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
@@ -92,14 +83,10 @@ export const TopBar: React.FC<TopBarProps> = ({
           <div className="relative">
             <button
               type="button"
-              onClick={handleBackClick}
-              className={`p-1.5 -ml-1 rounded-xl transition-all cursor-pointer flex items-center justify-center border ${
-                showLogoutMenu
-                  ? 'bg-slate-800 text-white border-slate-600'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800 active:scale-90 border-slate-700/60 bg-[#121824]'
-              }`}
-              title="Navigation / Log Out"
-              aria-label="Back or Log Out"
+              onClick={() => setShowLogoutMenu((prev) => !prev)}
+              className="p-1.5 -ml-1 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 active:scale-90 transition-all cursor-pointer flex items-center justify-center border border-slate-700/60 bg-[#121824]"
+              title="Log Out"
+              aria-label="Log Out"
             >
               <ArrowLeft className="w-4 h-4 text-slate-200" />
             </button>
