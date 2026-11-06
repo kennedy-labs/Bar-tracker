@@ -26,15 +26,16 @@ async function startServer() {
         const name = (item.name || '').trim();
         const opening = parseQty(item.opening);
         const added = parseQty(item.added || 0);
-        const closing = parseQty(item.closing);
+        const hasClosing = item.closing !== undefined && item.closing !== null && item.closing !== '' && item.closing !== '-' && item.closing !== '—';
+        const closing = hasClosing ? parseQty(item.closing) : undefined;
         return {
           id: `prod-import-${Date.now()}-${idx}`,
           businessName,
           name,
           opening,
           added,
-          closing,
-          sellingPrice: 0,
+          ...(closing !== undefined ? { closing } : {}),
+          sellingPrice: item.sellingPrice || 0,
         };
       });
 
