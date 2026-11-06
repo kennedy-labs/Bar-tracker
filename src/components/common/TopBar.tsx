@@ -40,11 +40,13 @@ export const TopBar: React.FC<TopBarProps> = ({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
+  const [showLogoutMenu, setShowLogoutMenu] = useState(false);
 
-  // Close settings menu and profile menu on phone back navigation
+  // Close settings menu, profile menu, and logout menu on phone back navigation
   useBackHandler(isSettingsOpen, () => setIsSettingsOpen(false), 'topbar-settings-menu');
   useBackHandler(isProfileMenuOpen, () => setIsProfileMenuOpen(false), 'topbar-profile-menu');
   useBackHandler(isLoanModalOpen, () => setIsLoanModalOpen(false), 'loan-modal');
+  useBackHandler(showLogoutMenu, () => setShowLogoutMenu(false), 'topbar-logout-menu');
 
   const isOwner = currentUser?.role === 'OWNER';
 
@@ -73,20 +75,57 @@ export const TopBar: React.FC<TopBarProps> = ({
     return activeTab === itemId;
   };
 
+  const handleBackClick = () => {
+    // On attendant active counter page or when no backward navigation is possible, show the logout button
+    if (!isOwner || activeTab === 'counter' || !navigationHistory.canGoBack()) {
+      setShowLogoutMenu((prev) => !prev);
+      return;
+    }
+    navigationHistory.triggerBack();
+  };
+
   return (
     <header className="sticky top-0 z-40 bg-ink/95 backdrop-blur-md border-b border-line px-3 sm:px-4 md:px-6 py-2.5">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
-        {/* Zone 1: Universal Back / Undo Button & Bar Name */}
+        {/* Zone 1: Universal Back Button (Reveals Logout) & Bar Name */}
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => navigationHistory.triggerBack()}
-            className="p-1.5 -ml-1 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 active:scale-90 transition-all cursor-pointer flex items-center justify-center border border-slate-700/60 bg-[#121824]"
-            title="Back / Undo (Previous Page)"
-            aria-label="Back / Undo"
-          >
-            <ArrowLeft className="w-4 h-4 text-slate-200" />
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={handleBackClick}
+              className={`p-1.5 -ml-1 rounded-xl transition-all cursor-pointer flex items-center justify-center border ${
+                showLogoutMenu
+                  ? 'bg-slate-800 text-white border-slate-600'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800 active:scale-90 border-slate-700/60 bg-[#121824]'
+              }`}
+              title="Navigation / Log Out"
+              aria-label="Back or Log Out"
+            >
+              <ArrowLeft className="w-4 h-4 text-slate-200" />
+            </button>
+
+            {showLogoutMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowLogoutMenu(false)}
+                />
+                <div className="absolute left-0 top-full mt-1.5 z-50 w-44 rounded-xl bg-[#121824] border border-[#1E293B] shadow-2xl py-1 text-xs animate-in fade-in zoom-in-95 duration-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLogoutMenu(false);
+                      onLogout();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors text-left cursor-pointer font-medium"
+                  >
+                    <LogOut className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>Log Out</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
           <BusinessIdentityBadge />
         </div>
 
