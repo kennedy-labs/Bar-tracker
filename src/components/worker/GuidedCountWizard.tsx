@@ -200,15 +200,24 @@ export const GuidedCountWizard: React.FC<GuidedCountWizardProps> = ({
     persistDraft(activeStep, nextCounted);
   };
 
-  const setMuratinaClosing = (product: Product, litres: number) => {
+  const setMuratinaClosing = (product: Product, litres: number, valueRemainder: number) => {
     const volTotal = product.volumeTotal || 10;
+    const pricePerUnit = product.pricePerUnit || product.sellingPrice || 1;
+    const unitPricePerLitre = pricePerUnit / volTotal;
     const cleanLitres = Math.max(0, litres);
-    const effectivePhysical = cleanLitres / volTotal;
+    const cleanRem = Math.max(0, valueRemainder);
+
+    let totalLitres = cleanLitres;
+    if (cleanLitres === 0 && cleanRem > 0 && unitPricePerLitre > 0) {
+      totalLitres = cleanRem / unitPricePerLitre;
+    }
+    const effectivePhysical = totalLitres / volTotal;
 
     store.updateShiftStockItemRow({
       shiftId: shift.id,
       productId: product.id,
-      closingLitres: cleanLitres,
+      closingLitres: cleanLitres > 0 ? cleanLitres : undefined,
+      closingValueRemainder: cleanRem > 0 ? cleanRem : undefined,
       closingPhysicalCount: effectivePhysical,
     });
     const nextCounted = countedSet.has(product.id) ? countedIds : [...countedIds, product.id];
@@ -556,25 +565,49 @@ export const GuidedCountWizard: React.FC<GuidedCountWizardProps> = ({
                         </div>
                       </div>
                     ) : p.measurementMode === 'MURATINA' ? (
-                      <div className="sm:pl-5.5 pt-1 space-y-1">
-                        <label className="text-[10px] font-mono uppercase text-muted">Remaining Litres (L)</label>
-                        <input
-                          type="number"
-                          step="any"
-                          inputMode="decimal"
-                          min="0"
-                          value={localInputs[`${p.id}_litres`] !== undefined ? localInputs[`${p.id}_litres`] : String(ssi?.closingLitres ?? (closing * (p.volumeTotal || 10)))}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setLocalInputs((prev) => ({ ...prev, [`${p.id}_litres`]: val }));
-                          }}
-                          onBlur={() => {
-                            const l = parseFloat(localInputs[`${p.id}_litres`] ?? String(ssi?.closingLitres ?? (closing * (p.volumeTotal || 10)))) || 0;
-                            setMuratinaClosing(p, l);
-                          }}
-                          className="w-full min-h-[42px] rounded-xl bg-ink-soft border border-line px-3 text-sm font-mono font-bold text-content focus:outline-none focus:border-brand"
-                          placeholder="Litres"
-                        />
+                      <div className="grid grid-cols-2 gap-2 sm:pl-5.5 pt-1">
+                        <div>
+                          <label className="text-[10px] font-mono uppercase text-muted">Remaining Litres (L)</label>
+                          <input
+                            type="number"
+                            step="any"
+                            inputMode="decimal"
+                            min="0"
+                            value={localInputs[`${p.id}_litres`] !== undefined ? localInputs[`${p.id}_litres`] : String(ssi?.closingLitres ?? '')}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setLocalInputs((prev) => ({ ...prev, [`${p.id}_litres`]: val }));
+                            }}
+                            onBlur={() => {
+                              const l = parseFloat(localInputs[`${p.id}_litres`] ?? String(ssi?.closingLitres ?? '')) || 0;
+                              const r = ssi?.closingValueRemainder || 0;
+                              setMuratinaClosing(p, l, r);
+                            }}
+                            className="w-full min-h-[42px] rounded-xl bg-ink-soft border border-line px-3 text-sm font-mono font-bold text-content focus:outline-none focus:border-brand"
+                            placeholder="Litres"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-mono uppercase text-muted">Or Value (sh)</label>
+                          <input
+                            type="number"
+                            step="any"
+                            inputMode="decimal"
+                            min="0"
+                            value={localInputs[`${p.id}_rem`] !== undefined ? localInputs[`${p.id}_rem`] : String(ssi?.closingValueRemainder ?? '')}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setLocalInputs((prev) => ({ ...prev, [`${p.id}_rem`]: val }));
+                            }}
+                            onBlur={() => {
+                              const l = ssi?.closingLitres || 0;
+                              const r = parseFloat(localInputs[`${p.id}_rem`] ?? String(ssi?.closingValueRemainder ?? '')) || 0;
+                              setMuratinaClosing(p, l, r);
+                            }}
+                            className="w-full min-h-[42px] rounded-xl bg-ink-soft border border-line px-3 text-sm font-mono font-bold text-content focus:outline-none focus:border-brand"
+                            placeholder="sh (e.g. 300)"
+                          />
+                        </div>
                       </div>
                     ) : p.measurementMode === 'KEG' ? (
                       <div className="sm:pl-5.5 pt-1 space-y-1">

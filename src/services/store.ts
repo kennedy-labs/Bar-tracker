@@ -3840,10 +3840,10 @@ class StoreService {
         const pricePerUnit = prod?.pricePerUnit || prod?.sellingPrice || 1;
         const unitPricePerLitre = pricePerUnit / volTotal;
         let effLitres = item.closingLitres;
-        if (effLitres === undefined && item.closingValueRemainder !== undefined) {
+        if ((effLitres === undefined || effLitres === 0) && item.closingValueRemainder !== undefined && item.closingValueRemainder > 0 && unitPricePerLitre > 0) {
           effLitres = item.closingValueRemainder / unitPricePerLitre;
         }
-        if (effLitres !== undefined) {
+        if (effLitres !== undefined && effLitres > 0) {
           physicalClosing = Math.max(0, effLitres / volTotal);
         } else if (params.closingPhysicalCounts[item.productId] !== undefined) {
           physicalClosing = params.closingPhysicalCounts[item.productId];
