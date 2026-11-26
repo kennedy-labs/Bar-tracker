@@ -37,59 +37,58 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({ shift: initi
   const totalReturned = shift.totalIncomeReturned || netCash + netMpesa;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs overflow-y-auto">
-      <div className="w-full max-w-3xl bg-[#111622] border border-[#1E2638] rounded-2xl p-5 md:p-6 shadow-xl my-6 space-y-5">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/80 backdrop-blur-xs">
+      <div className="w-full max-w-3xl max-h-[92dvh] overflow-y-auto bg-[#111622] border-t sm:border border-[#1E2638] rounded-t-3xl sm:rounded-2xl p-4 sm:p-6 shadow-xl space-y-5 pb-safe">
+        <div className="w-10 h-1 rounded-full bg-line-strong mx-auto -mt-1 sm:hidden" />
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-white tracking-tight">
+        <div className="flex items-start sm:items-center justify-between gap-2 pb-3 border-b border-line-soft">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-bold text-content tracking-tight">
                 Shift Audit Ledger
               </h2>
-              <span className="text-xs text-slate-500 font-mono">
-                ({shift.status})
-              </span>
-              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800/80 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Live Reconciled
+              <span className="text-xs text-muted font-mono">
+                {shift.status} · #{shift.shiftNumber}
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-muted mt-0.5 truncate">
               Attendant: {shift.workerName} · {new Date(shift.openedAt).toLocaleString()}
+              {shift.previousWorkerName ? ` · From ${shift.previousWorkerName}` : ''}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={() => {
                 const currentBiz = store.getCurrentBusiness();
                 exportShiftToCsv(shift, stockItems, expenses, currentBiz.name);
               }}
-              className="py-1.5 px-3 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/80 text-emerald-300 hover:text-emerald-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+              className="min-h-[44px] py-1.5 px-3 rounded-xl bg-brand-tint hover:bg-surface-2 border border-brand-line text-brand-strong text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
               title="Download Full Shift Audit Report (.csv)"
             >
-              <Download className="w-3.5 h-3.5 text-emerald-400" />
+              <Download className="w-4 h-4" />
               <span className="hidden sm:inline">Export CSV</span>
             </button>
             <button
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center text-muted hover:text-content rounded-xl hover:bg-surface-2 transition-colors cursor-pointer"
+              aria-label="Close"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
         {/* Financial Reconciliation Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-          <div className="p-3.5 rounded-xl bg-[#0D1117] border border-slate-800 space-y-2">
-            <div className="flex items-center gap-1.5 font-medium text-slate-300">
-              <Smartphone className="w-4 h-4 text-emerald-400" />
+          <div className="p-3.5 rounded-xl bg-ink-soft border border-line space-y-2">
+            <div className="flex items-center gap-1.5 font-medium text-content">
+              <Smartphone className="w-4 h-4 text-brand-strong" />
               <span>M-Pesa Till Handover</span>
             </div>
-            <div className="space-y-1 font-mono text-[11px] text-slate-400">
+            <div className="space-y-1 font-mono text-[11px] text-muted tabular-nums">
               <div className="flex justify-between">
                 <span>Closing Balance:</span>
-                <span className="text-white font-semibold">
+                <span className="text-content font-semibold">
                   KES {(shift.closingMpesaBalance || 0).toLocaleString()}
                 </span>
               </div>
@@ -97,22 +96,22 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({ shift: initi
                 <span>Opening Float:</span>
                 <span>-KES {shift.openingMpesaBalance.toLocaleString()}</span>
               </div>
-              <div className="pt-1 border-t border-slate-800 flex justify-between font-bold text-emerald-400">
+              <div className="pt-1 border-t border-line-soft flex justify-between font-bold text-brand-strong">
                 <span>Net M-Pesa Income:</span>
                 <span>KES {netMpesa.toLocaleString()}</span>
               </div>
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-[#0D1117] border border-slate-800 space-y-2">
-            <div className="flex items-center gap-1.5 font-medium text-slate-300">
-              <Banknote className="w-4 h-4 text-amber-400" />
+          <div className="p-3.5 rounded-xl bg-ink-soft border border-line space-y-2">
+            <div className="flex items-center gap-1.5 font-medium text-content">
+              <Banknote className="w-4 h-4 text-warn" />
               <span>Cash Drawer Handover</span>
             </div>
-            <div className="space-y-1 font-mono text-[11px] text-slate-400">
+            <div className="space-y-1 font-mono text-[11px] text-muted tabular-nums">
               <div className="flex justify-between">
                 <span>Ending Cash Count:</span>
-                <span className="text-white font-semibold">
+                <span className="text-content font-semibold">
                   KES {(shift.closingCashActual || 0).toLocaleString()}
                 </span>
               </div>
@@ -120,7 +119,7 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({ shift: initi
                 <span>Starting Float:</span>
                 <span>-KES {shift.openingCashFloat.toLocaleString()}</span>
               </div>
-              <div className="pt-1 border-t border-slate-800 flex justify-between font-bold text-amber-400">
+              <div className="pt-1 border-t border-line-soft flex justify-between font-bold text-warn">
                 <span>Net Cash Income:</span>
                 <span>KES {netCash.toLocaleString()}</span>
               </div>
@@ -128,38 +127,47 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({ shift: initi
           </div>
         </div>
 
-        {/* 4-Stat Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs font-mono">
-          <div className="p-3 rounded-xl bg-[#0D1117] border border-slate-800">
-            <span className="text-[10px] text-slate-500 font-sans block">Total Returned:</span>
-            <span className="font-bold text-white text-sm mt-0.5 block">
+        {/* 5-Stat Strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs font-mono tabular-nums">
+          <div className="p-3 rounded-xl bg-ink-soft border border-line">
+            <span className="text-[11px] text-muted font-sans block">Total Returned</span>
+            <span className="font-bold text-content text-sm mt-0.5 block">
               KES {totalReturned.toLocaleString()}
             </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-[#0D1117] border border-slate-800">
-            <span className="text-[10px] text-slate-500 font-sans block">Expected Sales:</span>
-            <span className="font-bold text-emerald-400 text-sm mt-0.5 block">
+          <div className="p-3 rounded-xl bg-ink-soft border border-line">
+            <span className="text-[11px] text-muted font-sans block">Expected Sales</span>
+            <span className="font-bold text-brand-strong text-sm mt-0.5 block">
               KES {(shift.expectedSalesRevenue || 0).toLocaleString()}
             </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-[#0D1117] border border-slate-800">
-            <span className="text-[10px] text-slate-500 font-sans block">Expenses Paid:</span>
-            <span className="font-bold text-rose-400 text-sm mt-0.5 block">
+          <div className="p-3 rounded-xl bg-ink-soft border border-line">
+            <span className="text-[11px] text-muted font-sans block">Est. Net Profit</span>
+            <span className="font-bold text-brand-strong text-sm mt-0.5 block">
+              {shift.estimatedNetProfit !== undefined
+                ? `KES ${shift.estimatedNetProfit.toLocaleString()}`
+                : '—'}
+            </span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-ink-soft border border-line">
+            <span className="text-[11px] text-muted font-sans block">Expenses Paid</span>
+            <span className="font-bold text-danger text-sm mt-0.5 block">
               -KES {(shift.totalExpenses || 0).toLocaleString()}
             </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-[#0D1117] border border-slate-800">
-            <span className="text-[10px] text-slate-500 font-sans block">Variance:</span>
+          <div className="p-3 rounded-xl bg-ink-soft border border-line col-span-2 sm:col-span-1">
+            <span className="text-[11px] text-muted font-sans block">Variance</span>
             <span
               className={`font-bold text-sm mt-0.5 block ${
                 (shift.financialVariance || 0) === 0
-                  ? 'text-emerald-400'
+                  ? 'text-brand-strong'
                   : (shift.financialVariance || 0) < 0
-                  ? 'text-rose-400'
-                  : 'text-amber-400'
+                  ? 'text-danger'
+                  : 'text-warn'
               }`}
             >
               {(shift.financialVariance || 0) === 0
@@ -171,12 +179,52 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({ shift: initi
           </div>
         </div>
 
-        {/* Item Stock Table */}
+        {/* Item Stock Table (Desktop) + Card List (Mobile) */}
         <div className="space-y-2">
           <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
             Stock Count Breakdown
           </h3>
-          <div className="overflow-x-auto border border-slate-800 rounded-xl bg-[#0D1117]">
+
+          {/* Phone-first compact card list */}
+          <div className="sm:hidden border border-slate-800 rounded-xl bg-[#0D1117] divide-y divide-slate-800/60">
+            {stockItems.map((item) => {
+              const added = item.additions + (item.transfersIn || 0);
+              return (
+                <div key={item.id} className="p-3 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-100 truncate">
+                      {item.productName}
+                    </span>
+                    <span className="text-xs font-mono font-bold text-emerald-400 tabular-nums shrink-0">
+                      KES {(item.recordedSales * item.sellingPrice).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5 text-[11px] font-mono tabular-nums text-center bg-[#111622] rounded-lg py-1.5 px-2">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block font-sans">Open</span>
+                      <span className="text-slate-300">{item.openingPhysicalCount}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 block font-sans">+Add</span>
+                      <span className={added > 0 ? 'text-emerald-400' : added < 0 ? 'text-rose-400' : 'text-slate-500'}>
+                        {added > 0 ? `+${added}` : added < 0 ? added : '0'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 block font-sans">Sold</span>
+                      <span className="text-white font-bold">{item.recordedSales}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 block font-sans">Close</span>
+                      <span className="text-slate-300">{item.closingPhysicalCount ?? '-'}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="hidden sm:block overflow-x-auto border border-slate-800 rounded-xl bg-[#0D1117]">
             <table className="w-full text-xs text-left">
               <thead className="bg-[#111622] text-slate-400 font-mono text-[10px] uppercase border-b border-slate-800">
                 <tr>
@@ -226,7 +274,7 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({ shift: initi
                       {item.closingPhysicalCount ?? '-'}
                     </td>
                     <td className="py-2 px-3 text-right text-emerald-400 font-medium">
-                      KES {((item.isMeasured || item.unit === 'VALUE_KES') ? item.recordedSales : item.recordedSales * item.sellingPrice).toLocaleString()}
+                      KES {(item.recordedSales * item.sellingPrice).toLocaleString()}
                     </td>
                   </tr>
                 ))}

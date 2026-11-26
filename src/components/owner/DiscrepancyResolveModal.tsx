@@ -25,8 +25,9 @@ export const DiscrepancyResolveModal: React.FC<DiscrepancyResolveModalProps> = (
  };
 
  return (
- <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm">
- <div className="w-full max-w-md bg-[#121824] border border-[#1E293B] rounded-3xl p-5 md:p-6 shadow-2xl">
+ <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/80 backdrop-blur-sm">
+ <div className="w-full max-w-md max-h-[92dvh] overflow-y-auto bg-[#121824] border-t sm:border border-[#1E293B] rounded-t-3xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl pb-safe">
+ <div className="w-10 h-1 rounded-full bg-slate-700 mx-auto mb-3 sm:hidden" />
  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
  <div className="flex items-center gap-2">
  <ShieldAlert className="w-5 h-5 text-red-400" />
@@ -34,7 +35,8 @@ export const DiscrepancyResolveModal: React.FC<DiscrepancyResolveModalProps> = (
  </div>
  <button
  onClick={onClose}
- className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
+ className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 cursor-pointer"
+ aria-label="Close"
  >
  <X className="w-5 h-5" />
  </button>
@@ -99,7 +101,7 @@ export const DiscrepancyResolveModal: React.FC<DiscrepancyResolveModalProps> = (
  required
  value={notes}
  onChange={(e) => setNotes(e.target.value)}
- className="w-full bg-[#0E1420] border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500"
+ className="w-full bg-[#0E1420] border border-slate-700 rounded-xl p-3 text-base sm:text-xs text-white focus:outline-none focus:border-emerald-500"
  />
  </div>
 

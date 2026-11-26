@@ -158,9 +158,9 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ currentUser }) => {
 
           <button
             onClick={handleOpenAdd}
-            className="py-1.5 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[10px] sm:text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+            className="min-h-[42px] py-2 px-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
           >
-            <UserPlus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+            <UserPlus className="w-3.5 h-3.5" />
             <span>Add Attendant</span>
           </button>
         </div>
@@ -207,21 +207,25 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ currentUser }) => {
                         </div>
                       </div>
                     </td>
-                    <td className="p-3 text-right space-x-1">
-                      <button
-                        onClick={() => handleStartEdit(user)}
-                        className="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-                        title="Edit"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteUser(user)}
-                        className="p-1.5 text-slate-500 hover:text-red-400 rounded-lg hover:bg-red-950/30 transition-colors cursor-pointer"
-                        title="Remove"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
+                    <td className="p-2 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          onClick={() => handleStartEdit(user)}
+                          className="min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+                          title="Edit"
+                          aria-label={`Edit ${user.name}`}
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteUser(user)}
+                          className="min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-red-400 rounded-xl hover:bg-red-950/30 transition-colors cursor-pointer"
+                          title="Remove"
+                          aria-label={`Remove ${user.name}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -240,8 +244,13 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ currentUser }) => {
                 <UserPlus className="w-5 h-5 text-emerald-400" />
                 <h3 className="text-sm font-bold text-white">Create Staff Account</h3>
               </div>
-              <button onClick={() => setShowAddModal(false)} className="p-1 text-slate-400 hover:text-white">
-                <X className="w-4 h-4" />
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -306,8 +315,13 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ currentUser }) => {
           <div className="bg-[#121824] border border-[#1E293B] rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <h3 className="text-sm font-bold text-white">Edit Staff Credentials</h3>
-              <button onClick={() => setEditingUser(null)} className="p-1 text-slate-400 hover:text-white">
-                <X className="w-4 h-4" />
+              <button
+                type="button"
+                onClick={() => setEditingUser(null)}
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
 

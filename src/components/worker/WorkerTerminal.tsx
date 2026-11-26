@@ -1,8 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { User } from '../../types';
-import { UnifiedStockLedger } from './UnifiedStockLedger';
+import { GuidedCounterWorkspace } from './GuidedCounterWorkspace';
 import { StartScreen } from './StartScreen';
-import { store } from '../../services/store';
 
 interface WorkerTerminalProps {
   currentUser: User;
@@ -15,22 +14,32 @@ export const WorkerTerminal: React.FC<WorkerTerminalProps> = ({
   activeTab,
   setActiveTab,
 }) => {
-  const activeShift = store.getActiveShift();
+  const [openWizardOnEnter, setOpenWizardOnEnter] = useState(false);
 
   if (activeTab === 'start') {
     return (
       <StartScreen
         currentUser={currentUser}
-        onStartShift={() => setActiveTab('counter')}
-        onGoToCounter={() => setActiveTab('counter')}
-        onGoToEndShift={() => setActiveTab('counter')} // It handles internal redirection
+        onStartShift={() => {
+          setOpenWizardOnEnter(false);
+          setActiveTab('counter');
+        }}
+        onGoToCounter={() => {
+          setOpenWizardOnEnter(false);
+          setActiveTab('counter');
+        }}
+        onGoToEndShift={() => {
+          setOpenWizardOnEnter(true);
+          setActiveTab('counter');
+        }}
       />
     );
   }
 
   return (
-    <UnifiedStockLedger
+    <GuidedCounterWorkspace
       currentUser={currentUser}
+      initialOpenWizard={openWizardOnEnter}
     />
   );
 };

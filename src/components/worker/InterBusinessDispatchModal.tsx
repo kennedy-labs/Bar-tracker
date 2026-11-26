@@ -96,26 +96,28 @@ export const InterBusinessDispatchModal: React.FC<InterBusinessDispatchModalProp
  };
 
  return (
- <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
- <div className="bg-[#121824] border border-[#1E293B] rounded-3xl p-5 md:p-7 max-w-lg w-full shadow-2xl space-y-5 my-6">
+ <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
+ <div className="bg-[#121824] border-t sm:border border-[#1E293B] rounded-t-3xl sm:rounded-3xl p-4 sm:p-6 max-w-lg w-full max-h-[92dvh] overflow-y-auto shadow-2xl space-y-5 sm:my-6 pb-safe">
+ <div className="w-10 h-1 rounded-full bg-slate-700 mx-auto -mt-1 sm:hidden" />
  {/* Header */}
- <div className="flex items-center justify-between pb-4 border-b border-slate-800">
- <div className="flex items-center gap-3">
- <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+ <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+ <div className="flex items-center gap-3 min-w-0">
+ <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
  <Truck className="w-5 h-5" />
  </div>
- <div>
- <h2 className="text-base font-bold text-white tracking-tight">
+ <div className="min-w-0">
+ <h2 className="text-base font-bold text-white tracking-tight truncate">
  Transfer Stock to Partner Bar
  </h2>
- <p className="text-xs text-slate-400">
+ <p className="text-xs text-slate-400 truncate">
  Transfer drinks directly to a neighboring business
  </p>
  </div>
  </div>
  <button
  onClick={onClose}
- className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
+ className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 cursor-pointer shrink-0"
+ aria-label="Close"
  >
  <X className="w-5 h-5" />
  </button>
@@ -196,11 +198,11 @@ export const InterBusinessDispatchModal: React.FC<InterBusinessDispatchModalProp
  </span>
  </div>
 
- <div className="flex items-center gap-3">
+ <div className="flex items-center gap-2.5">
  <button
  type="button"
  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
- className="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center font-bold text-base cursor-pointer"
+ className="w-11 h-11 rounded-xl bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center font-bold text-base cursor-pointer shrink-0"
  >
  <Minus className="w-4 h-4" />
  </button>
@@ -208,31 +210,32 @@ export const InterBusinessDispatchModal: React.FC<InterBusinessDispatchModalProp
  <input
  type="number"
  step="any"
+ inputMode="decimal"
  min="0.5"
  max={availableStock}
  value={quantity}
  onChange={(e) => setQuantity(Math.max(0.5, parseFloat(e.target.value) || 0.5))}
- className="flex-1 bg-[#151D2C] border border-slate-700 rounded-xl py-2 text-center text-lg font-mono font-bold text-white focus:outline-none focus:border-amber-500"
+ className="flex-1 min-h-[44px] bg-[#151D2C] border border-slate-700 rounded-xl py-2 text-center text-lg font-mono font-bold text-white focus:outline-none focus:border-amber-500"
  />
 
  <button
  type="button"
  onClick={() => setQuantity((q) => Math.min(availableStock, q + 1))}
- className="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center font-bold text-base cursor-pointer"
+ className="w-11 h-11 rounded-xl bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center font-bold text-base cursor-pointer shrink-0"
  >
  <Plus className="w-4 h-4" />
  </button>
  </div>
 
  {/* Quick pack / crate helper presets */}
- <div className="flex items-center gap-1.5 pt-1">
+ <div className="flex flex-wrap items-center gap-1.5 pt-1">
  <span className="text-[10px] text-slate-500 font-mono">Quick:</span>
  {[6, 12, 24, 48].map((amt) => (
  <button
  key={amt}
  type="button"
  onClick={() => setQuantity(Math.min(availableStock, amt))}
- className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono text-[10px] cursor-pointer"
+ className="min-h-[36px] px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono text-xs cursor-pointer"
  >
  {amt}x ({amt === 24 ? '1 Crate' : amt === 48 ? '2 Crates' : `${amt} bottles`})
  </button>

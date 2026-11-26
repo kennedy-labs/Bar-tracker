@@ -190,7 +190,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0F17] flex flex-col items-center justify-center p-4 selection:bg-emerald-500/30">
+    <div className="min-h-[100dvh] bg-[#0B0F17] flex flex-col items-center justify-center p-4 selection:bg-emerald-500/30">
       {/* Background glow */}
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-emerald-950/20 via-transparent to-transparent"></div>
 
@@ -213,7 +213,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
           <button
             type="button"
             onClick={() => switchMode('SIGN_IN')}
-            className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            className={`flex-1 min-h-[44px] py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
               viewMode === 'SIGN_IN'
                 ? 'bg-emerald-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-slate-200'
@@ -224,7 +224,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
           <button
             type="button"
             onClick={() => switchMode('REGISTER')}
-            className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            className={`flex-1 min-h-[44px] py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
               viewMode === 'REGISTER'
                 ? 'bg-emerald-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-slate-200'
@@ -271,7 +271,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                     onChange={(e) => setBusinessName(e.target.value)}
                     placeholder="e.g. Test bar"
                     disabled={isAuthenticating || lockoutSeconds > 0}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#0A0D14] border border-slate-700 text-white focus:outline-none focus:border-emerald-500 text-sm"
+                    className="w-full min-h-[44px] pl-10 pr-4 py-2.5 rounded-xl bg-[#0A0D14] border border-slate-700 text-white focus:outline-none focus:border-emerald-500 text-base sm:text-sm"
                   />
                 </div>
               </div>
@@ -289,7 +289,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="e.g. worker or owner"
                     disabled={isAuthenticating || lockoutSeconds > 0}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#0A0D14] border border-slate-700 text-white focus:outline-none focus:border-emerald-500 text-sm"
+                    className="w-full min-h-[44px] pl-10 pr-4 py-2.5 rounded-xl bg-[#0A0D14] border border-slate-700 text-white focus:outline-none focus:border-emerald-500 text-base sm:text-sm"
                     autoFocus
                   />
                 </div>
@@ -308,12 +308,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter password"
                     disabled={isAuthenticating || lockoutSeconds > 0}
-                    className="w-full pl-10 pr-11 py-2.5 rounded-xl bg-[#0A0D14] border border-slate-700 text-white focus:outline-none focus:border-emerald-500 text-sm font-mono"
+                    className="w-full min-h-[44px] pl-10 pr-12 py-2.5 rounded-xl bg-[#0A0D14] border border-slate-700 text-white focus:outline-none focus:border-emerald-500 text-base sm:text-sm font-mono"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer p-1"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer p-2 min-w-[36px] min-h-[36px] flex items-center justify-center"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -323,7 +324,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
               <button
                 type="submit"
                 disabled={isAuthenticating || lockoutSeconds > 0}
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-slate-950 font-black text-sm shadow-xl shadow-emerald-950/60 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+                className="w-full min-h-[48px] py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-slate-950 font-black text-sm shadow-xl shadow-emerald-950/60 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mt-2"
               >
                 {isAuthenticating ? (
                   <span>Signing In...</span>
@@ -362,7 +363,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                   placeholder="e.g. Test bar"
                   value={regBusinessName}
                   onChange={(e) => setRegBusinessName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0A0D14] border border-slate-700 text-white text-sm focus:outline-none focus:border-emerald-500"
+                  className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[#0A0D14] border border-slate-700 text-white text-base sm:text-sm focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
@@ -376,11 +377,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                   placeholder="e.g. owner"
                   value={regUsername}
                   onChange={(e) => setRegUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0A0D14] border border-slate-700 text-white text-sm font-mono focus:outline-none focus:border-emerald-500"
+                  className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[#0A0D14] border border-slate-700 text-white text-base sm:text-sm font-mono focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
                     Password <span className="text-red-400">*</span>
@@ -392,7 +393,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                     placeholder="Password"
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0A0D14] border border-slate-700 text-white text-sm font-mono focus:outline-none focus:border-emerald-500"
+                    className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[#0A0D14] border border-slate-700 text-white text-base sm:text-sm font-mono focus:outline-none focus:border-emerald-500"
                   />
                 </div>
                 <div>
@@ -406,7 +407,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                     placeholder="Retype password"
                     value={regConfirmPassword}
                     onChange={(e) => setRegConfirmPassword(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0A0D14] border border-slate-700 text-white text-sm font-mono focus:outline-none focus:border-emerald-500"
+                    className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[#0A0D14] border border-slate-700 text-white text-base sm:text-sm font-mono focus:outline-none focus:border-emerald-500"
                   />
                 </div>
               </div>
@@ -414,7 +415,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
               <button
                 type="submit"
                 disabled={isSubmittingReg}
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-slate-950 font-black text-sm shadow-xl shadow-emerald-950/60 transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
+                className="w-full min-h-[48px] py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-slate-950 font-black text-sm shadow-xl shadow-emerald-950/60 transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
               >
                 {isSubmittingReg ? (
                   <span>Setting Up Your Bar...</span>

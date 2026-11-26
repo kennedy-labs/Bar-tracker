@@ -9,60 +9,62 @@
  *
  * To retheme the whole app, change the values in ONE place: this file.
  *
- * Palette direction: deep slate/ink dark theme with a violet accent.
+ * Palette direction: deep slate/ink dark operational canvas with crisp emerald accent.
  */
 
 @theme {
   /* --- Base canvas ------------------------------------------------------- */
-  --color-ink: #0a0a0f; /* app background, deepest layer            */
-  --color-ink-soft: #0f0f16; /* page backdrop / recessed wells           */
+  --color-ink: #0a0d14; /* app background, deepest layer            */
+  --color-ink-soft: #0f141e; /* page backdrop / recessed wells           */
 
   /* --- Surfaces (elevation ladder) --------------------------------------- */
-  --color-surface: #14141d; /* primary card / panel                     */
-  --color-surface-2: #1a1a25; /* raised: inputs, table headers, chips     */
-  --color-surface-3: #22222f; /* hover / active raised states             */
+  --color-surface: #141a26; /* primary card / panel                     */
+  --color-surface-2: #1b2333; /* raised: inputs, table headers, tabs      */
+  --color-surface-3: #232d42; /* hover / active raised states             */
 
   /* --- Borders & dividers ------------------------------------------------ */
-  --color-line: #262633; /* default hairline border                  */
-  --color-line-soft: #1e1e29; /* internal dividers inside a surface       */
-  --color-line-strong: #35354a; /* emphasised borders, focus outlines       */
+  --color-line: #232c3f; /* default hairline border                  */
+  --color-line-soft: #1b2232; /* internal dividers inside a surface       */
+  --color-line-strong: #323e58; /* emphasised borders, focus outlines       */
 
-  /* --- Brand accent (primary action, positive state) --------------------- */
-  --color-brand: #8b5cf6; /* violet-500  — buttons, active tabs       */
-  --color-brand-strong: #a78bfa; /* violet-400  — hover / emphasis text      */
-  --color-brand-soft: #7c3aed; /* violet-600  — pressed state              */
-  --color-brand-tint: #1e1333; /* deep violet wash panel                   */
-  --color-brand-line: #4c2d8f; /* violet border for tinted panels          */
+  /* --- Brand accent (primary action, positive/balanced state) ------------ */
+  --color-brand: #10b981; /* emerald-500 — primary CTAs, balanced     */
+  --color-brand-strong: #34d399; /* emerald-400 — hover / emphasis text      */
+  --color-brand-soft: #059669; /* emerald-600 — pressed state              */
+  --color-brand-tint: #09261e; /* deep emerald wash panel                  */
+  --color-brand-line: #115e43; /* emerald border for tinted panels         */
 
-  /* --- Secondary accent (informational / measured goods) ----------------- */
-  --color-info: #22d3ee; /* cyan-400                                 */
-  --color-info-tint: #083344; /* deep cyan wash panel                     */
-  --color-info-line: #155e75; /* cyan border for tinted panels            */
+  /* --- Secondary accent (informational / M-Pesa & restock) --------------- */
+  --color-info: #38bdf8; /* sky-400                                  */
+  --color-info-tint: #082738; /* deep sky wash panel                      */
+  --color-info-line: #0e4a6b; /* sky border for tinted panels             */
 
-  /* --- Status: warning --------------------------------------------------- */
-  --color-warn: #fbbf24; /* amber-400                                */
-  --color-warn-tint: #3a2a08; /* deep amber wash panel                    */
-  --color-warn-line: #92400e; /* amber border for tinted panels           */
+  /* --- Status: warning / pending / low stock ----------------------------- */
+  --color-warn: #f59e0b; /* amber-500                                */
+  --color-warn-tint: #2e2007; /* deep amber wash panel                    */
+  --color-warn-line: #78350f; /* amber border for tinted panels           */
 
   /* --- Status: danger / shortage ---------------------------------------- */
-  --color-danger: #fb7185; /* rose-400                                 */
-  --color-danger-tint: #3b0d1a; /* deep rose wash panel                     */
-  --color-danger-line: #9f1239; /* rose border for tinted panels            */
+  --color-danger: #f43f5e; /* rose-500                                 */
+  --color-danger-tint: #330c18; /* deep rose wash panel                     */
+  --color-danger-line: #881337; /* rose border for tinted panels            */
 
   /* --- Status: success --------------------------------------------------- */
-  --color-success: #4ade80; /* green-400                                */
-  --color-success-tint: #0b2e1a; /* deep green wash panel                    */
-  --color-success-line: #166534; /* green border for tinted panels           */
+  --color-success: #10b981; /* emerald-500                              */
+  --color-success-tint: #09261e; /* deep emerald wash panel                  */
+  --color-success-line: #115e43; /* emerald border for tinted panels         */
 
   /* --- Typography -------------------------------------------------------- */
-  --color-content: #ececf3; /* primary text                             */
-  --color-muted: #9a9aae; /* secondary / label text                   */
-  --color-faint: #62627a; /* tertiary / placeholder text              */
+  --color-content: #f1f5f9; /* primary text                             */
+  --color-muted: #94a3b8; /* secondary / label text                   */
+  --color-faint: #64748b; /* tertiary / placeholder text              */
 
   /* --- Typography scale -------------------------------------------------- */
+  --font-display:
+    "Outfit", "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
   --font-sans:
     "Plus Jakarta Sans", system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* --- Radii ------------------------------------------------------------- */
@@ -72,13 +74,14 @@
 
   /* --- Elevation --------------------------------------------------------- */
   --shadow-panel:
-    0 1px 2px 0 rgb(0 0 0 / 0.4), 0 8px 24px -8px rgb(0 0 0 / 0.5);
-  --shadow-pop: 0 8px 32px -8px rgb(0 0 0 / 0.65);
+    0 1px 2px 0 rgb(0 0 0 / 0.35), 0 8px 24px -8px rgb(0 0 0 / 0.45);
+  --shadow-pop: 0 8px 32px -8px rgb(0 0 0 / 0.6);
 }
 
 @layer base {
   html {
     color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
   }
 
   body {
@@ -87,6 +90,32 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overflow-x: clip;
+  }
+
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: var(--font-display);
+    text-wrap: balance;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+
+  /* Prevent mobile Safari/Chrome auto-zoom when focusing inputs/selects */
+  @media (max-width: 639px) {
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea {
+      font-size: 16px;
+    }
   }
 
   .font-mono,
@@ -99,6 +128,17 @@
   :focus-visible {
     outline: 2px solid var(--color-brand);
     outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
@@ -119,10 +159,19 @@
     background: var(--color-muted);
   }
 
-  .scrollbar-none {
+  .scrollbar-none,
+  .no-scrollbar {
     scrollbar-width: none;
   }
-  .scrollbar-none::-webkit-scrollbar {
+  .scrollbar-none::-webkit-scrollbar,
+  .no-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
   }
 }

@@ -31,21 +31,22 @@ export const LoanModal: React.FC<LoanModalProps> = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#121824] border border-[#1E293B] rounded-3xl w-full max-w-sm p-5 space-y-5 shadow-2xl my-auto">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
+      <div className="bg-[#121824] border-t sm:border border-[#1E293B] rounded-t-3xl sm:rounded-3xl w-full max-w-sm max-h-[92dvh] overflow-y-auto p-4 sm:p-5 space-y-5 shadow-2xl sm:my-auto pb-safe">
+        <div className="w-10 h-1 rounded-full bg-slate-700 mx-auto -mt-1 sm:hidden" />
         <div className="flex justify-between items-center">
           <h2 className="text-lg font-bold text-white tracking-tight">Loans</h2>
-          <button onClick={onClose} className="p-1 text-slate-400 hover:text-white transition-colors cursor-pointer">
+          <button onClick={onClose} className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer" aria-label="Close">
             <X className="w-5 h-5" />
           </button>
         </div>
         
         {/* Add Loan Form */}
         <div className="space-y-3 bg-[#0E1420] p-4 rounded-2xl border border-slate-800">
-          <input type="text" placeholder="Name" value={name} onChange={e => setName(e.target.value)} className="w-full bg-[#151D2C] p-2.5 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 border border-slate-700" />
-          <input type="number" placeholder="Amount (KES)" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-[#151D2C] p-2.5 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 border border-slate-700" />
-          <input type="text" placeholder="Note (optional)" value={note} onChange={e => setNote(e.target.value)} className="w-full bg-[#151D2C] p-2 rounded-xl text-white text-xs focus:outline-none focus:border-emerald-500 border border-slate-700" />
-          <button onClick={handleAdd} className="w-full bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-xl font-bold text-white flex items-center justify-center gap-2 text-sm cursor-pointer transition-all active:scale-95">
+          <input type="text" placeholder="Name" value={name} onChange={e => setName(e.target.value)} className="w-full min-h-[42px] bg-[#151D2C] p-2.5 rounded-xl text-white text-base sm:text-sm focus:outline-none focus:border-emerald-500 border border-slate-700" />
+          <input type="number" inputMode="decimal" placeholder="Amount (KES)" value={amount} onChange={e => setAmount(e.target.value)} className="w-full min-h-[42px] bg-[#151D2C] p-2.5 rounded-xl text-white text-base sm:text-sm focus:outline-none focus:border-emerald-500 border border-slate-700" />
+          <input type="text" placeholder="Note (optional)" value={note} onChange={e => setNote(e.target.value)} className="w-full min-h-[42px] bg-[#151D2C] p-2.5 rounded-xl text-white text-base sm:text-xs focus:outline-none focus:border-emerald-500 border border-slate-700" />
+          <button onClick={handleAdd} className="w-full min-h-[44px] bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-xl font-bold text-white flex items-center justify-center gap-2 text-sm cursor-pointer transition-all active:scale-95">
             <Plus className="w-4 h-4"/> Add Loan
           </button>
         </div>
@@ -62,8 +63,8 @@ export const LoanModal: React.FC<LoanModalProps> = ({ isOpen, onClose }) => {
                   <div className="text-amber-400 font-mono text-xs font-semibold">KES {l.amount.toLocaleString()}</div>
                   {l.note && <div className="text-slate-500 text-[10px] truncate">{l.note}</div>}
                 </div>
-                <button onClick={() => handleMarkPaid(l.id)} className="text-emerald-400 text-[10px] font-bold bg-emerald-950/50 hover:bg-emerald-900 border border-emerald-900 px-3 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors">
-                  <CheckCircle2 className="w-3 h-3"/> Paid
+                <button onClick={() => handleMarkPaid(l.id)} className="min-h-[40px] text-emerald-400 text-xs font-bold bg-emerald-950/50 hover:bg-emerald-900 border border-emerald-900 px-3.5 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer transition-colors shrink-0">
+                  <CheckCircle2 className="w-3.5 h-3.5"/> Paid
                 </button>
               </div>
             ))

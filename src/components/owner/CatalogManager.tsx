@@ -1,8 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Product, ProductCategory, ProductUnit } from '../../types';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Product, ProductCategory, ProductUnit, InventoryItem } from '../../types';
 import { store } from '../../services/store';
-import { weightMeasurementService } from '../../services/weightMeasurement';
-import { WeightCalculatorModal } from '../common/WeightCalculatorModal';
 import { StockAdjustmentModal } from '../common/StockAdjustmentModal';
 import { useBackHandler } from '../../services/navigationHistory';
 import {
@@ -15,7 +13,6 @@ import {
   RotateCcw,
   Check,
   X,
-  TrendingUp,
   AlertTriangle,
   Layers,
   Sparkles,
@@ -24,7 +21,6 @@ import {
   SlidersHorizontal,
   FileText,
   CheckCircle2,
-  Scale,
   Minus,
   AlertCircle,
   PackageCheck,
@@ -98,7 +94,7 @@ const CountButton: React.FC<CountButtonProps> = ({
         onLongPress();
       }}
       onDoubleClick={onLongPress}
-      className={`w-14 sm:w-16 py-1.5 rounded-xl bg-[#0B0F17] border hover:border-emerald-500/50 active:scale-95 transition-all text-xs font-mono font-bold select-none cursor-pointer flex items-center justify-center gap-1.5 ${
+      className={`min-w-[58px] sm:w-16 min-h-[42px] py-1.5 rounded-xl bg-[#0B0F17] border hover:border-emerald-500/50 active:scale-95 transition-all text-xs font-mono font-bold select-none cursor-pointer flex items-center justify-center gap-1.5 ${
         isOut
           ? 'text-rose-400 border-rose-900/60 bg-rose-950/20'
           : isLow
@@ -113,13 +109,12 @@ const CountButton: React.FC<CountButtonProps> = ({
 };
 
 export const CatalogManager: React.FC = () => {
- const [, setTick] = useState(0);
- useEffect(() => {
- return store.subscribe(() => {
-   setStockInputs({});
-   setTick((t) => t + 1);
- });
- }, []);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    return store.subscribe(() => {
+      setTick((t) => t + 1);
+    });
+  }, []);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -212,6 +207,7 @@ export const CatalogManager: React.FC = () => {
   const [name, setName] = useState('');
   const [category, setCategory] = useState<ProductCategory>('BEER');
   const [unit, setUnit] = useState<ProductUnit>('BOTTLE');
+  const [buyingPrice, setBuyingPrice] = useState('');
   const [sellingPrice, setSellingPrice] = useState('');
   const [reorderLevel, setReorderLevel] = useState('5');
   const [initialStock, setInitialStock] = useState('');
@@ -222,84 +218,59 @@ export const CatalogManager: React.FC = () => {
   const [editName, setEditName] = useState('');
   const [editCategory, setEditCategory] = useState<ProductCategory>('BEER');
   const [editUnit, setEditUnit] = useState<ProductUnit>('BOTTLE');
+  const [editBuyingPrice, setEditBuyingPrice] = useState('');
   const [editSellingPrice, setEditSellingPrice] = useState('');
   const [editReorderLevel, setEditReorderLevel] = useState('5');
   const [editVolumeMl, setEditVolumeMl] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
-
-  // Measured Drink Modal States (Weight-based or Value-based Measurement)
-  const [showMeasuredModal, setShowMeasuredModal] = useState(false);
-  const [measuredEditingProduct, setMeasuredEditingProduct] = useState<Product | null>(null);
-  const [measuredMode, setMeasuredMode] = useState<'WEIGHT' | 'VALUE'>('WEIGHT');
-  const [measuredName, setMeasuredName] = useState('');
-  const [measuredCategory, setMeasuredCategory] = useState<ProductCategory>('BEER');
-  const [measuredFullWeight, setMeasuredFullWeight] = useState('60');
-  const [measuredTareWeight, setMeasuredTareWeight] = useState('0');
-  const [measuredPricePerKg, setMeasuredPricePerKg] = useState('150');
-  const [measuredStock, setMeasuredStock] = useState('60');
-  const [measuredError, setMeasuredError] = useState<string | null>(null);
-
-  // Quick Keg Scale Calculator Modal
-  const [showWeightCalcModal, setShowWeightCalcModal] = useState(false);
-  const [weightCalcModalProductId, setWeightCalcModalProductId] = useState<string | undefined>(undefined);
 
   // Phone back-button integration: close any open product modal on phone back
   useBackHandler(showAddModal, () => setShowAddModal(false), 'catalog-add-modal');
   useBackHandler(Boolean(editingProduct), () => setEditingProduct(null), 'catalog-edit-modal');
   useBackHandler(Boolean(deletingProduct), () => setDeletingProduct(null), 'catalog-delete-modal');
   useBackHandler(Boolean(viewingProduct), () => setViewingProduct(null), 'catalog-view-modal');
-  useBackHandler(showMeasuredModal, () => setShowMeasuredModal(false), 'catalog-measured-modal');
-  useBackHandler(showWeightCalcModal, () => setShowWeightCalcModal(false), 'catalog-weight-calc-modal');
   useBackHandler(Boolean(adjustingStockProduct), () => setAdjustingStockProduct(null), 'catalog-adjust-stock-modal');
 
   // Quick Inline Price Editing
   const [inlineEditId, setInlineEditId] = useState<string | null>(null);
   const [inlineSell, setInlineSell] = useState('');
 
-  const allProducts = store.getProducts(true);
-  const inventory = store.getInventory();
+  const allProducts = useMemo(() => store.getProducts(true), [tick]);
+  const inventory = useMemo(() => store.getInventory(), [tick]);
+
+  const inventoryMap = useMemo(() => {
+    const map = new Map<string, InventoryItem>();
+    inventory.forEach((i) => map.set(i.productId, i));
+    return map;
+  }, [inventory]);
 
   // Filter products
-  const filteredProducts = allProducts.filter((p) => {
-    if (!showArchived && p.isArchived) return false;
-    if (showArchived && !p.isArchived) return false;
+  const filteredProducts = useMemo(() => {
+    const cleanSearch = searchQuery.trim().toLowerCase();
+    return allProducts.filter((p) => {
+      if (!showArchived && p.isArchived) return false;
+      if (showArchived && !p.isArchived) return false;
 
-    const matchesSearch =
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.category.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch =
+        !cleanSearch ||
+        p.name.toLowerCase().includes(cleanSearch) ||
+        p.category.toLowerCase().includes(cleanSearch);
 
-    const matchesCat =
-      selectedCategory === 'ALL' || p.category === selectedCategory;
+      const matchesCat =
+        selectedCategory === 'ALL' || p.category === selectedCategory;
 
-    const inv = inventory.find((i) => i.productId === p.id);
-    const stockOnHand = inv ? inv.quantityOnHand : 0;
-    const isLow = stockOnHand <= (p.reorderLevel ?? 5);
+      const inv = inventoryMap.get(p.id);
+      const stockOnHand = inv ? inv.quantityOnHand : 0;
+      const isLow = stockOnHand <= (p.reorderLevel ?? 5);
 
-    const matchesStockFilter = stockStatusFilter === 'ALL' || isLow;
+      const matchesStockFilter = stockStatusFilter === 'ALL' || isLow;
 
-    return matchesSearch && matchesCat && matchesStockFilter;
-  });
+      return matchesSearch && matchesCat && matchesStockFilter;
+    });
+  }, [allProducts, inventoryMap, showArchived, searchQuery, selectedCategory, stockStatusFilter]);
 
-  const activeProducts = allProducts.filter((p) => !p.isArchived);
-  const archivedProducts = allProducts.filter((p) => p.isArchived);
-
-  // Stock Audit & Inventory Analytics
-  const totalActiveCount = activeProducts.length;
-  const totalStockUnits = activeProducts.reduce((sum, p) => {
-    const inv = inventory.find((i) => i.productId === p.id);
-    return sum + (inv ? inv.quantityOnHand : 0);
-  }, 0);
-  const lowStockCount = activeProducts.filter((p) => {
-    const inv = inventory.find((i) => i.productId === p.id);
-    const qty = inv ? inv.quantityOnHand : 0;
-    return qty <= (p.reorderLevel ?? 5);
-  }).length;
-  const totalRetailValue = activeProducts.reduce((sum, p) => {
-    const inv = inventory.find((i) => i.productId === p.id);
-    const qty = inv ? inv.quantityOnHand : 0;
-    const val = (p.isMeasured || p.unit === 'VALUE_KES') ? qty : qty * p.sellingPrice;
-    return sum + val;
-  }, 0);
+  const activeProducts = useMemo(() => allProducts.filter((p) => !p.isArchived), [allProducts]);
+  void activeProducts;
 
  // Categories list
  const categories: { key: string; label: string }[] = [
@@ -309,7 +280,6 @@ export const CatalogManager: React.FC = () => {
  { key: 'SPIRIT', label: 'Spirits & Whiskeys' },
  { key: 'WINE', label: 'Wines' },
  { key: 'SOFT_DRINK', label: 'Soft Drinks & Sodas' },
- { key: 'TRADITIONAL_BREW', label: 'Traditional Brew & Continuous' },
  { key: 'CIGARETTE', label: 'Cigarettes' },
  ];
 
@@ -324,7 +294,6 @@ export const CatalogManager: React.FC = () => {
  { key: 'CUP', label: 'Cup' },
  { key: 'KEG', label: 'Keg' },
  { key: 'PORTION', label: 'Portion' },
- { key: 'VALUE_KES', label: 'KES Monetary Value' },
  { key: 'CUSTOM', label: 'Custom' },
  ];
 
@@ -333,6 +302,7 @@ export const CatalogManager: React.FC = () => {
    setName('');
    setCategory('BEER');
    setUnit('BOTTLE');
+   setBuyingPrice('');
    setSellingPrice('');
    setReorderLevel('5');
    setInitialStock('');
@@ -342,48 +312,13 @@ export const CatalogManager: React.FC = () => {
    setShowAddModal(true);
  };
 
- // Open Add Measured Modal
- const handleOpenAddMeasured = () => {
-   setMeasuredEditingProduct(null);
-   setMeasuredMode('WEIGHT');
-    setMeasuredName('');
-   setMeasuredCategory('BEER');
-    setMeasuredFullWeight('');
-   setMeasuredTareWeight('0');
-    setMeasuredPricePerKg('');
-    setMeasuredStock('');
-   setMeasuredError(null);
-   setShowMeasuredModal(true);
- };
-
- // Open Edit Modal (Auto-routes measured products to the measured modal)
+ // Open Edit Modal
  const handleOpenEdit = (p: Product) => {
-   if (p.isMeasured) {
-     setMeasuredEditingProduct(p);
-     setMeasuredName(p.name);
-     setMeasuredCategory(p.category);
-     const invItem = inventory.find((i) => i.productId === p.id);
-
-     if (p.measurementType === 'WEIGHT' || p.unit === 'KG') {
-       setMeasuredMode('WEIGHT');
-       setMeasuredFullWeight(String(p.fullWeightKg || 60));
-       setMeasuredTareWeight(String(p.emptyWeightKg || 0));
-       setMeasuredPricePerKg(String(p.pricePerKg || p.sellingPrice || 150));
-       setMeasuredStock(String(invItem?.quantityOnHand ?? p.fullWeightKg ?? 60));
-     } else {
-       setMeasuredMode('VALUE');
-       setMeasuredStock(String(invItem?.quantityOnHand ?? p.totalMeasuredValueKes ?? 0));
-     }
-
-     setMeasuredError(null);
-     setShowMeasuredModal(true);
-     return;
-   }
-
    setEditingProduct(p);
    setEditName(p.name);
    setEditCategory(p.category);
    setEditUnit(p.unit);
+   setEditBuyingPrice(p.buyingPrice !== undefined ? String(p.buyingPrice) : '');
    setEditSellingPrice(p.sellingPrice !== undefined ? String(p.sellingPrice) : '0');
    setEditReorderLevel(String(p.reorderLevel || 5));
    setEditVolumeMl(p.volumeMl ? String(p.volumeMl) : '');
@@ -396,6 +331,7 @@ export const CatalogManager: React.FC = () => {
    setFormError(null);
 
    const sell = parseFloat(sellingPrice);
+   const buy = buyingPrice.trim() !== '' ? parseFloat(buyingPrice) : undefined;
    const reorder = parseFloat(reorderLevel) || 5;
    const stock = parseFloat(initialStock) || 0;
    const vol = volumeMl ? parseInt(volumeMl, 10) : undefined;
@@ -410,11 +346,17 @@ export const CatalogManager: React.FC = () => {
      return;
    }
 
+   if (buy !== undefined && (isNaN(buy) || buy < 0)) {
+     setFormError('Please enter a valid wholesale buying cost (KES 0 or higher).');
+     return;
+   }
+
    store.addProduct({
      name: name.trim(),
      category,
      unit,
      sellingPrice: sell,
+     buyingPrice: buy,
      reorderLevel: reorder,
      volumeMl: vol,
      initialStock: stock,
@@ -443,6 +385,12 @@ export const CatalogManager: React.FC = () => {
      return;
    }
 
+   const buy = editBuyingPrice.trim() !== '' ? parseFloat(editBuyingPrice) : undefined;
+   if (buy !== undefined && (isNaN(buy) || buy < 0)) {
+     setEditError('Please enter a valid wholesale buying cost (KES 0 or higher).');
+     return;
+   }
+
    const reorder = parseFloat(editReorderLevel) || 5;
    const vol = editVolumeMl ? parseInt(editVolumeMl, 10) : undefined;
 
@@ -452,6 +400,7 @@ export const CatalogManager: React.FC = () => {
      category: editCategory,
      unit: editUnit,
      sellingPrice: sell,
+     buyingPrice: buy,
      reorderLevel: reorder,
      volumeMl: vol,
    });
@@ -460,114 +409,6 @@ export const CatalogManager: React.FC = () => {
    setTimeout(() => setSavedStockNotice(null), 3500);
 
    setEditingProduct(null);
- };
-
- // Save Add or Edit Measured Product (Weight-based or Value-based Measurement)
- const handleSubmitMeasuredProduct = (e: React.FormEvent) => {
-   e.preventDefault();
-   setMeasuredError(null);
-
-   if (!measuredName.trim()) {
-     setMeasuredError('Please enter a drink name (e.g. Tusker Keg Draft, Makali, Muratina).');
-     return;
-   }
-
-   if (measuredMode === 'WEIGHT') {
-     const fullWeight = parseFloat(measuredFullWeight) || 60;
-     const tareWeight = parseFloat(measuredTareWeight) || 0;
-     const rate = parseFloat(measuredPricePerKg);
-     if (isNaN(rate) || rate <= 0) {
-       setMeasuredError('Please enter a valid price per kilogram (KES/kg).');
-       return;
-     }
-
-     const stockKg = parseFloat(measuredStock);
-     if (isNaN(stockKg) || stockKg < 0) {
-       setMeasuredError('Please enter a valid scale weight in kilograms (kg).');
-       return;
-     }
-
-     const cleanStockKg = Math.round(stockKg * 100) / 100;
-     const totalVal = Math.round(cleanStockKg * rate * 100) / 100;
-
-     if (measuredEditingProduct) {
-       store.updateProduct(measuredEditingProduct.id, {
-         name: measuredName.trim(),
-         category: measuredCategory,
-         unit: 'KG',
-         sellingPrice: rate,
-         pricePerKg: rate,
-         fullWeightKg: fullWeight,
-         emptyWeightKg: tareWeight,
-         isMeasured: true,
-         measurementType: 'WEIGHT',
-         measureUnitLabel: 'kg',
-         totalMeasuredValueKes: totalVal,
-       });
-
-       store.adjustProductStock(measuredEditingProduct.id, cleanStockKg);
-     } else {
-       store.addProduct({
-         name: measuredName.trim(),
-         category: measuredCategory,
-         unit: 'KG',
-         sellingPrice: rate,
-         pricePerKg: rate,
-         fullWeightKg: fullWeight,
-         emptyWeightKg: tareWeight,
-         initialStock: cleanStockKg,
-         reorderLevel: 10,
-         isMeasured: true,
-         measurementType: 'WEIGHT',
-         measureUnitLabel: 'kg',
-         totalMeasuredValueKes: totalVal,
-       });
-     }
-
-     setShowMeasuredModal(false);
-     setMeasuredEditingProduct(null);
-     return;
-   }
-
-   const stock = parseFloat(measuredStock);
-   if (isNaN(stock) || stock < 0) {
-     setMeasuredError('Please enter a valid counter stock value in KES.');
-     return;
-   }
-
-   const cleanStock = Math.round(stock * 100) / 100;
-
-   if (measuredEditingProduct) {
-     store.updateProduct(measuredEditingProduct.id, {
-       name: measuredName.trim(),
-       category: measuredCategory,
-       unit: 'VALUE_KES',
-       sellingPrice: 1,
-       isMeasured: true,
-       measurementType: 'VALUE',
-       measureUnitLabel: 'KES Value',
-       totalMeasuredValueKes: cleanStock,
-     });
-
-     // Update on-shelf inventory
-     store.adjustProductStock(measuredEditingProduct.id, cleanStock);
-   } else {
-     store.addProduct({
-       name: measuredName.trim(),
-       category: measuredCategory,
-       unit: 'VALUE_KES',
-       sellingPrice: 1,
-       initialStock: cleanStock,
-       reorderLevel: 200,
-       isMeasured: true,
-       measurementType: 'VALUE',
-       measureUnitLabel: 'KES Value',
-       totalMeasuredValueKes: cleanStock,
-     });
-   }
-
-   setShowMeasuredModal(false);
-   setMeasuredEditingProduct(null);
  };
 
  // Handle Archive or Delete
@@ -611,18 +452,10 @@ export const CatalogManager: React.FC = () => {
           <div className="flex items-center flex-wrap gap-2">
             <button
               onClick={handleOpenAdd}
-              className="py-2 px-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-lg transition-all cursor-pointer shrink-0"
+              className="min-h-[42px] py-2 px-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-lg transition-all cursor-pointer shrink-0"
             >
               <Plus className="w-4 h-4" />
               <span>Add Drink</span>
-            </button>
-
-            <button
-              onClick={handleOpenAddMeasured}
-              className="py-2 px-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg transition-all cursor-pointer shrink-0"
-            >
-              <Scale className="w-4 h-4 text-cyan-200" />
-              <span>Add Measured</span>
             </button>
           </div>
         </div>
@@ -639,20 +472,30 @@ export const CatalogManager: React.FC = () => {
                 placeholder="Search drink by name or category..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-[#0E1420] border border-slate-800 rounded-2xl pl-9 pr-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full min-h-[42px] bg-[#0E1420] border border-slate-800 rounded-2xl pl-9 pr-9 py-2 text-base sm:text-xs text-white focus:outline-none focus:border-emerald-500"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-white rounded-lg cursor-pointer"
+                  aria-label="Clear search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
 
           </div>
 
           {/* Category Chips */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
             {categories.map((c) => (
               <button
                 key={c.key}
                 onClick={() => setSelectedCategory(c.key)}
-                className={`py-1.5 px-3 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                className={`min-h-[38px] py-1.5 px-3 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
                   selectedCategory === c.key
                     ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold'
                     : 'bg-[#0E1420] text-slate-400 hover:text-slate-200 border border-slate-800/80'
@@ -676,7 +519,7 @@ export const CatalogManager: React.FC = () => {
           {/* STREAMLINED READ-ONLY ITEM LIST */}
           <div className="space-y-2.5">
             {filteredProducts.map((p) => {
-              const inv = inventory.find((i) => i.productId === p.id);
+              const inv = inventoryMap.get(p.id);
               const stockOnHand = inv ? inv.quantityOnHand : 0;
               const reorderThreshold = p.reorderLevel ?? 5;
               const isLow = stockOnHand <= reorderThreshold;
@@ -707,17 +550,27 @@ export const CatalogManager: React.FC = () => {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        {p.isMeasured ? (
-                          <span className="text-cyan-400/70 text-[10px] font-mono font-medium">
-                            Measured Value
-                          </span>
-                        ) : (
-                          <span className="text-slate-500 text-[10px] font-mono">
-                            KES {p.sellingPrice.toLocaleString()}
-                          </span>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-0.5 font-mono text-[11px] tabular-nums">
+                        <span className="text-muted">
+                          Sell KES {p.sellingPrice.toLocaleString()}
+                        </span>
+                        {p.buyingPrice !== undefined && p.buyingPrice > 0 && (
+                          <>
+                            <span className="text-faint">·</span>
+                            <span className="text-muted">
+                              Cost KES {p.buyingPrice.toLocaleString()}
+                            </span>
+                            {p.sellingPrice > 0 && (
+                              <>
+                                <span className="text-faint">·</span>
+                                <span className="text-brand-strong font-semibold">
+                                  {Math.round(((p.sellingPrice - p.buyingPrice) / p.sellingPrice) * 100)}% margin
+                                </span>
+                              </>
+                            )}
+                          </>
                         )}
-                        <span className="text-slate-600 text-[10px] uppercase tracking-tight">
+                        <span className="text-faint uppercase">
                           · {p.unit.toLowerCase()}
                         </span>
                       </div>
@@ -740,11 +593,11 @@ export const CatalogManager: React.FC = () => {
                     </div>
 
                     {/* 3 Vertical Dot Menu Icon */}
-                    <div className="w-8 shrink-0 flex justify-end relative">
+                    <div className="w-10 shrink-0 flex justify-end relative">
                       <button
                         type="button"
                         onClick={() => setActiveMenuId(isMenuOpen ? null : p.id)}
-                        className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                        className={`min-w-[42px] min-h-[42px] flex items-center justify-center rounded-xl transition-colors cursor-pointer ${
                           isMenuOpen
                             ? 'bg-slate-800 text-white'
                             : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
@@ -770,7 +623,7 @@ export const CatalogManager: React.FC = () => {
                                 setViewingProduct(p);
                                 setActiveMenuId(null);
                               }}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-200 hover:text-white hover:bg-slate-800/80 transition-colors text-left cursor-pointer"
+                              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:text-white hover:bg-slate-800/80 transition-colors text-left cursor-pointer"
                             >
                               <Info className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                               <span>View Product</span>
@@ -841,7 +694,7 @@ export const CatalogManager: React.FC = () => {
                           </span>
                         </div>
 
-                        {p.volumeMl && !p.isMeasured && (
+                        {p.volumeMl && (
                           <div>
                             <span className="text-[10px] text-slate-500 uppercase block font-mono">Bottle Volume</span>
                             <span className="text-slate-200 font-medium">{p.volumeMl} ml</span>
@@ -852,13 +705,6 @@ export const CatalogManager: React.FC = () => {
                           <span className="text-[10px] text-slate-500 uppercase block font-mono">Reorder Alert</span>
                           <span className="text-slate-200 font-medium">≤ {reorderThreshold} units</span>
                         </div>
-
-                        {p.isMeasured && (
-                          <div>
-                            <span className="text-[10px] text-cyan-400 uppercase block font-mono">Measurement Mode</span>
-                            <span className="text-cyan-300 font-medium">Weight / Scale</span>
-                          </div>
-                        )}
                       </div>
                     </div>
                   )}
@@ -872,8 +718,9 @@ export const CatalogManager: React.FC = () => {
 
   {/* 3. MODAL: ADD NEW DRINK (Dedicated function) */}
   {showAddModal && (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="w-full max-w-lg bg-[#121824] border border-[#1E293B] rounded-3xl p-5 md:p-6 shadow-2xl my-6">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/80 backdrop-blur-sm">
+      <div className="w-full max-w-lg max-h-[92dvh] overflow-y-auto bg-[#121824] border-t sm:border border-[#1E293B] rounded-t-3xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl pb-safe">
+        <div className="w-10 h-1 rounded-full bg-slate-700 mx-auto mb-3 sm:hidden" />
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
@@ -886,7 +733,8 @@ export const CatalogManager: React.FC = () => {
           </div>
           <button
             onClick={() => setShowAddModal(false)}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 cursor-pointer"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
@@ -954,15 +802,27 @@ export const CatalogManager: React.FC = () => {
             </div>
           </div>
 
-          {/* Selling Price */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-              Selling Price (KES) <span className="text-emerald-400">*</span>
-            </label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-emerald-400 font-bold">
-                KES
-              </span>
+          {/* Wholesale Cost & Selling Price */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                Wholesale Cost (KES)
+              </label>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                placeholder="Optional (e.g. 170)"
+                value={buyingPrice}
+                onChange={(e) => setBuyingPrice(e.target.value)}
+                className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono font-bold text-slate-200 focus:outline-none focus:border-emerald-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                Selling Price (KES) <span className="text-emerald-400">*</span>
+              </label>
               <input
                 type="number"
                 step="any"
@@ -971,10 +831,16 @@ export const CatalogManager: React.FC = () => {
                 placeholder="e.g. 250"
                 value={sellingPrice}
                 onChange={(e) => setSellingPrice(e.target.value)}
-                className="w-full bg-[#0E1420] border border-emerald-500/80 rounded-xl pl-12 pr-3 py-2 text-sm font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-400"
+                className="w-full bg-[#0E1420] border border-emerald-500/80 rounded-xl px-3 py-2 text-sm font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-400"
               />
             </div>
           </div>
+          {buyingPrice.trim() !== '' && sellingPrice.trim() !== '' && parseFloat(sellingPrice) > 0 && (
+            <div className="text-xs font-mono text-emerald-400 tabular-nums">
+              Est. profit per unit: KES {(parseFloat(sellingPrice) - (parseFloat(buyingPrice) || 0)).toLocaleString()} (
+              {Math.round(((parseFloat(sellingPrice) - (parseFloat(buyingPrice) || 0)) / parseFloat(sellingPrice)) * 100)}% margin)
+            </div>
+          )}
 
           {/* Initial Stock & Reorder Alert Level */}
           <div className="grid grid-cols-2 gap-3">
@@ -1013,13 +879,13 @@ export const CatalogManager: React.FC = () => {
             <button
               type="button"
               onClick={() => setShowAddModal(false)}
-              className="py-3 px-4 rounded-xl bg-[#0E1420] border border-slate-800 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
+              className="min-h-[44px] py-3 px-4 rounded-xl bg-[#0E1420] border border-slate-800 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/50 cursor-pointer"
+              className="flex-1 min-h-[44px] py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/50 cursor-pointer"
             >
               <Check className="w-4 h-4" />
               <span>Add Drink</span>
@@ -1032,8 +898,9 @@ export const CatalogManager: React.FC = () => {
 
   {/* 4. MODAL: EDIT PRODUCT (Dedicated Soft Adjustment Function) */}
   {editingProduct && (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="w-full max-w-lg bg-[#121824] border border-[#1E293B] rounded-3xl p-5 md:p-6 shadow-2xl my-6 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/80 backdrop-blur-sm">
+      <div className="w-full max-w-lg max-h-[92dvh] overflow-y-auto bg-[#121824] border-t sm:border border-[#1E293B] rounded-t-3xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4 pb-safe">
+        <div className="w-10 h-1 rounded-full bg-slate-700 mx-auto -mt-1 sm:hidden" />
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
@@ -1047,7 +914,8 @@ export const CatalogManager: React.FC = () => {
           </div>
           <button
             onClick={() => setEditingProduct(null)}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 cursor-pointer"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
@@ -1058,14 +926,14 @@ export const CatalogManager: React.FC = () => {
           <div className="min-w-0">
             <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Current Shelf Stock</div>
             <div className="text-sm font-bold text-white mt-0.5 font-mono">
-              {inventory.find((i) => i.productId === editingProduct.id)?.quantityOnHand ?? 0}{' '}
+              {inventoryMap.get(editingProduct.id)?.quantityOnHand ?? 0}{' '}
               <span className="text-xs text-slate-400 font-sans font-normal">{editingProduct.unit.toLowerCase()}</span>
             </div>
           </div>
           <button
             type="button"
             onClick={() => {
-              const currentQty = inventory.find((i) => i.productId === editingProduct.id)?.quantityOnHand ?? 0;
+              const currentQty = inventoryMap.get(editingProduct.id)?.quantityOnHand ?? 0;
               setAdjustingStockProduct({
                 product: editingProduct,
                 currentStock: currentQty,
@@ -1073,7 +941,7 @@ export const CatalogManager: React.FC = () => {
               });
               setEditingProduct(null);
             }}
-            className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition cursor-pointer shrink-0"
+            className="min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition cursor-pointer shrink-0"
           >
             Adjust Count
           </button>
@@ -1139,20 +1007,29 @@ export const CatalogManager: React.FC = () => {
             </div>
           </div>
 
-          {/* Selling Price */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                Retail Selling Price (KES)
+          {/* Wholesale Cost & Selling Price */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                Wholesale Cost (KES)
               </label>
-              {parseFloat(editSellingPrice) === 0 && (
-                <span className="text-[10px] text-amber-400 font-mono">Currently unpriced</span>
-              )}
+              <input
+                type="number"
+                step="any"
+                min="0"
+                placeholder="Optional"
+                value={editBuyingPrice}
+                onChange={(e) => setEditBuyingPrice(e.target.value)}
+                className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2.5 text-sm font-mono font-bold text-slate-200 focus:outline-none focus:border-sky-400"
+              />
             </div>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-emerald-400 font-bold">
-                KES
-              </span>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                  Selling Price (KES)
+                </label>
+              </div>
               <input
                 type="number"
                 step="any"
@@ -1160,10 +1037,16 @@ export const CatalogManager: React.FC = () => {
                 required
                 value={editSellingPrice}
                 onChange={(e) => setEditSellingPrice(e.target.value)}
-                className="w-full bg-[#0E1420] border border-emerald-500/80 rounded-xl pl-12 pr-3 py-2.5 text-sm font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-400"
+                className="w-full bg-[#0E1420] border border-emerald-500/80 rounded-xl px-3 py-2.5 text-sm font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-400"
               />
             </div>
           </div>
+          {editBuyingPrice.trim() !== '' && parseFloat(editSellingPrice) > 0 && (
+            <div className="text-xs font-mono text-emerald-400 tabular-nums">
+              Est. profit per unit: KES {(parseFloat(editSellingPrice) - (parseFloat(editBuyingPrice) || 0)).toLocaleString()} (
+              {Math.round(((parseFloat(editSellingPrice) - (parseFloat(editBuyingPrice) || 0)) / parseFloat(editSellingPrice)) * 100)}% margin)
+            </div>
+          )}
 
           {/* Low Stock Alert Level */}
           <div>
@@ -1185,13 +1068,13 @@ export const CatalogManager: React.FC = () => {
             <button
               type="button"
               onClick={() => setEditingProduct(null)}
-              className="py-3 px-4 rounded-xl bg-[#0E1420] border border-slate-800 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
+              className="min-h-[44px] py-3 px-4 rounded-xl bg-[#0E1420] border border-slate-800 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 py-3 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-sky-950/50 cursor-pointer"
+              className="flex-1 min-h-[44px] py-3 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-sky-950/50 cursor-pointer"
             >
               <Check className="w-4 h-4" />
               <span>Save Changes</span>
@@ -1204,8 +1087,8 @@ export const CatalogManager: React.FC = () => {
 
   {/* 4. MODAL: VIEW PRODUCT DETAILS */}
   {viewingProduct && (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="w-full max-w-lg bg-[#121824] border border-[#1E293B] rounded-3xl p-5 md:p-6 shadow-2xl my-6 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-sm">
+      <div className="w-full max-w-lg max-h-[92dvh] overflow-y-auto bg-[#121824] border border-[#1E293B] rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
@@ -1219,35 +1102,42 @@ export const CatalogManager: React.FC = () => {
           </div>
           <button
             onClick={() => setViewingProduct(null)}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
+            className="min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Status Badges */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+        {/* Status Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           <div className="p-3 bg-[#0E1420] border border-slate-800 rounded-2xl">
             <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Retail Price</div>
-            <div className="text-sm font-bold text-emerald-400 mt-0.5 font-mono">
-              {viewingProduct.isMeasured && viewingProduct.measurementType === 'VALUE'
-                ? 'Measured'
-                : `KES ${viewingProduct.sellingPrice.toLocaleString()}`}
+            <div className="text-sm font-bold text-emerald-400 mt-0.5 font-mono tabular-nums">
+              KES {viewingProduct.sellingPrice.toLocaleString()}
+            </div>
+          </div>
+
+          <div className="p-3 bg-[#0E1420] border border-slate-800 rounded-2xl">
+            <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Wholesale Cost</div>
+            <div className="text-sm font-bold text-slate-200 mt-0.5 font-mono tabular-nums">
+              {viewingProduct.buyingPrice !== undefined && viewingProduct.buyingPrice > 0
+                ? `KES ${viewingProduct.buyingPrice.toLocaleString()}`
+                : 'Not set'}
             </div>
           </div>
 
           <div className="p-3 bg-[#0E1420] border border-slate-800 rounded-2xl">
             <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Stock on Shelf</div>
-            <div className="text-sm font-bold text-white mt-0.5 font-mono">
-              {inventory.find((i) => i.productId === viewingProduct.id)?.quantityOnHand ?? 0}{' '}
+            <div className="text-sm font-bold text-white mt-0.5 font-mono tabular-nums">
+              {inventoryMap.get(viewingProduct.id)?.quantityOnHand ?? 0}{' '}
               <span className="text-xs text-slate-400 font-sans font-normal">{viewingProduct.unit.toLowerCase()}</span>
             </div>
           </div>
 
-          <div className="p-3 bg-[#0E1420] border border-slate-800 rounded-2xl col-span-2 sm:col-span-1">
+          <div className="p-3 bg-[#0E1420] border border-slate-800 rounded-2xl">
             <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Category</div>
-            <div className="text-sm font-bold text-slate-200 mt-0.5">
-              {viewingProduct.category}
+            <div className="text-sm font-bold text-slate-200 mt-0.5 truncate">
+              {viewingProduct.category.replace(/_/g, ' ')}
             </div>
           </div>
         </div>
@@ -1283,7 +1173,7 @@ export const CatalogManager: React.FC = () => {
           <button
             type="button"
             onClick={() => setViewingProduct(null)}
-            className="flex-1 py-2.5 px-4 rounded-xl bg-[#0E1420] border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer"
+            className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl bg-[#0E1420] border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer"
           >
             Close
           </button>
@@ -1295,7 +1185,7 @@ export const CatalogManager: React.FC = () => {
                 setViewingProduct(null);
                 handleOpenEdit(prod);
               }}
-              className="flex-1 py-2.5 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+              className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
             >
               <Edit2 className="w-4 h-4" />
               <span>Edit Details</span>
@@ -1308,8 +1198,8 @@ export const CatalogManager: React.FC = () => {
 
   {/* 5. MODAL: CONFIRM ARCHIVE / DELETE */}
  {deletingProduct && (
- <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
- <div className="w-full max-w-md bg-[#121824] border border-[#1E293B] rounded-3xl p-5 shadow-2xl space-y-4">
+ <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/80 backdrop-blur-sm">
+ <div className="w-full max-w-md max-h-[92dvh] overflow-y-auto bg-[#121824] border-t sm:border border-[#1E293B] rounded-t-3xl sm:rounded-3xl p-4 sm:p-5 shadow-2xl space-y-4 pb-safe">
  <div className="flex items-center gap-2.5 text-red-400">
  <div className="w-9 h-9 rounded-xl bg-red-950/60 border border-red-500/40 flex items-center justify-center">
  <Trash2 className="w-4 h-4" />
@@ -1345,11 +1235,11 @@ export const CatalogManager: React.FC = () => {
  </div>
  </div>
 
- <div className="flex items-center gap-2 pt-1">
+ <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 pt-1">
  <button
  type="button"
  onClick={() => setDeletingProduct(null)}
- className="py-2.5 px-3.5 rounded-xl bg-[#0E1420] border border-slate-800 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
+ className="min-h-[44px] py-2.5 px-3.5 rounded-xl bg-[#0E1420] border border-slate-800 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
  >
  Cancel
  </button>
@@ -1357,16 +1247,16 @@ export const CatalogManager: React.FC = () => {
  <button
  type="button"
  onClick={() => handleConfirmArchiveOrDelete(false)}
- className="flex-1 py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+ className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm whitespace-nowrap"
  >
- <Archive className="w-3.5 h-3.5" />
+ <Archive className="w-3.5 h-3.5 shrink-0" />
  <span>Archive Drink</span>
  </button>
 
  <button
  type="button"
  onClick={() => handleConfirmArchiveOrDelete(true)}
- className="py-2.5 px-3 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
+ className="min-h-[44px] py-2.5 px-3.5 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
  >
  <span>Delete</span>
  </button>
@@ -1374,227 +1264,6 @@ export const CatalogManager: React.FC = () => {
  </div>
  </div>
  )}
-
- {/* 5. MODAL: ADD / EDIT MEASURED DRINK (WEIGHT OR VALUE BASED) */}
- {showMeasuredModal && (
- <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
- <div className="w-full max-w-lg bg-[#121824] border border-cyan-800/80 rounded-3xl p-5 sm:p-6 shadow-2xl max-h-[92vh] overflow-y-auto space-y-4">
- {/* Modal Header */}
- <div className="flex items-center justify-between pb-3 border-b border-slate-800">
- <div className="flex items-center gap-2.5">
- <div className="w-10 h-10 rounded-2xl bg-cyan-950 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
- <Scale className="w-5 h-5" />
- </div>
- <div>
- <h3 className="text-base font-bold text-white tracking-tight">
- {measuredEditingProduct ? 'Edit Measured Drink' : 'Add Measured Drink'}
- </h3>
- {measuredMode === 'WEIGHT' && (
-   <p className="text-[11px] text-cyan-300">Drink measured by weight</p>
- )}
- </div>
- </div>
- <button
- type="button"
- onClick={() => {
- setShowMeasuredModal(false);
- setMeasuredEditingProduct(null);
- setMeasuredError(null);
- }}
- className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
- >
- <X className="w-5 h-5" />
- </button>
- </div>
-
- {/* Measurement Type Mode Selector */}
- <div className="grid grid-cols-2 gap-2 p-1 bg-[#0E1420] rounded-2xl border border-slate-800">
-   <button
-     type="button"
-     onClick={() => {
-       setMeasuredMode('WEIGHT');
-     }}
-     className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-       measuredMode === 'WEIGHT'
-         ? 'bg-cyan-500/20 border border-cyan-500/60 text-cyan-300 shadow-sm'
-         : 'text-slate-400 hover:text-white border border-transparent'
-     }`}
-   >
-     <Scale className="w-3.5 h-3.5" />
-     <span>By Weight (Keg / kg)</span>
-   </button>
-
-   <button
-     type="button"
-     onClick={() => {
-       setMeasuredMode('VALUE');
-     }}
-     className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-       measuredMode === 'VALUE'
-         ? 'bg-cyan-500/20 border border-cyan-500/60 text-cyan-300 shadow-sm'
-         : 'text-slate-400 hover:text-white border border-transparent'
-     }`}
-   >
-     <TrendingUp className="w-3.5 h-3.5" />
-     <span>By Value (KES)</span>
-   </button>
- </div>
-
- {measuredError && (
- <div className="p-3 rounded-2xl bg-red-950/80 border border-red-500/50 text-red-300 text-xs flex items-center gap-2">
- <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
- <span>{measuredError}</span>
- </div>
- )}
-
- <form onSubmit={handleSubmitMeasuredProduct} className="space-y-4">
- {/* Quick Preset Staples - Show only for Weight mode */}
- {!measuredEditingProduct && measuredMode === 'WEIGHT' && (
-   <div>
-     <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-       Quick Staples (Keg Tanks)
-     </label>
-     <div className="flex flex-wrap gap-1.5">
-       {/* Keg presets could go here */}
-     </div>
-   </div>
- )}
-
- {/* Drink Name */}
- <div>
- <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
- Drink Name
- </label>
- <input
- type="text"
- required
- autoFocus
- value={measuredName}
- onChange={(e) => setMeasuredName(e.target.value)}
- placeholder={measuredMode === 'WEIGHT' ? 'e.g. Tusker Keg Draft 60kg' : 'e.g. Makali, Muratina'}
- className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-500"
- />
- </div>
-
- {/* Category */}
- <div>
- <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
- Category
- </label>
- <select
- value={measuredCategory}
- onChange={(e) => setMeasuredCategory(e.target.value as ProductCategory)}
- className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
- >
- <option value="BEER">Beer / Keg Draft</option>
- <option value="TRADITIONAL_BREW">Traditional Brew & Continuous</option>
- <option value="WINE">Wine (Carafe / Dispenser)</option>
- <option value="SPIRIT">Spirit / Whiskey Dispenser</option>
- <option value="SOFT_DRINK">Soft Drink / Juice</option>
- </select>
- </div>
-
- {measuredMode === 'WEIGHT' ? (
-   /* Weight Configuration Fields */
-    <div className="space-y-3 p-4 rounded-2xl bg-[#0E1420] border border-cyan-800/80">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-
-       <div>
-         <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
-           Price per kg (KES)
-         </label>
-         <input
-           type="number"
-           step="any"
-           min="1"
-           required
-           value={measuredPricePerKg}
-           onChange={(e) => setMeasuredPricePerKg(e.target.value)}
-           className="w-full bg-[#121824] border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-400"
-           
-         />
-         <span className="text-[10px] text-slate-400 mt-0.5 block">e.g. 150 KES/kg</span>
-       </div>
-
-       <div>
-         <label className="block text-[11px] font-semibold text-cyan-300 uppercase tracking-wider mb-1">
-           Scale Weight (kg)
-         </label>
-         <input
-           type="number"
-           step="any"
-           min="0"
-           required
-           value={measuredStock}
-           onChange={(e) => setMeasuredStock(e.target.value)}
-           className="w-full bg-[#121824] border border-cyan-500 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-400"
-           
-         />
-         <span className="text-[10px] text-cyan-400 mt-0.5 block">Current scale reading</span>
-       </div>
-     </div>
-
-   </div>
- ) : (
-   /* Pure Value Measurement - Value IS Selling Price */
-   <div className="space-y-3 p-3.5 rounded-2xl bg-[#0E1420] border border-cyan-900/60">
-     <div>
-       <div className="flex items-center justify-between mb-1">
-         <label className="text-xs font-semibold text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
-           <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
-           <span>Price kshs</span>
-         </label>
-       </div>
-       <input
-         type="number"
-         step="any"
-         min="0"
-         required
-         value={measuredStock}
-         onChange={(e) => setMeasuredStock(e.target.value)}
-         className="w-full bg-[#121824] border border-cyan-500/80 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-400"
-         
-       />
-     </div>
-   </div>
- )}
-
- {/* Action Buttons */}
- <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
- <button
- type="button"
- onClick={() => {
- setShowMeasuredModal(false);
- setMeasuredEditingProduct(null);
- setMeasuredError(null);
- }}
- className="py-3 px-4 rounded-xl bg-[#0E1420] border border-slate-800 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
- >
- Cancel
- </button>
- <button
- type="submit"
- className="flex-1 py-3 px-4 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-cyan-950/60 cursor-pointer"
- >
- <Check className="w-4 h-4" />
- <span>
- {measuredEditingProduct
- ? 'Save Changes'
- : 'Add Measured Drink'}
- </span>
- </button>
- </div>
- </form>
- </div>
- </div>
- )}
-
- {/* Quick Keg Scale Calculator Modal */}
- <WeightCalculatorModal
-   isOpen={showWeightCalcModal}
-   onClose={() => setShowWeightCalcModal(false)}
-   initialProductId={weightCalcModalProductId}
- />
 
  {/* Professional Stock Adjustment Modal */}
  {adjustingStockProduct && (

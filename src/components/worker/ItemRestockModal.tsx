@@ -20,13 +20,10 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
  onClose,
  onConfirmRestock,
 }) => {
- const isMeasured = product.isMeasured;
- const isWeight = product.measurementType === 'WEIGHT' || product.unit === 'KG' || Boolean(isMeasured && (product.fullWeightKg || 0) > 0);
- const isValue = !isWeight && isMeasured && (product.measurementType === 'VALUE' || product.unit === 'VALUE_KES');
- const unitLabel = isValue ? 'KES' : isWeight ? 'kg' : product.measureUnitLabel || product.unit.toLowerCase();
+ const unitLabel = product.unit.toLowerCase();
 
  const [mode, setMode] = useState<'ADD' | 'REDUCE'>('ADD');
- const [quantity, setQuantity] = useState<string>(isValue ? '500' : isWeight ? '60' : (isMeasured ? '5' : '12'));
+ const [quantity, setQuantity] = useState<string>('12');
  const [reduceReason, setReduceReason] = useState<string>('Returned to Main Store');
  const [source, setSource] = useState<string>('Central Warehouse / Storekeeper');
  const [note, setNote] = useState<string>('');
@@ -40,9 +37,8 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
  const isInvalidReduction = isReduce && (parsedQty > currentCount || currentCount <= 0);
 
  const handleAdjust = (delta: number) => {
- const step = isValue ? 100 : (isMeasured ? 1 : 1);
  const current = parseFloat(quantity) || 0;
- const next = Math.max(step, current + delta * step);
+ const next = Math.max(1, current + delta);
  setQuantity(String(next));
  };
 
@@ -66,16 +62,8 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
  });
  };
 
- const addPresets = isValue
-   ? [250, 500, 1000, 1500]
-   : isWeight
-   ? [10, 20, 30, 60]
-   : (isMeasured ? [1, 2, 5, 10] : [6, 12, 24, 48]);
- const reducePresets = isValue
-   ? [200, 500, 1000].filter((v) => v <= currentCount)
-   : isWeight
-   ? [5, 10, 20, 30].filter((v) => v <= currentCount)
-   : [1, 2, 6, 12].filter((v) => v <= currentCount);
+ const addPresets = [6, 12, 24, 48];
+ const reducePresets = [1, 2, 6, 12].filter((v) => v <= currentCount);
 
  return (
  <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-xs">
@@ -87,8 +75,6 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
  className={`w-9 h-9 rounded-xl flex items-center justify-center ${
  isReduce
  ? 'bg-rose-500/20 border border-rose-500/40 text-rose-400'
- : isMeasured
- ? 'bg-cyan-500/20 border border-cyan-500/40 text-cyan-400'
  : 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-400'
  }`}
  >
@@ -97,10 +83,10 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
  <div>
  <span
  className={`text-[10px] font-mono uppercase tracking-wider font-bold block ${
- isReduce ? 'text-rose-400' : isMeasured ? 'text-cyan-400' : 'text-emerald-400'
+ isReduce ? 'text-rose-400' : 'text-emerald-400'
  }`}
  >
- {isReduce ? 'Reduce Counter Stock' : isMeasured ? 'Restock Measured Drink' : 'Restock Counter'}
+ {isReduce ? 'Reduce Counter Stock' : 'Restock Counter'}
  </span>
  <h3 className="text-base font-bold text-white tracking-tight truncate max-w-[260px]">
  {product.name}
@@ -121,7 +107,7 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
  type="button"
  onClick={() => {
  setMode('ADD');
- setQuantity(isValue ? '500' : (isMeasured ? '5' : '12'));
+ setQuantity('12');
  }}
  className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
  !isReduce
@@ -137,7 +123,7 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
  type="button"
  onClick={() => {
  setMode('REDUCE');
- setQuantity(isValue ? '100' : '1');
+ setQuantity('1');
  }}
  className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
  isReduce
@@ -155,7 +141,7 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
  <div className="p-3 rounded-2xl bg-[#0E1420] border border-slate-800 flex items-center justify-between text-xs font-mono">
  <span className="text-slate-400">Current on shelf:</span>
  <span className="text-white font-bold text-sm">
- {isValue ? `KES ${currentCount.toLocaleString()} worth` : `${currentCount} ${unitLabel}`}
+ {currentCount} {unitLabel}
  </span>
  </div>
 
@@ -183,11 +169,7 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
  <div className="space-y-2">
  <div className="flex items-center justify-between">
  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
- {isReduce
- ? `Quantity to Deduct (${unitLabel})`
- : isValue
- ? 'Add Amount / Worth (KES)'
- : `Add Amount (${unitLabel})`}
+ {isReduce ? `Quantity to Deduct (${unitLabel})` : `Add Amount (${unitLabel})`}
  </label>
  {isReduce && currentCount > 0 && (
  <button
@@ -221,8 +203,6 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
  className={`flex-1 h-12 bg-[#0E1420] border rounded-2xl text-center font-mono font-black text-2xl focus:outline-none ${
  isReduce
  ? 'border-rose-500/50 text-rose-400 focus:border-rose-400'
- : isMeasured
- ? 'border-cyan-500/50 text-cyan-400 focus:border-cyan-400'
  : 'border-emerald-500/50 text-emerald-400 focus:border-emerald-400'
  }`}
  />
@@ -247,13 +227,11 @@ export const ItemRestockModal: React.FC<ItemRestockModalProps> = ({
  parsedQty === amt
  ? isReduce
  ? 'bg-rose-500/20 border-rose-500 text-rose-300 font-bold'
- : isMeasured
- ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 font-bold'
  : 'bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold'
  : 'bg-[#0E1420] border-slate-800 text-slate-400 hover:text-white'
  }`}
  >
- {isReduce ? `-${amt}` : `+${amt}`} {isValue ? 'KES' : ''}
+ {isReduce ? `-${amt}` : `+${amt}`}
  </button>
  ))}
  </div>

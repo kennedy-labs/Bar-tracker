@@ -95,6 +95,11 @@ class StoreService {
 
   // Step 2: Timestamp Invariant & Modification Tracker
   private localModifications = new Map<string, number>();
+  private syncedDocHashes = new Map<string, string>();
+  private pendingStorageKeys = new Set<string>();
+  private storageFlushPending = false;
+  private notifyPending = false;
+  private liveNotifyPending = false;
 
   public recordLocalModification(id: string): void {
     if (!id) return;
@@ -174,6 +179,10 @@ class StoreService {
         this.set(STORAGE_KEYS.IS_ONLINE, false, false);
         this.notify();
       });
+
+      const flushOnExit = () => this.flushPendingStorageWrites();
+      window.addEventListener('beforeunload', flushOnExit);
+      window.addEventListener('pagehide', flushOnExit);
     }
 
     this.loadFromStorage();
@@ -188,21 +197,33 @@ class StoreService {
   }
 
   private notifySubscribersOnly() {
-    this.subscribers.forEach((cb) => {
-      try {
-        cb();
-      } catch (e) {
-        console.error('Subscriber callback error:', e);
-      }
+    if (this.notifyPending) return;
+    this.notifyPending = true;
+    queueMicrotask(() => {
+      this.notifyPending = false;
+      const subs = [...this.subscribers];
+      subs.forEach((cb) => {
+        try {
+          cb();
+        } catch (e) {
+          console.error('Subscriber callback error:', e);
+        }
+      });
     });
   }
 
   private notify() {
     this.notifySubscribersOnly();
-    try {
-      this.liveChannel?.postMessage({ type: 'LOCAL_STORE_MUTATED', timestamp: Date.now() });
-    } catch (e) {
-      // ignore
+    if (!this.liveNotifyPending) {
+      this.liveNotifyPending = true;
+      queueMicrotask(() => {
+        this.liveNotifyPending = false;
+        try {
+          this.liveChannel?.postMessage({ type: 'LOCAL_STORE_MUTATED', timestamp: Date.now() });
+        } catch (e) {
+          // ignore
+        }
+      });
     }
   }
 
@@ -322,9 +343,106 @@ class StoreService {
     }
   }
 
+  private scheduleLocalStorageWrite(key: string): void {
+    if (typeof window === 'undefined') return;
+    this.pendingStorageKeys.add(key);
+    if (this.storageFlushPending) return;
+    this.storageFlushPending = true;
+    queueMicrotask(() => {
+      this.flushPendingStorageWrites();
+    });
+  }
+
+  private flushPendingStorageWrites(): void {
+    this.storageFlushPending = false;
+    if (typeof window === 'undefined' || this.pendingStorageKeys.size === 0) return;
+    const keys = Array.from(this.pendingStorageKeys);
+    this.pendingStorageKeys.clear();
+    keys.forEach((k) => {
+      if (this.memoryStore.has(k)) {
+        this.safeSetLocalStorage(k, this.memoryStore.get(k));
+      }
+    });
+  }
+
+  private computeDocSignature(val: unknown): string {
+    if (val === null || val === undefined) return '';
+    if (typeof val !== 'object') return JSON.stringify(val);
+    if (Array.isArray(val)) {
+      return `[${val.map((item) => this.computeDocSignature(item)).join(',')}]`;
+    }
+    const obj = val as Record<string, unknown>;
+    const keys = Object.keys(obj).sort();
+    const parts: string[] = [];
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      const v = obj[k];
+      if (v !== undefined) {
+        parts.push(`${JSON.stringify(k)}:${this.computeDocSignature(v)}`);
+      }
+    }
+    return `{${parts.join(',')}}`;
+  }
+
+  private seedSyncedHashesForKey(key: string, value: unknown): void {
+    const record = (coll: string, docId: string, payload: unknown) => {
+      if (!docId || !payload) return;
+      const cleanId = String(docId).replace(/[^a-zA-Z0-9_-]/g, '_');
+      this.syncedDocHashes.set(`${coll}/${cleanId}`, this.computeDocSignature(payload));
+    };
+
+    if (key === STORAGE_KEYS.BUSINESSES && Array.isArray(value)) {
+      (value as BusinessProfile[]).forEach((b) => b?.id && record(FIRESTORE_COLLECTIONS.BUSINESSES, b.id, b));
+    } else if (key === STORAGE_KEYS.USERS && Array.isArray(value)) {
+      (value as User[]).forEach((u) => u?.id && record(FIRESTORE_COLLECTIONS.USERS, u.id, u));
+    } else if (key === STORAGE_KEYS.PRODUCTS && Array.isArray(value)) {
+      (value as Product[]).forEach((p) => p?.id && record(FIRESTORE_COLLECTIONS.PRODUCTS, p.id, p));
+    } else if (key === STORAGE_KEYS.INVENTORY_MAP && value && typeof value === 'object') {
+      Object.entries(value as Record<string, InventoryItem[]>).forEach(([bizId, items]) => {
+        if (Array.isArray(items)) {
+          items.forEach((item) => {
+            if (!item) return;
+            const id = item.id || `inv-${bizId}-${item.productId}`;
+            record(FIRESTORE_COLLECTIONS.INVENTORY, id, { ...item, id, businessId: bizId });
+          });
+        }
+      });
+    } else if (key === STORAGE_KEYS.SHIFTS_MAP && value && typeof value === 'object') {
+      Object.entries(value as Record<string, Shift[]>).forEach(([bizId, shifts]) => {
+        if (Array.isArray(shifts)) {
+          shifts.forEach((s) => s?.id && record(FIRESTORE_COLLECTIONS.SHIFTS, s.id, { ...s, businessId: bizId }));
+        }
+      });
+    } else if (key === STORAGE_KEYS.SHIFT_STOCK_ITEMS && Array.isArray(value)) {
+      (value as ShiftStockItem[]).forEach((item) => item?.id && record(FIRESTORE_COLLECTIONS.SHIFT_STOCK_ITEMS, item.id, item));
+    } else if (key === STORAGE_KEYS.STOCK_ADDITIONS && Array.isArray(value)) {
+      (value as StockAdditionRecord[]).forEach((a) => a?.id && record(FIRESTORE_COLLECTIONS.STOCK_ADDITIONS, a.id, a));
+    } else if (key === STORAGE_KEYS.EXPENSES && Array.isArray(value)) {
+      (value as Expense[]).forEach((e) => e?.id && record(FIRESTORE_COLLECTIONS.EXPENSES, e.id, e));
+    } else if (key === STORAGE_KEYS.DISCREPANCIES && Array.isArray(value)) {
+      (value as Discrepancy[]).forEach((d) => d?.id && record(FIRESTORE_COLLECTIONS.DISCREPANCIES, d.id, d));
+    } else if (key === STORAGE_KEYS.EVENTS_MAP && value && typeof value === 'object') {
+      Object.entries(value as Record<string, OperationalEvent[]>).forEach(([bizId, events]) => {
+        if (Array.isArray(events)) {
+          events.forEach((ev) => ev?.id && record(FIRESTORE_COLLECTIONS.EVENTS, ev.id, { ...ev, businessId: bizId }));
+        }
+      });
+    } else if (key === STORAGE_KEYS.MPESA_ACCOUNTS_MAP && value && typeof value === 'object') {
+      Object.entries(value as Record<string, MpesaAccount[]>).forEach(([bizId, accs]) => {
+        if (Array.isArray(accs)) {
+          accs.forEach((acc) => acc?.id && record(FIRESTORE_COLLECTIONS.MPESA_ACCOUNTS, acc.id, { ...acc, businessId: bizId }));
+        }
+      });
+    } else if (key === STORAGE_KEYS.INTER_TRANSFERS && Array.isArray(value)) {
+      (value as InterBusinessTransfer[]).forEach((t) => t?.id && record(FIRESTORE_COLLECTIONS.INTER_TRANSFERS, t.id, t));
+    } else if (key === STORAGE_KEYS.LOANS && Array.isArray(value)) {
+      (value as Loan[]).forEach((l) => l?.id && record(FIRESTORE_COLLECTIONS.LOANS, l.id, l));
+    }
+  }
+
   private set(key: string, value: unknown, syncToCloud: boolean = true) {
     this.memoryStore.set(key, value);
-    this.safeSetLocalStorage(key, value);
+    this.scheduleLocalStorageWrite(key);
     if (syncToCloud && !this.isRemoteMutating) {
       this.dispatchFirestoreSync(key, value);
     }
@@ -332,6 +450,8 @@ class StoreService {
 
   private loadFromStorage() {
     this.memoryStore.clear();
+    this.pendingStorageKeys.clear();
+    this.syncedDocHashes.clear();
 
     // Step 1: Clean Slate Protocol & Non-Destructive Cache Versioning
     // Purges stale cache keys while rigorously preserving active un-synced shift data, offline queues, and credentials
@@ -375,7 +495,9 @@ class StoreService {
         try {
           const val = localStorage.getItem(k);
           if (val !== null) {
-            this.memoryStore.set(k, JSON.parse(val));
+            const parsed = JSON.parse(val);
+            this.memoryStore.set(k, parsed);
+            this.seedSyncedHashesForKey(k, parsed);
           }
         } catch (err) {
           console.warn(`Purging unparseable key "${k}" during loadFromStorage`, err);
@@ -522,6 +644,7 @@ class StoreService {
   public async deleteFromFirestore(collectionName: string, docId: string): Promise<void> {
     if (!docId || !db) return;
     const cleanId = String(docId).replace(/[^a-zA-Z0-9_-]/g, '_');
+    this.syncedDocHashes.delete(`${collectionName}/${cleanId}`);
     if (!this.isOnline()) {
       this.queueOfflineOperation(`DELETE_${collectionName}`, { docId: cleanId });
       return;
@@ -534,21 +657,31 @@ class StoreService {
     }
   }
 
+  private syncItemIfChanged(collectionName: string, docId: string, payload: unknown): void {
+    if (!docId || !payload) return;
+    const cleanId = String(docId).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const sigKey = `${collectionName}/${cleanId}`;
+    const sig = this.computeDocSignature(payload);
+    if (this.syncedDocHashes.get(sigKey) === sig) return;
+    this.syncedDocHashes.set(sigKey, sig);
+    this.saveToFirestore(collectionName, docId, payload);
+  }
+
   private dispatchFirestoreSync(key: string, value: unknown) {
     if (this.isRemoteMutating || !db) return;
 
     try {
       if (key === STORAGE_KEYS.BUSINESSES && Array.isArray(value)) {
         (value as BusinessProfile[]).forEach((b) => {
-          if (b && b.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.BUSINESSES, b.id, b);
+          if (b && b.id) this.syncItemIfChanged(FIRESTORE_COLLECTIONS.BUSINESSES, b.id, b);
         });
       } else if (key === STORAGE_KEYS.USERS && Array.isArray(value)) {
         (value as User[]).forEach((u) => {
-          if (u && u.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.USERS, u.id, u);
+          if (u && u.id) this.syncItemIfChanged(FIRESTORE_COLLECTIONS.USERS, u.id, u);
         });
       } else if (key === STORAGE_KEYS.PRODUCTS && Array.isArray(value)) {
         (value as Product[]).forEach((p) => {
-          if (p && p.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.PRODUCTS, p.id, p);
+          if (p && p.id) this.syncItemIfChanged(FIRESTORE_COLLECTIONS.PRODUCTS, p.id, p);
         });
       } else if (key === STORAGE_KEYS.INVENTORY_MAP && value && typeof value === 'object') {
         const invMap = value as Record<string, InventoryItem[]>;
@@ -556,7 +689,7 @@ class StoreService {
           if (Array.isArray(items)) {
             items.forEach((item) => {
               const id = item.id || `inv-${bizId}-${item.productId}`;
-              this.saveToFirestore(FIRESTORE_COLLECTIONS.INVENTORY, id, { ...item, id, businessId: bizId });
+              this.syncItemIfChanged(FIRESTORE_COLLECTIONS.INVENTORY, id, { ...item, id, businessId: bizId });
             });
           }
         });
@@ -565,32 +698,32 @@ class StoreService {
         Object.entries(sMap).forEach(([bizId, shifts]) => {
           if (Array.isArray(shifts)) {
             shifts.forEach((s) => {
-              if (s && s.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.SHIFTS, s.id, { ...s, businessId: bizId });
+              if (s && s.id) this.syncItemIfChanged(FIRESTORE_COLLECTIONS.SHIFTS, s.id, { ...s, businessId: bizId });
             });
           }
         });
       } else if (key === STORAGE_KEYS.SHIFT_STOCK_ITEMS && Array.isArray(value)) {
         (value as ShiftStockItem[]).forEach((item) => {
-          if (item && item.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.SHIFT_STOCK_ITEMS, item.id, item);
+          if (item && item.id) this.syncItemIfChanged(FIRESTORE_COLLECTIONS.SHIFT_STOCK_ITEMS, item.id, item);
         });
       } else if (key === STORAGE_KEYS.STOCK_ADDITIONS && Array.isArray(value)) {
         (value as StockAdditionRecord[]).forEach((a) => {
-          if (a && a.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.STOCK_ADDITIONS, a.id, a);
+          if (a && a.id) this.syncItemIfChanged(FIRESTORE_COLLECTIONS.STOCK_ADDITIONS, a.id, a);
         });
       } else if (key === STORAGE_KEYS.EXPENSES && Array.isArray(value)) {
         (value as Expense[]).forEach((e) => {
-          if (e && e.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.EXPENSES, e.id, e);
+          if (e && e.id) this.syncItemIfChanged(FIRESTORE_COLLECTIONS.EXPENSES, e.id, e);
         });
       } else if (key === STORAGE_KEYS.DISCREPANCIES && Array.isArray(value)) {
         (value as Discrepancy[]).forEach((d) => {
-          if (d && d.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.DISCREPANCIES, d.id, d);
+          if (d && d.id) this.syncItemIfChanged(FIRESTORE_COLLECTIONS.DISCREPANCIES, d.id, d);
         });
       } else if (key === STORAGE_KEYS.EVENTS_MAP && value && typeof value === 'object') {
         const eMap = value as Record<string, OperationalEvent[]>;
         Object.entries(eMap).forEach(([bizId, events]) => {
           if (Array.isArray(events)) {
             events.forEach((ev) => {
-              if (ev && ev.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.EVENTS, ev.id, { ...ev, businessId: bizId });
+              if (ev && ev.id) this.syncItemIfChanged(FIRESTORE_COLLECTIONS.EVENTS, ev.id, { ...ev, businessId: bizId });
             });
           }
         });
@@ -599,17 +732,17 @@ class StoreService {
         Object.entries(mMap).forEach(([bizId, accs]) => {
           if (Array.isArray(accs)) {
             accs.forEach((acc) => {
-              if (acc && acc.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.MPESA_ACCOUNTS, acc.id, { ...acc, businessId: bizId });
+              if (acc && acc.id) this.syncItemIfChanged(FIRESTORE_COLLECTIONS.MPESA_ACCOUNTS, acc.id, { ...acc, businessId: bizId });
             });
           }
         });
       } else if (key === STORAGE_KEYS.INTER_TRANSFERS && Array.isArray(value)) {
         (value as InterBusinessTransfer[]).forEach((t) => {
-          if (t && t.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.INTER_TRANSFERS, t.id, t);
+          if (t && t.id) this.syncItemIfChanged(FIRESTORE_COLLECTIONS.INTER_TRANSFERS, t.id, t);
         });
       } else if (key === STORAGE_KEYS.LOANS && Array.isArray(value)) {
         (value as Loan[]).forEach((l) => {
-          if (l && l.id) this.saveToFirestore(FIRESTORE_COLLECTIONS.LOANS, l.id, l);
+          if (l && l.id) this.syncItemIfChanged(FIRESTORE_COLLECTIONS.LOANS, l.id, l);
         });
       }
     } catch (e) {
@@ -728,8 +861,15 @@ class StoreService {
             }
           });
 
+          const mergedValues = Array.from(mergedMap.values());
+          mergedValues.forEach((docItem) => {
+            if (docItem?.id) {
+              const cleanId = String(docItem.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+              this.syncedDocHashes.set(`${coll}/${cleanId}`, this.computeDocSignature(docItem));
+            }
+          });
           this.isRemoteMutating = true;
-          this.set(key, [...otherBizDocs, ...Array.from(mergedMap.values())], false);
+          this.set(key, [...otherBizDocs, ...mergedValues], false);
           this.isRemoteMutating = false;
           this.notifySubscribersOnly();
         },
@@ -746,6 +886,10 @@ class StoreService {
       (snapshot) => {
         if (snapshot.exists()) {
           const bData = snapshot.data() as BusinessProfile;
+          if (bData?.id) {
+            const cleanId = String(bData.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+            this.syncedDocHashes.set(`${FIRESTORE_COLLECTIONS.BUSINESSES}/${cleanId}`, this.computeDocSignature(bData));
+          }
           const currentBizs = this.get<BusinessProfile[]>(STORAGE_KEYS.BUSINESSES, []);
           const idx = currentBizs.findIndex((b) => b.id === bData.id);
           if (idx >= 0) currentBizs[idx] = bData;
@@ -793,7 +937,16 @@ class StoreService {
           }
         });
 
-        currentMap[bizId] = Array.from(mergedMap.values());
+        const invValues = Array.from(mergedMap.values());
+        invValues.forEach((item) => {
+          const id = item.id || `inv-${bizId}-${item.productId}`;
+          const cleanId = String(id).replace(/[^a-zA-Z0-9_-]/g, '_');
+          this.syncedDocHashes.set(
+            `${FIRESTORE_COLLECTIONS.INVENTORY}/${cleanId}`,
+            this.computeDocSignature({ ...item, id, businessId: bizId })
+          );
+        });
+        currentMap[bizId] = invValues;
         this.isRemoteMutating = true;
         this.set(STORAGE_KEYS.INVENTORY_MAP, currentMap, false);
         this.isRemoteMutating = false;
@@ -811,6 +964,15 @@ class StoreService {
       shiftQ,
       (snapshot) => {
         const shifts = snapshot.docs.map((d) => d.data() as Shift);
+        shifts.forEach((s) => {
+          if (s?.id) {
+            const cleanId = String(s.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+            this.syncedDocHashes.set(
+              `${FIRESTORE_COLLECTIONS.SHIFTS}/${cleanId}`,
+              this.computeDocSignature({ ...s, businessId: bizId })
+            );
+          }
+        });
         const currentMap = this.get<Record<string, Shift[]>>(STORAGE_KEYS.SHIFTS_MAP, {});
         currentMap[bizId] = shifts;
         this.isRemoteMutating = true;
@@ -830,6 +992,15 @@ class StoreService {
       eventQ,
       (snapshot) => {
         const events = snapshot.docs.map((d) => d.data() as OperationalEvent);
+        events.forEach((ev) => {
+          if (ev?.id) {
+            const cleanId = String(ev.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+            this.syncedDocHashes.set(
+              `${FIRESTORE_COLLECTIONS.EVENTS}/${cleanId}`,
+              this.computeDocSignature({ ...ev, businessId: bizId })
+            );
+          }
+        });
         const currentMap = this.get<Record<string, OperationalEvent[]>>(STORAGE_KEYS.EVENTS_MAP, {});
         currentMap[bizId] = events;
         this.isRemoteMutating = true;
@@ -849,6 +1020,15 @@ class StoreService {
       mpesaQ,
       (snapshot) => {
         const accs = snapshot.docs.map((d) => d.data() as MpesaAccount);
+        accs.forEach((acc) => {
+          if (acc?.id) {
+            const cleanId = String(acc.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+            this.syncedDocHashes.set(
+              `${FIRESTORE_COLLECTIONS.MPESA_ACCOUNTS}/${cleanId}`,
+              this.computeDocSignature({ ...acc, businessId: bizId })
+            );
+          }
+        });
         const currentMap = this.get<Record<string, MpesaAccount[]>>(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, {});
         currentMap[bizId] = accs;
         this.isRemoteMutating = true;
@@ -890,9 +1070,6 @@ class StoreService {
       const currentBizId = this.getCurrentBusinessId();
       if (currentBizId) {
         this.rebindTenantListeners(currentBizId);
-        this.fetchCoreFirestoreEntities().catch((err) => {
-          console.debug('Background Core Firestore fetch note:', err);
-        });
       }
     } catch (err) {
       console.warn('initFirestoreSync note:', err);
@@ -945,11 +1122,15 @@ class StoreService {
         }
       }
 
-      this.set(STORAGE_KEYS.OFFLINE_QUEUE, remainingQueue, false);
+      if (remainingQueue.length !== queue.length) {
+        this.set(STORAGE_KEYS.OFFLINE_QUEUE, remainingQueue, false);
+      }
       this.lastSyncTimestamp = new Date().toISOString();
       this.isCurrentlySyncing = false;
 
-      await this.fetchCoreFirestoreEntities();
+      if (!this.currentListeningBizId) {
+        await this.fetchCoreFirestoreEntities();
+      }
 
       /*
       if (successfullySynced > 0) {
@@ -1739,7 +1920,7 @@ class StoreService {
       return u;
     });
     if (modified) {
-      this.set(STORAGE_KEYS.USERS, users);
+      this.set(STORAGE_KEYS.USERS, users, false);
     }
     return users;
   }
@@ -2181,6 +2362,7 @@ class StoreService {
 
   public getMpesaAccounts(includeArchived = false): MpesaAccount[] {
     const bizId = this.getCurrentBusinessId();
+    if (!bizId) return [];
     const map = this.get<Record<string, MpesaAccount[]>>(STORAGE_KEYS.MPESA_ACCOUNTS_MAP, {});
 
     // Seed initial accounts if not yet set for this business
@@ -2385,6 +2567,7 @@ class StoreService {
 
   public getInventory(): InventoryItem[] {
     const bizId = this.getCurrentBusinessId();
+    if (!bizId) return [];
     const inventoryMap = this.get<Record<string, InventoryItem[]>>(STORAGE_KEYS.INVENTORY_MAP, {});
     const list = inventoryMap[bizId] || [];
 
@@ -2407,9 +2590,9 @@ class StoreService {
     });
 
     const deduped = Array.from(seen.values());
-    if (hasDups || !inventoryMap[bizId]) {
+    if (hasDups) {
       inventoryMap[bizId] = deduped;
-      this.set(STORAGE_KEYS.INVENTORY_MAP, inventoryMap);
+      this.set(STORAGE_KEYS.INVENTORY_MAP, inventoryMap, false);
     }
     return deduped;
   }
@@ -2501,6 +2684,7 @@ class StoreService {
       productName: product.name,
       unit: product.unit || 'BOTTLE',
       sellingPrice: product.sellingPrice || 0,
+      buyingPrice: product.buyingPrice,
       openingSystemCount: qty,
       openingPhysicalCount: qty,
       openingVerified: true,
@@ -2511,13 +2695,6 @@ class StoreService {
       damages: 0,
       ownerAdjustments: 0,
       closingPhysicalCount: options?.closingPhysicalCount,
-      isMeasured: product.isMeasured,
-      measurementType: product.measurementType,
-      measureUnitLabel: product.measureUnitLabel,
-      totalMeasuredValueKes: product.totalMeasuredValueKes,
-      fullWeightKg: product.fullWeightKg,
-      emptyWeightKg: product.emptyWeightKg,
-      pricePerKg: product.pricePerKg || (product.measurementType === 'WEIGHT' ? product.sellingPrice : undefined),
     };
   }
 
@@ -2897,6 +3074,7 @@ class StoreService {
     )}`;
 
     let hasOpeningInconsistency = false;
+    let handoverMismatchCount = 0;
     const shiftStockItems: ShiftStockItem[] = [];
     const stockMovements: StockMovement[] = [];
     const lastClosedShift = this.getLastClosedShift();
@@ -2915,19 +3093,13 @@ class StoreService {
       const diff = physicalCount - systemCount;
       if (diff !== 0) {
         hasOpeningInconsistency = true;
-
-        const isWeight =
-          product.measurementType === 'WEIGHT' ||
-          product.unit === 'KG' ||
-          (product.isMeasured && (product.fullWeightKg || 0) > 0);
-        const isVal = !isWeight && product.isMeasured && (product.measurementType === 'VALUE' || product.unit === 'VALUE_KES');
-        const priceRate = isWeight ? (product.pricePerKg || product.sellingPrice || 150) : product.sellingPrice;
+        handoverMismatchCount += 1;
 
         const nowIso = new Date().toISOString();
         if (diff < 0) {
           // Shortage: previous attendant held accountable
           const shortageQty = Math.abs(diff);
-          const moneyVal = isVal ? shortageQty : Math.round(shortageQty * priceRate * 100) / 100;
+          const moneyVal = Math.round(shortageQty * product.sellingPrice * 100) / 100;
           discrepancies.unshift({
             id: `disc-${Date.now()}-${product.id}`,
             businessId: currentBizId,
@@ -2943,20 +3115,16 @@ class StoreService {
             actual: physicalCount,
             variance: diff, // negative e.g. -2
             monetaryValue: moneyVal,
-            severity: (isVal ? shortageQty >= 300 : isWeight ? shortageQty >= 2 : shortageQty >= 3) ? 'HIGH' : 'MEDIUM',
+            severity: shortageQty >= 3 ? 'HIGH' : 'MEDIUM',
             status: 'FLAGGED',
-            ownerNotes: isVal
-              ? `Opening handover shortage: KES ${shortageQty.toLocaleString()} value less than expected left by ${prevAttendant}. Reported by incoming attendant ${params.workerName}.`
-              : isWeight
-              ? `Opening handover shortage: ${shortageQty} kg (${shortageQty} kg × KES ${priceRate} = KES ${moneyVal.toLocaleString()}) less than expected left by ${prevAttendant}. Weighed on counter scale.`
-              : `Opening handover shortage: ${shortageQty} bottle(s) fewer than expected left by ${prevAttendant}. Reported by incoming attendant ${params.workerName}.`,
+            ownerNotes: `Opening handover shortage: ${shortageQty} bottle(s) fewer than expected left by ${prevAttendant}. Reported by incoming attendant ${params.workerName}.`,
             timestamp: nowIso,
             updatedAt: nowIso,
           });
         } else {
           // Surplus: previous attendant credited to balance the scale!
           const surplusQty = diff;
-          const moneyVal = isVal ? surplusQty : Math.round(surplusQty * priceRate * 100) / 100;
+          const moneyVal = Math.round(surplusQty * product.sellingPrice * 100) / 100;
           discrepancies.unshift({
             id: `disc-${Date.now()}-${product.id}`,
             businessId: currentBizId,
@@ -2974,11 +3142,7 @@ class StoreService {
             monetaryValue: moneyVal,
             severity: 'LOW',
             status: 'RESOLVED',
-            ownerNotes: isVal
-              ? `Opening handover surplus: +KES ${surplusQty.toLocaleString()} value found on shelf left by ${prevAttendant}. Credited to previous attendant to balance their scale fairly.`
-              : isWeight
-              ? `Opening handover surplus: +${surplusQty} kg (+KES ${moneyVal.toLocaleString()}) extra found on scale left by ${prevAttendant}. Credited to previous attendant to balance their scale fairly.`
-              : `Opening handover surplus: +${surplusQty} extra bottle(s) found on shelf left by ${prevAttendant}. Credited to previous attendant to balance their scale fairly.`,
+            ownerNotes: `Opening handover surplus: +${surplusQty} extra bottle(s) found on shelf left by ${prevAttendant}. Credited to previous attendant to balance their scale fairly.`,
             timestamp: nowIso,
             updatedAt: nowIso,
           });
@@ -2993,6 +3157,7 @@ class StoreService {
         productName: product.name,
         unit: product.unit,
         sellingPrice: product.sellingPrice,
+        buyingPrice: product.buyingPrice,
         openingSystemCount: systemCount,
         openingPhysicalCount: physicalCount,
         openingVerified: true,
@@ -3001,13 +3166,6 @@ class StoreService {
         transfersIn: 0,
         transfersOut: 0,
         damages: 0,
-        isMeasured: product.isMeasured,
-        measurementType: product.measurementType,
-        measureUnitLabel: product.measureUnitLabel,
-        totalMeasuredValueKes: product.totalMeasuredValueKes,
-        fullWeightKg: product.fullWeightKg,
-        emptyWeightKg: product.emptyWeightKg,
-        pricePerKg: product.pricePerKg || (product.measurementType === 'WEIGHT' ? product.sellingPrice : undefined),
       };
       shiftStockItems.push(item);
 
@@ -3075,6 +3233,9 @@ class StoreService {
       openingMpesaBalance: Number(params.openingMpesaBalance) || 0,
       recordedSalesCount: 0,
       openingInconsistencyNote: params.inconsistencyNote,
+      previousShiftId: lastClosedShift?.id,
+      previousWorkerName: lastClosedShift?.workerName,
+      handoverMismatchCount,
     };
 
     this.recordLocalModification(shiftId);
@@ -3100,6 +3261,32 @@ class StoreService {
     this.notify();
     this.triggerCloudSync();
     return newShift;
+  }
+
+  public updateShiftOpeningFloats(
+    shiftId: string,
+    params: {
+      openingCoinsFloat: number;
+      openingCashFloat: number;
+      openingMpesaBalance: number;
+    }
+  ): Shift | null {
+    const bizId = this.getCurrentBusinessId();
+    const shiftsMap = this.get<Record<string, Shift[]>>(STORAGE_KEYS.SHIFTS_MAP, {});
+    const list = shiftsMap[bizId] || [];
+    const shift = list.find((s) => s.id === shiftId);
+    if (!shift) return null;
+
+    shift.openingCoinsFloat = Number(params.openingCoinsFloat) || 0;
+    shift.openingCashFloat = Number(params.openingCashFloat) || 0;
+    shift.openingMpesaBalance = Number(params.openingMpesaBalance) || 0;
+    shift.updatedAt = new Date().toISOString();
+
+    shiftsMap[bizId] = list;
+    this.set(STORAGE_KEYS.SHIFTS_MAP, shiftsMap);
+    this.notify();
+    this.triggerCloudSync();
+    return shift;
   }
 
   public recordStockAdjustment(params: {
@@ -3617,23 +3804,13 @@ class StoreService {
 
     const totalIncomeReturned = calculatedCashIncome + calculatedMpesaIncome + calculatedCoinsIncome;
 
+    const productsMap = new Map(this.getProducts(true).map((p) => [p.id, p]));
     let expectedSalesRevenue = 0;
+    let estimatedCogs = 0;
+    let costedRevenue = 0;
 
     const reconciledStockItems = shiftStockItems.map((item) => {
-      const isWeight =
-        item.measurementType === 'WEIGHT' ||
-        item.unit === 'KG' ||
-        (item.isMeasured === true && (item.fullWeightKg || 0) > 0);
-
-      const isValue =
-        !isWeight &&
-        ((item.isMeasured && item.measurementType === 'VALUE') ||
-        item.unit === 'VALUE_KES');
-
-      const ratePerUnit = isWeight
-        ? (item.pricePerKg || item.sellingPrice || 150)
-        : item.sellingPrice;
-
+      const prod = productsMap.get(item.productId);
       const availableStock =
         item.openingPhysicalCount +
         item.additions +
@@ -3649,22 +3826,20 @@ class StoreService {
 
       const calculatedSold = Math.round(Math.max(0, availableStock - physicalClosing) * 100) / 100;
       const overageCount = physicalClosing > availableStock ? Math.round((physicalClosing - availableStock) * 100) / 100 : 0;
-      const discrepancyValue = isValue ? overageCount : Math.round(overageCount * ratePerUnit * 100) / 100;
+      const discrepancyValue = Math.round(overageCount * item.sellingPrice * 100) / 100;
 
-      if (isValue) {
-        // Continuous/local drink measured by monetary value (e.g. Muratina left on counter)
-        // calculatedSold is already the KES money value
-        expectedSalesRevenue += calculatedSold;
-      } else if (isWeight) {
-        // Measured by weight on scale (e.g. 29 kg sold * KES 150/kg = KES 4,350)
-        expectedSalesRevenue += Math.round(calculatedSold * ratePerUnit * 100) / 100;
-      } else {
-        // Discrete bottle count
-        expectedSalesRevenue += calculatedSold * item.sellingPrice;
+      const itemRevenue = Math.round(calculatedSold * item.sellingPrice * 100) / 100;
+      expectedSalesRevenue += itemRevenue;
+
+      const unitCost = item.buyingPrice ?? prod?.buyingPrice;
+      if (unitCost !== undefined && unitCost > 0) {
+        estimatedCogs += Math.round(calculatedSold * unitCost * 100) / 100;
+        costedRevenue += itemRevenue;
       }
 
       return {
         ...item,
+        buyingPrice: unitCost,
         recordedSales: calculatedSold,
         closingPhysicalCount: physicalClosing,
         expectedClosingCount: availableStock,
@@ -3673,10 +3848,15 @@ class StoreService {
       };
     });
 
-    const totalExpenses = expenses.reduce((sum, e) => sum + Math.round(e.amount * 100), 0);
-    const rawFinancialVariance = Math.round(totalIncomeReturned * 100) + totalExpenses - Math.round(expectedSalesRevenue * 100);
+    const totalExpensesCents = expenses.reduce((sum, e) => sum + Math.round(e.amount * 100), 0);
+    const totalExpenses = totalExpensesCents / 100;
+    const rawFinancialVariance = Math.round(totalIncomeReturned * 100) + totalExpensesCents - Math.round(expectedSalesRevenue * 100);
     // Negligible threshold: sub-shilling variances (< KES 0.50) are normalized to zero to eliminate floating-point ghost cents
     const financialVariance = Math.abs(rawFinancialVariance) < 50 ? 0 : rawFinancialVariance / 100;
+
+    const estimatedGrossProfit = Math.round((expectedSalesRevenue - estimatedCogs) * 100) / 100;
+    const estimatedNetProfit = Math.round((estimatedGrossProfit - totalExpenses) * 100) / 100;
+    const costedRevenueShare = expectedSalesRevenue > 0 ? Math.min(1, costedRevenue / expectedSalesRevenue) : 0;
 
     return {
       shift,
@@ -3691,6 +3871,10 @@ class StoreService {
       calculatedCoinsIncome,
       totalIncomeReturned,
       expectedSalesRevenue,
+      estimatedCogs,
+      estimatedGrossProfit,
+      estimatedNetProfit,
+      costedRevenueShare,
       totalExpenses,
       financialVariance,
       reconciledStockItems,
@@ -3724,6 +3908,10 @@ class StoreService {
     shift.calculatedCoinsIncome = recon.calculatedCoinsIncome;
     shift.totalIncomeReturned = recon.totalIncomeReturned;
     shift.expectedSalesRevenue = recon.expectedSalesRevenue;
+    shift.estimatedCogs = recon.estimatedCogs;
+    shift.estimatedGrossProfit = recon.estimatedGrossProfit;
+    shift.estimatedNetProfit = recon.estimatedNetProfit;
+    shift.costedRevenueShare = recon.costedRevenueShare;
     shift.totalExpenses = recon.totalExpenses;
     shift.financialVariance = recon.financialVariance;
     shift.closingNotes = params.closingNotes;
@@ -3862,7 +4050,7 @@ class StoreService {
     return 'counter';
   }
 
-  public updateProductPricing(productId: string, sellingPrice: number) {
+  public updateProductPricing(productId: string, sellingPrice: number, buyingPrice?: number) {
     const allProducts = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
     const product = allProducts.find((p) => p.id === productId);
     if (!product) return;
@@ -3872,15 +4060,15 @@ class StoreService {
     }
 
     product.sellingPrice = sellingPrice;
-    if (product.isMeasured) {
-      product.totalMeasuredValueKes = sellingPrice;
+    if (buyingPrice !== undefined) {
+      product.buyingPrice = buyingPrice > 0 ? buyingPrice : undefined;
     }
     this.set(STORAGE_KEYS.PRODUCTS, allProducts);
 
     this.addEvent({
       type: 'INFO',
       title: `Price Updated: ${product.name}`,
-      description: `Selling Price: KES ${sellingPrice.toLocaleString()}`,
+      description: `Selling Price: KES ${sellingPrice.toLocaleString()}${buyingPrice !== undefined ? ` | Cost: KES ${buyingPrice.toLocaleString()}` : ''}`,
       actorName: 'Owner Audit Desk',
       severity: 'INFO',
     });
@@ -4111,23 +4299,16 @@ class StoreService {
     category: import('../types').ProductCategory;
     unit: import('../types').ProductUnit;
     sellingPrice: number;
+    buyingPrice?: number;
     reorderLevel?: number;
     volumeMl?: number;
     initialStock?: number;
     businessId?: string;
-    isMeasured?: boolean;
-    measurementType?: import('../types').MeasurementType;
-    measureUnitLabel?: string;
-    totalMeasuredValueKes?: number;
-    fullWeightKg?: number;
-    emptyWeightKg?: number;
-    pricePerKg?: number;
   }): Product {
     const currentBizId = params.businessId || this.getCurrentBusinessId();
     const products = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
-    const isWeight = params.measurementType === 'WEIGHT' || params.unit === 'KG';
-    const cleanPricePerKg = params.pricePerKg ? Number(params.pricePerKg) : (isWeight ? Number(params.sellingPrice) : undefined);
-    const cleanSellingPrice = isWeight && cleanPricePerKg ? cleanPricePerKg : (Number(params.sellingPrice) || 0);
+    const cleanSellingPrice = Number(params.sellingPrice) || 0;
+    const cleanBuyingPrice = params.buyingPrice !== undefined && Number(params.buyingPrice) > 0 ? Number(params.buyingPrice) : undefined;
     const initialQty = Number(params.initialStock) || 0;
 
     const newProduct: Product = {
@@ -4137,18 +4318,10 @@ class StoreService {
       category: params.category,
       unit: params.unit,
       sellingPrice: cleanSellingPrice,
+      buyingPrice: cleanBuyingPrice,
       reorderLevel: Number(params.reorderLevel) || 5,
       volumeMl: params.volumeMl ? Number(params.volumeMl) : undefined,
       isArchived: false,
-      isMeasured: Boolean(params.isMeasured || isWeight),
-      measurementType: params.measurementType || (isWeight ? 'WEIGHT' : (params.isMeasured ? 'VALUE' : 'COUNT')),
-      measureUnitLabel: params.measureUnitLabel || (isWeight ? 'kg' : undefined),
-      totalMeasuredValueKes: isWeight
-        ? (initialQty * cleanSellingPrice)
-        : (params.totalMeasuredValueKes ? Number(params.totalMeasuredValueKes) : undefined),
-      fullWeightKg: params.fullWeightKg ? Number(params.fullWeightKg) : (isWeight ? 60 : undefined),
-      emptyWeightKg: params.emptyWeightKg !== undefined ? Number(params.emptyWeightKg) : (isWeight ? 0 : undefined),
-      pricePerKg: cleanPricePerKg,
     };
 
     products.push(newProduct);
@@ -4177,6 +4350,7 @@ class StoreService {
         productName: newProduct.name,
         unit: newProduct.unit,
         sellingPrice: newProduct.sellingPrice,
+        buyingPrice: newProduct.buyingPrice,
         openingSystemCount: 0,
         openingPhysicalCount: 0,
         openingVerified: true,
@@ -4185,13 +4359,6 @@ class StoreService {
         transfersIn: 0,
         transfersOut: 0,
         damages: 0,
-        isMeasured: newProduct.isMeasured,
-        measurementType: newProduct.measurementType,
-        measureUnitLabel: newProduct.measureUnitLabel,
-        totalMeasuredValueKes: newProduct.totalMeasuredValueKes,
-        fullWeightKg: newProduct.fullWeightKg,
-        emptyWeightKg: newProduct.emptyWeightKg,
-        pricePerKg: newProduct.pricePerKg,
       };
       allSSIs.push(newSSI);
       this.set(STORAGE_KEYS.SHIFT_STOCK_ITEMS, allSSIs);
@@ -4218,6 +4385,7 @@ class StoreService {
   ): Array<{
     name: string;
     sellingPrice: number;
+    buyingPrice?: number;
     category: import('../types').ProductCategory;
     unit: import('../types').ProductUnit;
     initialStock?: number;
@@ -4331,11 +4499,13 @@ class StoreService {
       const category: import('../types').ProductCategory = validCats.includes(rawCat as any) ? (rawCat as any) : guessedCat;
 
       const sellingPrice = isNaN(rawSell) ? 0 : rawSell;
+      const buyingPrice = rawCost !== undefined && !isNaN(rawCost) && rawCost >= 0 ? rawCost : undefined;
       const stock = rawStock !== undefined && !isNaN(rawStock) ? rawStock : defaultStock;
 
       return {
         name: rawName,
         sellingPrice,
+        buyingPrice,
         category,
         unit: 'BOTTLE' as import('../types').ProductUnit,
         initialStock: stock,
@@ -4351,6 +4521,7 @@ class StoreService {
     items: Array<{
       name: string;
       sellingPrice: number;
+      buyingPrice?: number;
       category?: import('../types').ProductCategory;
       unit?: import('../types').ProductUnit;
       initialStock?: number;
@@ -4367,6 +4538,10 @@ class StoreService {
       if (!cleanName) return;
 
       const sellPrice = Number(item.sellingPrice) || 0;
+      const buyPrice =
+        item.buyingPrice !== undefined && !isNaN(Number(item.buyingPrice)) && Number(item.buyingPrice) >= 0
+          ? Number(item.buyingPrice)
+          : undefined;
 
       const newProduct: Product = {
         id: `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -4375,6 +4550,7 @@ class StoreService {
         category: item.category || 'BEER',
         unit: item.unit || 'BOTTLE',
         sellingPrice: sellPrice,
+        buyingPrice: buyPrice,
         reorderLevel: Number(item.reorderLevel) || 5,
         isArchived: false,
       };
@@ -4453,16 +4629,6 @@ class StoreService {
     }
 
     Object.assign(product, updates);
-    if (product.measurementType === 'WEIGHT') {
-      if (updates.pricePerKg !== undefined) {
-        product.pricePerKg = updates.pricePerKg;
-        product.sellingPrice = updates.pricePerKg;
-      } else if (updates.sellingPrice !== undefined) {
-        product.pricePerKg = updates.sellingPrice;
-      }
-    } else if (product.isMeasured && updates.sellingPrice !== undefined && updates.totalMeasuredValueKes === undefined) {
-      product.totalMeasuredValueKes = updates.sellingPrice;
-    }
     this.set(STORAGE_KEYS.PRODUCTS, allProducts);
 
     // Also update any active shift stock items so attendant UI immediately displays updated name and price
@@ -4473,13 +4639,7 @@ class StoreService {
         ssi.productName = product.name;
         ssi.unit = product.unit;
         ssi.sellingPrice = product.sellingPrice;
-        ssi.isMeasured = product.isMeasured;
-        ssi.measurementType = product.measurementType;
-        ssi.measureUnitLabel = product.measureUnitLabel;
-        ssi.totalMeasuredValueKes = product.totalMeasuredValueKes;
-        ssi.fullWeightKg = product.fullWeightKg;
-        ssi.emptyWeightKg = product.emptyWeightKg;
-        ssi.pricePerKg = product.pricePerKg;
+        ssi.buyingPrice = product.buyingPrice;
         ssiChanged = true;
       }
     });
@@ -4622,6 +4782,204 @@ class StoreService {
     this.notify();
   }
 
+  // --- Owner & Attendant Operational Intelligence Selectors ---
+  public getLiveShiftEstimate(shiftId: string) {
+    const shift = this.getShiftById(shiftId);
+    if (!shift) return null;
+    const products = this.getProducts();
+    const productsMap = new Map(products.map((p) => [p.id, p]));
+    const stockItems = this.getShiftStockItems(shiftId);
+    const expenses = this.getExpenses(shiftId);
+    const draft = this.getHandoverDraft(shiftId);
+    const countedSet = new Set(draft?.countedProductIds || []);
+
+    let revenue = 0;
+    let cogs = 0;
+    let costedRevenue = 0;
+    let unitsSold = 0;
+    let countedCount = 0;
+    let restocksCount = 0;
+
+    stockItems.forEach((item) => {
+      const prod = productsMap.get(item.productId);
+
+      if (item.additions !== 0) restocksCount += 1;
+
+      const draftVal = draft?.closingPhysicalCounts?.[item.productId];
+      const hasCounted =
+        item.closingPhysicalCount !== undefined ||
+        draftVal !== undefined ||
+        countedSet.has(item.productId);
+
+      if (hasCounted) countedCount += 1;
+
+      const available =
+        Number(item.openingPhysicalCount || 0) +
+        Number(item.additions || 0) +
+        Number(item.transfersIn || 0) -
+        Number(item.transfersOut || 0) -
+        Number(item.damages || 0) +
+        Number(item.ownerAdjustments || 0);
+
+      const closing =
+        draftVal !== undefined
+          ? Number(draftVal)
+          : item.closingPhysicalCount !== undefined
+          ? Number(item.closingPhysicalCount)
+          : available;
+
+      const sold = Math.round(Math.max(0, available - closing) * 100) / 100;
+      const rate = item.sellingPrice || 0;
+      const itemRev = Math.round(sold * rate * 100) / 100;
+      const unitCost = item.buyingPrice ?? prod?.buyingPrice;
+
+      revenue += itemRev;
+      unitsSold += sold;
+      if (unitCost !== undefined && unitCost > 0) {
+        cogs += Math.round(sold * unitCost * 100) / 100;
+        costedRevenue += itemRev;
+      }
+    });
+
+    const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+    const grossProfit = Math.round((revenue - cogs) * 100) / 100;
+    const netProfit = Math.round((grossProfit - totalExpenses) * 100) / 100;
+    const costedShare = revenue > 0 ? Math.min(1, costedRevenue / revenue) : 0;
+    const totalProducts = products.length || stockItems.length;
+
+    return {
+      shift,
+      revenue: Math.round(revenue * 100) / 100,
+      cogs: Math.round(cogs * 100) / 100,
+      grossProfit,
+      netProfit,
+      totalExpenses,
+      costedShare,
+      unitsSold: Math.round(unitsSold * 100) / 100,
+      countedCount,
+      totalProducts,
+      restocksCount,
+    };
+  }
+
+  public getTopMovingDrinks(options?: { days?: number; limit?: number }) {
+    const days = options?.days ?? 7;
+    const limit = options?.limit ?? 8;
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+
+    const products = this.getProducts();
+    const productsMap = new Map(products.map((p) => [p.id, p]));
+    const inventoryMap = new Map(this.getInventory().map((i) => [i.productId, i.quantityOnHand]));
+    const shifts = this.getShifts().filter((s) => {
+      const ts = new Date(s.closedAt || s.openedAt).getTime();
+      return !isNaN(ts) && ts >= cutoff;
+    });
+    const shiftIds = new Set(shifts.map((s) => s.id));
+    const allSSIs = this.getAllShiftStockItems().filter((i) => shiftIds.has(i.shiftId));
+
+    const agg = new Map<
+      string,
+      {
+        productId: string;
+        name: string;
+        category: string;
+        unit: string;
+        unitsSold: number;
+        revenue: number;
+        profit: number;
+        hasCost: boolean;
+        stockOnHand: number;
+        reorderLevel: number;
+      }
+    >();
+
+    allSSIs.forEach((item) => {
+      const sold = Number(item.recordedSales || 0);
+      if (sold <= 0) return;
+
+      const prod = productsMap.get(item.productId);
+      const rate = prod?.sellingPrice || item.sellingPrice || 0;
+      const rev = Math.round(sold * rate * 100) / 100;
+      const buyCost = item.buyingPrice ?? prod?.buyingPrice;
+      const hasCost = buyCost !== undefined && buyCost > 0;
+      const profit = hasCost ? Math.round((rev - sold * buyCost) * 100) / 100 : 0;
+
+      const existing = agg.get(item.productId);
+      if (existing) {
+        existing.unitsSold += sold;
+        existing.revenue += rev;
+        existing.profit += profit;
+        existing.hasCost = existing.hasCost || hasCost;
+      } else {
+        agg.set(item.productId, {
+          productId: item.productId,
+          name: prod?.name || item.productName,
+          category: prod?.category || 'OTHER',
+          unit: prod?.unit || item.unit,
+          unitsSold: sold,
+          revenue: rev,
+          profit,
+          hasCost,
+          stockOnHand: inventoryMap.get(item.productId) ?? 0,
+          reorderLevel: prod?.reorderLevel ?? 5,
+        });
+      }
+    });
+
+    return Array.from(agg.values())
+      .sort((a, b) => b.revenue - a.revenue || b.unitsSold - a.unitsSold)
+      .slice(0, limit);
+  }
+
+  public getLowStockAlerts() {
+    const products = this.getProducts();
+    const inventoryMap = new Map(this.getInventory().map((i) => [i.productId, Number(i.quantityOnHand || 0)]));
+
+    return products
+      .map((product) => {
+        const quantityOnHand = inventoryMap.get(product.id) ?? 0;
+        const reorderLevel = Number(product.reorderLevel ?? 5);
+        if (quantityOnHand > reorderLevel) return null;
+        return {
+          product,
+          quantityOnHand,
+          reorderLevel,
+          severity: (quantityOnHand <= 0 ? 'OUT' : 'LOW') as 'OUT' | 'LOW',
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+      .sort((a, b) => a.quantityOnHand - b.quantityOnHand);
+  }
+
+  public getHandoverTrail(limit = 12) {
+    const shifts = [...this.getShifts()]
+      .filter((s) => s.shiftNumber !== 'SH-261022-676' && !s.shiftNumber?.includes('261022-676'))
+      .sort((a, b) => new Date(b.openedAt).getTime() - new Date(a.openedAt).getTime());
+
+    const discrepancies = this.getDiscrepancies();
+    const discByShift = new Map<string, Discrepancy[]>();
+    discrepancies.forEach((d) => {
+      const list = discByShift.get(d.shiftId);
+      if (list) list.push(d);
+      else discByShift.set(d.shiftId, [d]);
+    });
+
+    return shifts.slice(0, limit).map((shift, idx) => {
+      const olderShift = shifts[idx + 1];
+      const shiftDiscs = discByShift.get(shift.id) || [];
+      const openingIssues = shiftDiscs.filter((d) => d.previousShiftId || d.responsibleWorkerName);
+      const flaggedIssues = shiftDiscs.filter((d) => d.status !== 'RESOLVED');
+
+      return {
+        shift,
+        previousWorkerName: shift.previousWorkerName || olderShift?.workerName,
+        previousShiftNumber: olderShift?.shiftNumber,
+        previousClosedAt: olderShift?.closedAt,
+        openingIssues,
+        flaggedCount: flaggedIssues.length,
+      };
+    });
+  }
 }
 
 export const store = new StoreService();

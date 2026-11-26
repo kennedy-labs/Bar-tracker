@@ -1,15 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { User } from './types';
 import { store } from './services/store';
 import { authService } from './services/auth';
-import { AuthScreen } from './components/auth/AuthScreen';
 import { TopBar } from './components/common/TopBar';
-import { WorkerTerminal } from './components/worker/WorkerTerminal';
-import { OwnerDashboard } from './components/owner/OwnerDashboard';
-import { EditProfileModal } from './components/common/EditProfileModal';
-
-
 import { navigationHistory } from './services/navigationHistory';
+
+const AuthScreen = lazy(() =>
+  import('./components/auth/AuthScreen').then((m) => ({ default: m.AuthScreen }))
+);
+const WorkerTerminal = lazy(() =>
+  import('./components/worker/WorkerTerminal').then((m) => ({ default: m.WorkerTerminal }))
+);
+const OwnerDashboard = lazy(() =>
+  import('./components/owner/OwnerDashboard').then((m) => ({ default: m.OwnerDashboard }))
+);
+const EditProfileModal = lazy(() =>
+  import('./components/common/EditProfileModal').then((m) => ({ default: m.EditProfileModal }))
+);
+
+const RouteFallback = () => (
+  <div className="flex-1 flex items-center justify-center min-h-[50dvh] p-6">
+    <div className="w-7 h-7 rounded-full border-2 border-brand/30 border-t-brand animate-spin" />
+  </div>
+);
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -99,8 +112,6 @@ export default function App() {
     authService.createSession(updatedUser);
   };
 
-  // Connect tab changes with phone back-button navigation
-
   // tick triggers re-render whenever store state mutates
   const [, setTick] = useState<number>(0);
   useEffect(() => {
@@ -146,6 +157,7 @@ export default function App() {
 
     const ownerTabs = [
       'overview',
+      'handovers',
       'shifts',
       'stock',
       'settings',
@@ -154,8 +166,10 @@ export default function App() {
       'staff',
       'profile',
       'launch',
+      'reports',
+      'discrepancies',
     ];
-    const workerTabs = ['counter', 'history'];
+    const workerTabs = ['counter', 'history', 'start'];
 
     if (currentUser.role === 'WORKER' && !workerTabs.includes(activeTab)) {
       handleTabChange('counter');
@@ -169,11 +183,15 @@ export default function App() {
 
   // If not logged in, show production Authentication Screen
   if (!currentUser) {
-    return <AuthScreen onLogin={handleLogin} />;
+    return (
+      <Suspense fallback={<div className="min-h-[100dvh] bg-ink flex items-center justify-center"><div className="w-7 h-7 rounded-full border-2 border-brand/30 border-t-brand animate-spin" /></div>}>
+        <AuthScreen onLogin={handleLogin} />
+      </Suspense>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-ink text-content flex flex-col font-sans">
+    <div className="min-h-[100dvh] bg-ink text-content flex flex-col font-sans">
       {/* Universal Top Bar adhering to Top Bar Contract */}
       <TopBar
         currentUser={currentUser}
@@ -186,33 +204,39 @@ export default function App() {
       />
 
       {/* Main Workspace Body */}
-      <main className="flex-1 px-3 py-3 sm:p-4 md:p-6 max-w-7xl mx-auto w-full pb-8 md:pb-12">
-        {currentUser.role === 'OWNER' ? (
-          <OwnerDashboard
-            currentUser={currentUser}
-            activeTab={activeTab}
-            setActiveTab={handleTabChange}
-            onUpdateProfile={handleUpdateProfile}
-          />
-        ) : (
-          <WorkerTerminal
-            currentUser={currentUser}
-            activeTab={activeTab}
-            setActiveTab={handleTabChange}
-          />
-        )}
+      <main className={`flex-1 px-3 py-3 sm:p-4 md:p-6 max-w-7xl mx-auto w-full ${currentUser.role === 'OWNER' ? 'pb-24 md:pb-12' : 'pb-20 md:pb-10'}`}>
+        <Suspense fallback={<RouteFallback />}>
+          {currentUser.role === 'OWNER' ? (
+            <OwnerDashboard
+              currentUser={currentUser}
+              activeTab={activeTab}
+              setActiveTab={handleTabChange}
+              onUpdateProfile={handleUpdateProfile}
+            />
+          ) : (
+            <WorkerTerminal
+              currentUser={currentUser}
+              activeTab={activeTab}
+              setActiveTab={handleTabChange}
+            />
+          )}
+        </Suspense>
       </main>
 
       {/* Root-Level Edit Profile Modal (Ensures it appears on top of all workspace lists & content) */}
-      <EditProfileModal
-        currentUser={currentUser}
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-        onLogout={handleLogout}
-        onSuccess={(updated) => {
-          handleUpdateProfile(updated);
-        }}
-      />
+      {isProfileModalOpen && (
+        <Suspense fallback={null}>
+          <EditProfileModal
+            currentUser={currentUser}
+            isOpen={isProfileModalOpen}
+            onClose={() => setIsProfileModalOpen(false)}
+            onLogout={handleLogout}
+            onSuccess={(updated) => {
+              handleUpdateProfile(updated);
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

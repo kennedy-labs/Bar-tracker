@@ -14,8 +14,7 @@ export type ProductCategory =
   | 'SPIRIT'
   | 'WINE'
   | 'SOFT_DRINK'
-  | 'CIGARETTE'
-  | 'TRADITIONAL_BREW';
+  | 'CIGARETTE';
 
 export type ProductUnit =
   | 'BOTTLE'
@@ -27,12 +26,8 @@ export type ProductUnit =
   | 'JUG'
   | 'CUP'
   | 'KEG'
-  | 'KG'
   | 'PORTION'
-  | 'VALUE_KES'
   | 'CUSTOM';
-
-export type MeasurementType = 'COUNT' | 'VALUE' | 'VOLUME' | 'WEIGHT' | 'BOTH';
 
 export interface Product {
   id: string;
@@ -40,17 +35,11 @@ export interface Product {
   name: string;
   category: ProductCategory;
   unit: ProductUnit;
-  sellingPrice: number; // in KES (retail / counter selling price or price per kg)
+  sellingPrice: number; // in KES (retail / counter selling price)
+  buyingPrice?: number; // optional wholesale cost per unit in KES for real-time net profit
   reorderLevel: number;
   volumeMl?: number;
   isArchived?: boolean;
-  isMeasured?: boolean;
-  measurementType?: MeasurementType;
-  measureUnitLabel?: string;
-  totalMeasuredValueKes?: number;
-  fullWeightKg?: number; // e.g. 60 kg full keg tank
-  emptyWeightKg?: number; // tare weight of container in kg (default 0)
-  pricePerKg?: number; // price per kg in KES (e.g. 150 KES)
 }
 
 export interface ProductCostHistory {
@@ -98,6 +87,7 @@ export interface ShiftStockItem {
   productName: string;
   unit: ProductUnit;
   sellingPrice: number;
+  buyingPrice?: number;
   openingSystemCount: number;
   openingPhysicalCount: number;
   openingVerified: boolean;
@@ -111,13 +101,6 @@ export interface ShiftStockItem {
   expectedClosingCount?: number;
   discrepancyCount?: number; // actual - expected
   discrepancyValue?: number; // in KES
-  isMeasured?: boolean;
-  measurementType?: MeasurementType;
-  measureUnitLabel?: string;
-  totalMeasuredValueKes?: number;
-  fullWeightKg?: number;
-  emptyWeightKg?: number;
-  pricePerKg?: number;
   adjustmentNote?: string;
   closingNote?: string;
   updatedAt?: string;
@@ -151,6 +134,13 @@ export interface Shift {
   calculatedCoinsIncome?: number; // closingCoinsActual - openingCoinsFloat
   totalIncomeReturned?: number; // calculatedCashIncome + calculatedMpesaIncome + calculatedCoinsIncome
   expectedSalesRevenue?: number; // sum(item.recordedSales * item.sellingPrice) or sum of sales value
+  estimatedCogs?: number; // sum(item.recordedSales * buyingPrice) for costed items
+  estimatedGrossProfit?: number; // expectedSalesRevenue - estimatedCogs
+  estimatedNetProfit?: number; // estimatedGrossProfit - totalExpenses
+  costedRevenueShare?: number; // 0..1 fraction of revenue backed by entered buying costs
+  previousShiftId?: string;
+  previousWorkerName?: string;
+  handoverMismatchCount?: number;
   totalExpenses?: number; // Cash + Mpesa expenses
   financialVariance?: number; // (totalIncomeReturned + totalExpenses) - expectedSalesRevenue
 
@@ -173,6 +163,8 @@ export interface Shift {
 export interface HandoverDraft {
   step: 1 | 2 | 3;
   closingPhysicalCounts: Record<string, number>;
+  countedProductIds?: string[];
+  activeCategory?: string;
   closingCoinsActual: string;
   closingCashActual: string;
   closingMpesaBalance: string;

@@ -14,7 +14,7 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <title>Bar Track — Operations, Stock Audit & Reconciliation System</title>
     <meta name="description" content="Bar operations management and sales reconciliation system featuring shift transitions, physical stock counts, M-Pesa and cash float tracking, and owner oversight." />
     <meta property="og:title" content="Bar Track — Operations, Stock Audit & Reconciliation System" />
@@ -30,21 +30,21 @@
           var root = document.getElementById('root');
           if (!root) return;
           root.innerHTML = '' +
-            '<div style="min-height: 100vh; background-color: #0a0a0f; color: #ececf3; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; font-family: system-ui, -apple-system, sans-serif; text-align: center;">' +
-              '<div style="max-width: 400px; width: 100%; background: #14141d; border: 1px solid #262633; border-radius: 24px; padding: 28px 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.6);">' +
-                '<div style="width: 48px; height: 48px; border-radius: 14px; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px auto; color: #f87171; font-size: 22px;">' +
-                  '⚠️' +
+            '<div style="min-height: 100vh; background-color: #0A0D14; color: #F1F5F9; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; font-family: system-ui, -apple-system, sans-serif; text-align: center;">' +
+              '<div style="max-width: 400px; width: 100%; background: #141A26; border: 1px solid #232C3F; border-radius: 20px; padding: 28px 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.6);">' +
+                '<div style="width: 48px; height: 48px; border-radius: 14px; background: rgba(244, 63, 94, 0.12); border: 1px solid rgba(244, 63, 94, 0.3); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px auto; color: #fb7185; font-size: 20px; font-weight: 800;">' +
+                  '!' +
                 '</div>' +
                 '<h2 style="font-size: 18px; font-weight: 800; color: #ffffff; margin: 0 0 8px 0; letter-spacing: -0.02em;">System Recovery</h2>' +
-                '<p style="font-size: 13px; color: #9a9aae; margin: 0 0 18px 0; line-height: 1.5;">' +
+                '<p style="font-size: 13px; color: #94A3B8; margin: 0 0 18px 0; line-height: 1.5;">' +
                   'The application caught a startup issue. Tap below to reload fresh or clean stored cache.' +
                 '</p>' +
-                (errMsg ? '<div style="font-family: monospace; font-size: 11px; color: #fb7185; background: #1a1a25; border: 1px solid #35354a; border-radius: 10px; padding: 10px; margin-bottom: 18px; word-break: break-all; max-height: 80px; overflow-y: auto; text-align: left;">' + String(errMsg) + '</div>' : '') +
+                (errMsg ? '<div style="font-family: monospace; font-size: 11px; color: #fb7185; background: #1B2333; border: 1px solid #323E58; border-radius: 10px; padding: 10px; margin-bottom: 18px; word-break: break-all; max-height: 80px; overflow-y: auto; text-align: left;">' + String(errMsg) + '</div>' : '') +
                 '<div style="display: flex; flex-direction: column; gap: 10px;">' +
-                  '<button id="__recReloadBtn" style="width: 100%; padding: 12px; background: #10b981; color: #022c22; border: none; border-radius: 12px; font-size: 13px; font-weight: 800; cursor: pointer;">' +
+                  '<button id="__recReloadBtn" style="width: 100%; padding: 12px; background: #10B981; color: #022C22; border: none; border-radius: 12px; font-size: 13px; font-weight: 800; cursor: pointer;">' +
                     'Reload Application' +
                   '</button>' +
-                  '<button id="__recResetBtn" style="width: 100%; padding: 12px; background: #1e1e29; color: #ececf3; border: 1px solid #35354a; border-radius: 12px; font-size: 13px; font-weight: 600; cursor: pointer;">' +
+                  '<button id="__recResetBtn" style="width: 100%; padding: 12px; background: #1B2333; color: #F1F5F9; border: 1px solid #323E58; border-radius: 12px; font-size: 13px; font-weight: 600; cursor: pointer;">' +
                     'Clean Cache & Safe Restart' +
                   '</button>' +
                 '</div>' +
@@ -135,16 +135,16 @@
       })();
     </script>
   </head>
-  <body style="margin: 0; padding: 0; background-color: #0a0a0f; color: #ececf3; min-height: 100vh; font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased;">
+  <body style="margin: 0; padding: 0; background-color: #0A0D14; color: #F1F5F9; min-height: 100vh; font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased;">
     <div id="root">
-      <div style="min-height: 100vh; background-color: #0a0a0f; color: #ececf3; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; text-align: center; padding: 20px;">
-        <div style="width: 56px; height: 56px; border-radius: 16px; background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; box-shadow: 0 8px 24px -8px rgba(139, 92, 246, 0.4);">
-          <svg style="width: 28px; height: 28px; color: #a78bfa; animation: spin 1.5s linear infinite;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+      <div style="min-height: 100vh; background-color: #0A0D14; color: #F1F5F9; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; text-align: center; padding: 20px;">
+        <div style="width: 52px; height: 52px; border-radius: 14px; background: rgba(16, 185, 129, 0.14); border: 1px solid rgba(16, 185, 129, 0.3); display: flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+          <svg style="width: 24px; height: 24px; color: #10B981; animation: spin 1.4s linear infinite;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v3m0 12v3m9-9h-3M6 12H3m15.364 6.364l-2.121-2.121M8.757 8.757L6.636 6.636m11.728 0l-2.121 2.121M8.757 15.243l-2.121 2.121" />
           </svg>
         </div>
-        <h2 style="font-size: 18px; font-weight: 800; letter-spacing: -0.025em; color: #ffffff; margin: 0 0 4px 0;">Bar Track</h2>
-        <p style="font-size: 13px; color: #9a9aae; margin: 0;">Loading Bar Operations & Stock System...</p>
+        <h2 style="font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: #F1F5F9; margin: 0 0 4px 0;">Bar Track</h2>
+        <p style="font-size: 13px; color: #94A3B8; margin: 0;">Loading Bar Operations & Stock System...</p>
       </div>
       <style>
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }

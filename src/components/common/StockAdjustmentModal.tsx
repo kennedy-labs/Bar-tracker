@@ -72,8 +72,8 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="w-full max-w-md bg-[#121824] border border-[#1E293B] rounded-3xl p-5 sm:p-6 shadow-2xl my-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-sm">
+      <div className="w-full max-w-md max-h-[92dvh] overflow-y-auto bg-[#121824] border border-[#1E293B] rounded-3xl p-4 sm:p-6 shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div>
@@ -88,7 +88,7 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
+            className="min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
