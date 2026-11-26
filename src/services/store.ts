@@ -2763,6 +2763,10 @@ class StoreService {
     closingPhysicalCount?: number;
     adjustmentNote?: string;
     closingNote?: string;
+    closingUnits?: number;
+    closingValueRemainder?: number;
+    closingLitres?: number;
+    closingGrossWeightKg?: number;
   }) {
     const allSSIs = this.get<ShiftStockItem[]>(STORAGE_KEYS.SHIFT_STOCK_ITEMS, []);
     let ssi = allSSIs.find(
@@ -2781,17 +2785,15 @@ class StoreService {
         additions: params.additions !== undefined ? params.additions : 0,
         closingPhysicalCount: params.closingPhysicalCount,
       });
-      // Honour an explicitly supplied opening count even when the caller also
-      // omitted/derived it from inventory.
       ssi.openingSystemCount = openCount;
       ssi.openingPhysicalCount =
         params.openingPhysicalCount !== undefined ? params.openingPhysicalCount : openCount;
-      if (params.adjustmentNote !== undefined) {
-        ssi.adjustmentNote = params.adjustmentNote;
-      }
-      if (params.closingNote !== undefined) {
-        ssi.closingNote = params.closingNote;
-      }
+      if (params.adjustmentNote !== undefined) ssi.adjustmentNote = params.adjustmentNote;
+      if (params.closingNote !== undefined) ssi.closingNote = params.closingNote;
+      if (params.closingUnits !== undefined) ssi.closingUnits = params.closingUnits;
+      if (params.closingValueRemainder !== undefined) ssi.closingValueRemainder = params.closingValueRemainder;
+      if (params.closingLitres !== undefined) ssi.closingLitres = params.closingLitres;
+      if (params.closingGrossWeightKg !== undefined) ssi.closingGrossWeightKg = params.closingGrossWeightKg;
       allSSIs.push(ssi);
     } else {
       if (params.openingPhysicalCount !== undefined) {
@@ -2812,12 +2814,12 @@ class StoreService {
             ? Math.max(0, params.closingPhysicalCount)
             : undefined;
       }
-      if (params.adjustmentNote !== undefined) {
-        ssi.adjustmentNote = params.adjustmentNote;
-      }
-      if (params.closingNote !== undefined) {
-        ssi.closingNote = params.closingNote;
-      }
+      if (params.adjustmentNote !== undefined) ssi.adjustmentNote = params.adjustmentNote;
+      if (params.closingNote !== undefined) ssi.closingNote = params.closingNote;
+      if (params.closingUnits !== undefined) ssi.closingUnits = params.closingUnits;
+      if (params.closingValueRemainder !== undefined) ssi.closingValueRemainder = params.closingValueRemainder;
+      if (params.closingLitres !== undefined) ssi.closingLitres = params.closingLitres;
+      if (params.closingGrossWeightKg !== undefined) ssi.closingGrossWeightKg = params.closingGrossWeightKg;
     }
 
     const available = Number(ssi.openingPhysicalCount || 0) + Number(ssi.additions || 0) + Number(ssi.transfersIn || 0) - Number(ssi.transfersOut || 0) - Number(ssi.damages || 0) + Number(ssi.ownerAdjustments || 0);
@@ -3811,6 +3813,7 @@ class StoreService {
 
     const reconciledStockItems = shiftStockItems.map((item) => {
       const prod = productsMap.get(item.productId);
+      const mode = prod?.measurementMode || 'STANDARD';
       const availableStock =
         item.openingPhysicalCount +
         item.additions +
@@ -3819,12 +3822,53 @@ class StoreService {
         item.damages +
         (item.ownerAdjustments || 0);
 
-      const physicalClosing =
-        params.closingPhysicalCounts[item.productId] !== undefined
-          ? params.closingPhysicalCounts[item.productId]
-          : availableStock;
+      let physicalClosing = availableStock;
+      let calculatedSold = 0;
 
-      const calculatedSold = Math.round(Math.max(0, availableStock - physicalClosing) * 100) / 100;
+      if (mode === 'MAKALI') {
+        const pricePerUnit = prod?.pricePerUnit || prod?.sellingPrice || 1;
+        const cUnits = item.closingUnits ?? (params.closingPhysicalCounts[item.productId] !== undefined ? Math.floor(params.closingPhysicalCounts[item.productId]) : undefined);
+        const cRem = item.closingValueRemainder ?? 0;
+        if (cUnits !== undefined) {
+          physicalClosing = Math.max(0, cUnits + (cRem / pricePerUnit));
+        } else if (params.closingPhysicalCounts[item.productId] !== undefined) {
+          physicalClosing = params.closingPhysicalCounts[item.productId];
+        }
+        calculatedSold = Math.round(Math.max(0, availableStock - physicalClosing) * 100) / 100;
+      } else if (mode === 'MURATINA') {
+        const volTotal = prod?.volumeTotal || 10;
+        const pricePerUnit = prod?.pricePerUnit || prod?.sellingPrice || 1;
+        const unitPricePerLitre = pricePerUnit / volTotal;
+        let effLitres = item.closingLitres;
+        if (effLitres === undefined && item.closingValueRemainder !== undefined) {
+          effLitres = item.closingValueRemainder / unitPricePerLitre;
+        }
+        if (effLitres !== undefined) {
+          physicalClosing = Math.max(0, effLitres / volTotal);
+        } else if (params.closingPhysicalCounts[item.productId] !== undefined) {
+          physicalClosing = params.closingPhysicalCounts[item.productId];
+        }
+        calculatedSold = Math.round(Math.max(0, availableStock - physicalClosing) * 100) / 100;
+      } else if (mode === 'KEG') {
+        const fullWt = prod?.fullWeightKg || 60;
+        const emptyWt = prod?.emptyWeightKg || 12;
+        const netPerTank = Math.max(1, fullWt - emptyWt);
+        const grossKg = item.closingGrossWeightKg ?? (params.closingPhysicalCounts[item.productId] !== undefined ? params.closingPhysicalCounts[item.productId] * netPerTank + emptyWt : undefined);
+        if (grossKg !== undefined) {
+          const netClosingKg = Math.max(0, grossKg - emptyWt);
+          physicalClosing = Math.max(0, netClosingKg / netPerTank);
+        } else {
+          physicalClosing = params.closingPhysicalCounts[item.productId] !== undefined ? params.closingPhysicalCounts[item.productId] : availableStock;
+        }
+        calculatedSold = Math.round(Math.max(0, availableStock - physicalClosing) * 100) / 100;
+      } else {
+        physicalClosing =
+          params.closingPhysicalCounts[item.productId] !== undefined
+            ? params.closingPhysicalCounts[item.productId]
+            : availableStock;
+        calculatedSold = Math.round(Math.max(0, availableStock - physicalClosing) * 100) / 100;
+      }
+
       const overageCount = physicalClosing > availableStock ? Math.round((physicalClosing - availableStock) * 100) / 100 : 0;
       const discrepancyValue = Math.round(overageCount * item.sellingPrice * 100) / 100;
 
@@ -4304,6 +4348,11 @@ class StoreService {
     volumeMl?: number;
     initialStock?: number;
     businessId?: string;
+    measurementMode?: import('../types').MeasurementMode;
+    pricePerUnit?: number;
+    volumeTotal?: number;
+    fullWeightKg?: number;
+    emptyWeightKg?: number;
   }): Product {
     const currentBizId = params.businessId || this.getCurrentBusinessId();
     const products = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, []);
@@ -4322,6 +4371,11 @@ class StoreService {
       reorderLevel: Number(params.reorderLevel) || 5,
       volumeMl: params.volumeMl ? Number(params.volumeMl) : undefined,
       isArchived: false,
+      measurementMode: params.measurementMode || 'STANDARD',
+      pricePerUnit: params.pricePerUnit !== undefined ? Number(params.pricePerUnit) : undefined,
+      volumeTotal: params.volumeTotal !== undefined ? Number(params.volumeTotal) : undefined,
+      fullWeightKg: params.fullWeightKg !== undefined ? Number(params.fullWeightKg) : undefined,
+      emptyWeightKg: params.emptyWeightKg !== undefined ? Number(params.emptyWeightKg) : undefined,
     };
 
     products.push(newProduct);

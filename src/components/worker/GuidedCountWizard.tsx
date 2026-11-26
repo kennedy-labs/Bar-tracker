@@ -182,6 +182,59 @@ export const GuidedCountWizard: React.FC<GuidedCountWizardProps> = ({
     persistDraft(activeStep, nextCounted);
   };
 
+  const setMakaliClosing = (product: Product, units: number, valueRemainder: number) => {
+    const pricePerUnit = product.pricePerUnit || product.sellingPrice || 1;
+    const cleanUnits = Math.max(0, Math.floor(units));
+    const cleanRem = Math.max(0, valueRemainder);
+    const effectivePhysical = cleanUnits + (cleanRem / pricePerUnit);
+
+    store.updateShiftStockItemRow({
+      shiftId: shift.id,
+      productId: product.id,
+      closingUnits: cleanUnits,
+      closingValueRemainder: cleanRem,
+      closingPhysicalCount: effectivePhysical,
+    });
+    const nextCounted = countedSet.has(product.id) ? countedIds : [...countedIds, product.id];
+    setCountedIds(nextCounted);
+    persistDraft(activeStep, nextCounted);
+  };
+
+  const setMuratinaClosing = (product: Product, litres: number) => {
+    const volTotal = product.volumeTotal || 10;
+    const cleanLitres = Math.max(0, litres);
+    const effectivePhysical = cleanLitres / volTotal;
+
+    store.updateShiftStockItemRow({
+      shiftId: shift.id,
+      productId: product.id,
+      closingLitres: cleanLitres,
+      closingPhysicalCount: effectivePhysical,
+    });
+    const nextCounted = countedSet.has(product.id) ? countedIds : [...countedIds, product.id];
+    setCountedIds(nextCounted);
+    persistDraft(activeStep, nextCounted);
+  };
+
+  const setKegClosing = (product: Product, grossWeightKg: number) => {
+    const fullWt = product.fullWeightKg || 60;
+    const emptyWt = product.emptyWeightKg || 12;
+    const netPerTank = Math.max(1, fullWt - emptyWt);
+    const cleanGross = Math.max(0, grossWeightKg);
+    const netClosingKg = Math.max(0, cleanGross - emptyWt);
+    const effectivePhysical = netClosingKg / netPerTank;
+
+    store.updateShiftStockItemRow({
+      shiftId: shift.id,
+      productId: product.id,
+      closingGrossWeightKg: cleanGross,
+      closingPhysicalCount: effectivePhysical,
+    });
+    const nextCounted = countedSet.has(product.id) ? countedIds : [...countedIds, product.id];
+    setCountedIds(nextCounted);
+    persistDraft(activeStep, nextCounted);
+  };
+
   const stepIndex = steps.indexOf(activeStep);
   const currentCategoryProducts = useMemo(() => {
     if (activeStep === 'DRAWER') return [];
@@ -456,61 +509,161 @@ export const GuidedCountWizard: React.FC<GuidedCountWizardProps> = ({
                       </div>
                     </div>
 
-                    {/* Touch Stepper & Same Button */}
-                    <div className="flex items-center justify-between gap-1.5 sm:gap-2 sm:pl-5.5">
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setProductClosing(p, Math.max(0, closing - 1))}
-                          className="min-w-[44px] min-h-[44px] rounded-xl bg-surface-2 hover:bg-surface-3 border border-line text-content flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
-                          aria-label={`Decrease closing count for ${p.name}`}
-                        >
-                          <Minus className="w-4 h-4" />
-                        </button>
-
+                    {/* Measured Inputs or Touch Stepper */}
+                    {p.measurementMode === 'MAKALI' ? (
+                      <div className="grid grid-cols-2 gap-2 sm:pl-5.5 pt-1">
+                        <div>
+                          <label className="text-[10px] font-mono uppercase text-muted">Whole Units</label>
+                          <input
+                            type="number"
+                            step="any"
+                            inputMode="decimal"
+                            min="0"
+                            value={localInputs[`${p.id}_units`] !== undefined ? localInputs[`${p.id}_units`] : String(ssi?.closingUnits ?? Math.floor(closing))}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setLocalInputs((prev) => ({ ...prev, [`${p.id}_units`]: val }));
+                            }}
+                            onBlur={() => {
+                              const u = parseFloat(localInputs[`${p.id}_units`] ?? String(ssi?.closingUnits ?? Math.floor(closing))) || 0;
+                              const r = ssi?.closingValueRemainder || 0;
+                              setMakaliClosing(p, u, r);
+                            }}
+                            className="w-full min-h-[42px] rounded-xl bg-ink-soft border border-line px-3 text-sm font-mono font-bold text-content focus:outline-none focus:border-brand"
+                            placeholder="Units"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-mono uppercase text-muted">Extra Value (sh)</label>
+                          <input
+                            type="number"
+                            step="any"
+                            inputMode="decimal"
+                            min="0"
+                            value={localInputs[`${p.id}_rem`] !== undefined ? localInputs[`${p.id}_rem`] : String(ssi?.closingValueRemainder ?? 0)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setLocalInputs((prev) => ({ ...prev, [`${p.id}_rem`]: val }));
+                            }}
+                            onBlur={() => {
+                              const u = ssi?.closingUnits ?? Math.floor(closing);
+                              const r = parseFloat(localInputs[`${p.id}_rem`] ?? String(ssi?.closingValueRemainder ?? 0)) || 0;
+                              setMakaliClosing(p, u, r);
+                            }}
+                            className="w-full min-h-[42px] rounded-xl bg-ink-soft border border-line px-3 text-sm font-mono font-bold text-content focus:outline-none focus:border-brand"
+                            placeholder="sh"
+                          />
+                        </div>
+                      </div>
+                    ) : p.measurementMode === 'MURATINA' ? (
+                      <div className="sm:pl-5.5 pt-1 space-y-1">
+                        <label className="text-[10px] font-mono uppercase text-muted">Remaining Litres (L)</label>
                         <input
                           type="number"
                           step="any"
                           inputMode="decimal"
                           min="0"
-                          value={displayInput}
+                          value={localInputs[`${p.id}_litres`] !== undefined ? localInputs[`${p.id}_litres`] : String(ssi?.closingLitres ?? (closing * (p.volumeTotal || 10)))}
                           onChange={(e) => {
                             const val = e.target.value;
-                            setLocalInputs((prev) => ({ ...prev, [p.id]: val }));
+                            setLocalInputs((prev) => ({ ...prev, [`${p.id}_litres`]: val }));
                           }}
                           onBlur={() => {
-                            const raw = localInputs[p.id];
-                            if (raw === undefined) return;
-                            const parsed = parseFloat(raw);
-                            setProductClosing(p, isNaN(parsed) ? available : parsed);
+                            const l = parseFloat(localInputs[`${p.id}_litres`] ?? String(ssi?.closingLitres ?? (closing * (p.volumeTotal || 10)))) || 0;
+                            setMuratinaClosing(p, l);
                           }}
-                          className={`w-16 sm:w-20 min-h-[44px] rounded-xl bg-ink-soft border text-center font-mono text-base font-bold text-content tabular-nums focus:outline-none focus:border-brand ${
-                            isVerified ? 'border-brand-line' : 'border-line-strong'
-                          }`}
+                          className="w-full min-h-[42px] rounded-xl bg-ink-soft border border-line px-3 text-sm font-mono font-bold text-content focus:outline-none focus:border-brand"
+                          placeholder="Litres"
                         />
+                      </div>
+                    ) : p.measurementMode === 'KEG' ? (
+                      <div className="sm:pl-5.5 pt-1 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-mono uppercase text-muted">Scale Gross Weight (kg)</label>
+                          <span className="text-[10px] font-mono text-brand-strong">
+                            Tare: {p.emptyWeightKg || 12}kg · Net:{' '}
+                            {Math.max(
+                              0,
+                              (parseFloat(localInputs[`${p.id}_keg`] ?? String(ssi?.closingGrossWeightKg ?? (closing * ((p.fullWeightKg || 60) - (p.emptyWeightKg || 12)) + (p.emptyWeightKg || 12)))) || 0) -
+                                (p.emptyWeightKg || 12)
+                            ).toFixed(1)}
+                            kg
+                          </span>
+                        </div>
+                        <input
+                          type="number"
+                          step="any"
+                          inputMode="decimal"
+                          min="0"
+                          value={localInputs[`${p.id}_keg`] !== undefined ? localInputs[`${p.id}_keg`] : String(ssi?.closingGrossWeightKg ?? (closing * ((p.fullWeightKg || 60) - (p.emptyWeightKg || 12)) + (p.emptyWeightKg || 12)))}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setLocalInputs((prev) => ({ ...prev, [`${p.id}_keg`]: val }));
+                          }}
+                          onBlur={() => {
+                            const gross = parseFloat(localInputs[`${p.id}_keg`] ?? String(ssi?.closingGrossWeightKg ?? 0)) || 0;
+                            setKegClosing(p, gross);
+                          }}
+                          className="w-full min-h-[42px] rounded-xl bg-ink-soft border border-line px-3 text-sm font-mono font-bold text-content focus:outline-none focus:border-brand"
+                          placeholder="Gross kg"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between gap-1.5 sm:gap-2 sm:pl-5.5">
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setProductClosing(p, Math.max(0, closing - 1))}
+                            className="min-w-[44px] min-h-[44px] rounded-xl bg-surface-2 hover:bg-surface-3 border border-line text-content flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
+                            aria-label={`Decrease closing count for ${p.name}`}
+                          >
+                            <Minus className="w-4 h-4" />
+                          </button>
+
+                          <input
+                            type="number"
+                            step="any"
+                            inputMode="decimal"
+                            min="0"
+                            value={displayInput}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setLocalInputs((prev) => ({ ...prev, [p.id]: val }));
+                            }}
+                            onBlur={() => {
+                              const raw = localInputs[p.id];
+                              if (raw === undefined) return;
+                              const parsed = parseFloat(raw);
+                              setProductClosing(p, isNaN(parsed) ? available : parsed);
+                            }}
+                            className={`w-16 sm:w-20 min-h-[44px] rounded-xl bg-ink-soft border text-center font-mono text-base font-bold text-content tabular-nums focus:outline-none focus:border-brand ${
+                              isVerified ? 'border-brand-line' : 'border-line-strong'
+                            }`}
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() => setProductClosing(p, closing + 1)}
+                            className="min-w-[44px] min-h-[44px] rounded-xl bg-surface-2 hover:bg-surface-3 border border-line text-content flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
+                            aria-label={`Increase closing count for ${p.name}`}
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
 
                         <button
                           type="button"
-                          onClick={() => setProductClosing(p, closing + 1)}
-                          className="min-w-[44px] min-h-[44px] rounded-xl bg-surface-2 hover:bg-surface-3 border border-line text-content flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
-                          aria-label={`Increase closing count for ${p.name}`}
+                          onClick={() => setProductClosing(p, available)}
+                          className={`min-h-[44px] px-2.5 sm:px-3.5 rounded-xl text-xs font-semibold border transition-colors cursor-pointer whitespace-nowrap tabular-nums shrink-0 ${
+                            isVerified && closing === available
+                              ? 'bg-brand-tint border-brand-line text-brand-strong'
+                              : 'bg-surface-2 hover:bg-surface-3 border-line text-content'
+                          }`}
                         >
-                          <Plus className="w-4 h-4" />
+                          Same ({available})
                         </button>
                       </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setProductClosing(p, available)}
-                        className={`min-h-[44px] px-2.5 sm:px-3.5 rounded-xl text-xs font-semibold border transition-colors cursor-pointer whitespace-nowrap tabular-nums shrink-0 ${
-                          isVerified && closing === available
-                            ? 'bg-brand-tint border-brand-line text-brand-strong'
-                            : 'bg-surface-2 hover:bg-surface-3 border-line text-content'
-                        }`}
-                      >
-                        Same ({available})
-                      </button>
-                    </div>
+                    )}
                   </div>
                 );
               })

@@ -29,6 +29,8 @@ export type ProductUnit =
   | 'PORTION'
   | 'CUSTOM';
 
+export type MeasurementMode = 'STANDARD' | 'MAKALI' | 'MURATINA' | 'KEG';
+
 export interface Product {
   id: string;
   businessId?: string;
@@ -40,6 +42,13 @@ export interface Product {
   reorderLevel: number;
   volumeMl?: number;
   isArchived?: boolean;
+
+  // Generalized Measured Product Engine Config (Non-hardcoded)
+  measurementMode?: MeasurementMode;
+  pricePerUnit?: number; // For Makali / packed unit pricing
+  volumeTotal?: number;  // For Muratina total volume (e.g. 10 litres)
+  fullWeightKg?: number; // For Keg full tank gross weight (e.g. 60kg)
+  emptyWeightKg?: number;// For Keg empty tank tare weight (e.g. 12kg)
 }
 
 export interface ProductCostHistory {
@@ -104,6 +113,12 @@ export interface ShiftStockItem {
   adjustmentNote?: string;
   closingNote?: string;
   updatedAt?: string;
+
+  // Raw measured product closing inputs
+  closingUnits?: number;
+  closingValueRemainder?: number;
+  closingLitres?: number;
+  closingGrossWeightKg?: number;
 }
 
 export interface Shift {

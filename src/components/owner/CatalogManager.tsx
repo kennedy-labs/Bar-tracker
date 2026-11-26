@@ -212,6 +212,11 @@ export const CatalogManager: React.FC = () => {
   const [reorderLevel, setReorderLevel] = useState('5');
   const [initialStock, setInitialStock] = useState('');
   const [volumeMl, setVolumeMl] = useState('');
+  const [measurementMode, setMeasurementMode] = useState<import('../../types').MeasurementMode>('STANDARD');
+  const [pricePerUnit, setPricePerUnit] = useState('');
+  const [volumeTotal, setVolumeTotal] = useState('');
+  const [fullWeightKg, setFullWeightKg] = useState('');
+  const [emptyWeightKg, setEmptyWeightKg] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
   // Form State for Dedicated Soft Product Editing
@@ -307,6 +312,11 @@ export const CatalogManager: React.FC = () => {
    setReorderLevel('5');
    setInitialStock('');
    setVolumeMl('');
+   setMeasurementMode('STANDARD');
+   setPricePerUnit('');
+   setVolumeTotal('');
+   setFullWeightKg('');
+   setEmptyWeightKg('');
    setFormError(null);
    setEditingProduct(null);
    setShowAddModal(true);
@@ -360,6 +370,11 @@ export const CatalogManager: React.FC = () => {
      reorderLevel: reorder,
      volumeMl: vol,
      initialStock: stock,
+     measurementMode,
+     pricePerUnit: pricePerUnit.trim() !== '' ? parseFloat(pricePerUnit) : undefined,
+     volumeTotal: volumeTotal.trim() !== '' ? parseFloat(volumeTotal) : undefined,
+     fullWeightKg: fullWeightKg.trim() !== '' ? parseFloat(fullWeightKg) : undefined,
+     emptyWeightKg: emptyWeightKg.trim() !== '' ? parseFloat(emptyWeightKg) : undefined,
    });
 
    setSavedStockNotice(`Added ${name.trim()} to catalog`);
@@ -839,6 +854,106 @@ export const CatalogManager: React.FC = () => {
             <div className="text-xs font-mono text-emerald-400 tabular-nums">
               Est. profit per unit: KES {(parseFloat(sellingPrice) - (parseFloat(buyingPrice) || 0)).toLocaleString()} (
               {Math.round(((parseFloat(sellingPrice) - (parseFloat(buyingPrice) || 0)) / parseFloat(sellingPrice)) * 100)}% margin)
+            </div>
+          )}
+
+          {/* Measurement Mode & Measured Product Properties */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+              Measurement Behavior / Engine Type
+            </label>
+            <select
+              value={measurementMode}
+              onChange={(e) => setMeasurementMode(e.target.value as any)}
+              className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+            >
+              <option value="STANDARD">Standard Counted (Bottles / Units)</option>
+              <option value="MAKALI">Makali (Packed units with cash value remainder)</option>
+              <option value="MURATINA">Muratina (Volume-based litres or cash value)</option>
+              <option value="KEG">Keg (Scale weight gross kg minus tare empty)</option>
+            </select>
+          </div>
+
+          {measurementMode === 'MAKALI' && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                Price Per Packed Unit (KES)
+              </label>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                placeholder="e.g. 450"
+                value={pricePerUnit}
+                onChange={(e) => setPricePerUnit(e.target.value)}
+                className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
+              />
+            </div>
+          )}
+
+          {measurementMode === 'MURATINA' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                  Total Volume per Unit (Litres)
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  placeholder="e.g. 10"
+                  value={volumeTotal}
+                  onChange={(e) => setVolumeTotal(e.target.value)}
+                  className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                  Price per Total Volume (KES)
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  placeholder="e.g. 1200"
+                  value={pricePerUnit}
+                  onChange={(e) => setPricePerUnit(e.target.value)}
+                  className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
+                />
+              </div>
+            </div>
+          )}
+
+          {measurementMode === 'KEG' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                  Full Tank Weight (kg)
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  placeholder="e.g. 60"
+                  value={fullWeightKg}
+                  onChange={(e) => setFullWeightKg(e.target.value)}
+                  className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                  Empty Tank Tare (kg)
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  placeholder="e.g. 12"
+                  value={emptyWeightKg}
+                  onChange={(e) => setEmptyWeightKg(e.target.value)}
+                  className="w-full bg-[#0E1420] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none"
+                />
+              </div>
             </div>
           )}
 
